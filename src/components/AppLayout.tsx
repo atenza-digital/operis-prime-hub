@@ -1,11 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, FileCheck2 } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, History, Receipt, FileCheck2 } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/agendar", label: "Agendamento", icon: CalendarPlus },
+  { to: "/agendar", label: "Agendar", icon: CalendarPlus },
   { to: "/os-gerar", label: "Gerar OS", icon: FileText },
   { to: "/os-finalizar", label: "Encerrar OS", icon: ClipboardCheck },
+  { to: "/historico", label: "Histórico", icon: History },
+  { to: "/medicao", label: "Medição", icon: Receipt },
   { to: "/visualizar", label: "Certificado", icon: FileCheck2 },
 ];
 
@@ -15,7 +17,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       {/* Top bar */}
-      <header className="sticky top-0 z-50 border-b bg-surface-dark text-surface-dark-foreground">
+      <header className="sticky top-0 z-50 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
         <div className="container flex h-14 items-center gap-6">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center font-bold text-primary-foreground text-sm">
@@ -25,14 +27,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="text-xs text-muted-foreground hidden md:inline ml-1">Hub de Operações</span>
           </div>
 
-          <nav className="flex items-center gap-1 ml-auto">
+          <nav className="flex items-center gap-1 ml-auto overflow-x-auto">
             {navItems.map(({ to, label, icon: Icon }) => {
               const active = pathname === to;
               return (
                 <Link
                   key={to}
                   to={to}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                     active
                       ? "bg-primary text-primary-foreground"
                       : "text-surface-dark-foreground/70 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10"

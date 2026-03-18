@@ -8,6 +8,8 @@ import Dashboard from "@/pages/Dashboard";
 import Agendamento from "@/pages/Agendamento";
 import OSGerar from "@/pages/OSGerar";
 import OSFinalizar from "@/pages/OSFinalizar";
+import Historico from "@/pages/Historico";
+import Medicao from "@/pages/Medicao";
 import Visualizador from "@/pages/Visualizador";
 import NotFound from "@/pages/NotFound";
 
@@ -25,6 +27,8 @@ const App = () => (
             <Route path="/agendar" element={<Agendamento />} />
             <Route path="/os-gerar" element={<OSGerar />} />
             <Route path="/os-finalizar" element={<OSFinalizar />} />
+            <Route path="/historico" element={<Historico />} />
+            <Route path="/medicao" element={<Medicao />} />
             <Route path="/visualizar" element={<Visualizador />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
