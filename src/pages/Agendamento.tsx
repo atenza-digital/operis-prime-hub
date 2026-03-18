@@ -12,6 +12,7 @@ import { CalendarPlus, ShieldAlert, Send } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Agendamento() {
+  const navigate = useNavigate();
   const [clienteSel, setClienteSel] = useState("");
   const [contratoSel, setContratoSel] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
