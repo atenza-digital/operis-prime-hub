@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, History, Receipt, FileCheck2 } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, History, Receipt, FileCheck2, Briefcase } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
