@@ -1,9 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarPlus, ClipboardCheck, FileCheck2 } from "lucide-react";
+import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, FileCheck2 } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/agendar", label: "Agendamento", icon: CalendarPlus },
+  { to: "/os-gerar", label: "Gerar OS", icon: FileText },
   { to: "/os-finalizar", label: "Encerrar OS", icon: ClipboardCheck },
   { to: "/visualizar", label: "Certificado", icon: FileCheck2 },
 ];
