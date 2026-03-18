@@ -36,9 +36,12 @@ export default function Agendamento() {
   const handleAgendar = () => {
     setEnviado(true);
     toast.success("Card operacional enviado para o Helena CRM", {
-      description: `Agendamento criado para ${contratoAtivo?.servico}`,
+      description: `Agendamento criado para ${contratoAtivo?.servico}. Redirecionando para gerar a OS...`,
     });
-    setTimeout(() => setEnviado(false), 3000);
+    setTimeout(() => {
+      setEnviado(false);
+      navigate("/os-gerar");
+    }, 2000);
   };
 
   return (
