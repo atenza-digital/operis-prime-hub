@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "@/components/AppLayout";
+import ComercialLayout from "@/components/ComercialLayout";
 import Dashboard from "@/pages/Dashboard";
 import Agendamento from "@/pages/Agendamento";
 import OSGerar from "@/pages/OSGerar";
@@ -11,6 +12,9 @@ import OSFinalizar from "@/pages/OSFinalizar";
 import Historico from "@/pages/Historico";
 import Medicao from "@/pages/Medicao";
 import Visualizador from "@/pages/Visualizador";
+import Clientes from "@/pages/comercial/Clientes";
+import Servicos from "@/pages/comercial/Servicos";
+import Contratos from "@/pages/comercial/Contratos";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,18 +25,23 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/agendar" element={<Agendamento />} />
-            <Route path="/os-gerar" element={<OSGerar />} />
-            <Route path="/os-finalizar" element={<OSFinalizar />} />
-            <Route path="/historico" element={<Historico />} />
-            <Route path="/medicao" element={<Medicao />} />
-            <Route path="/visualizar" element={<Visualizador />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
+        <Routes>
+          {/* Operacional */}
+          <Route element={<AppLayout><Dashboard /></AppLayout>} path="/" />
+          <Route element={<AppLayout><Agendamento /></AppLayout>} path="/agendar" />
+          <Route element={<AppLayout><OSGerar /></AppLayout>} path="/os-gerar" />
+          <Route element={<AppLayout><OSFinalizar /></AppLayout>} path="/os-finalizar" />
+          <Route element={<AppLayout><Historico /></AppLayout>} path="/historico" />
+          <Route element={<AppLayout><Medicao /></AppLayout>} path="/medicao" />
+          <Route element={<AppLayout><Visualizador /></AppLayout>} path="/visualizar" />
+
+          {/* Comercial */}
+          <Route element={<ComercialLayout><Clientes /></ComercialLayout>} path="/comercial/clientes" />
+          <Route element={<ComercialLayout><Servicos /></ComercialLayout>} path="/comercial/servicos" />
+          <Route element={<ComercialLayout><Contratos /></ComercialLayout>} path="/comercial/contratos" />
+
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

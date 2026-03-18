@@ -1,22 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CalendarPlus, FileText, ClipboardCheck, History, Receipt, FileCheck2, Briefcase } from "lucide-react";
+import { Users, Briefcase, FileSignature, ArrowLeft } from "lucide-react";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/agendar", label: "Agendar", icon: CalendarPlus },
-  { to: "/os-gerar", label: "Gerar OS", icon: FileText },
-  { to: "/os-finalizar", label: "Encerrar OS", icon: ClipboardCheck },
-  { to: "/historico", label: "Histórico", icon: History },
-  { to: "/medicao", label: "Medição", icon: Receipt },
-  { to: "/visualizar", label: "Certificado", icon: FileCheck2 },
+  { to: "/comercial/clientes", label: "Clientes", icon: Users },
+  { to: "/comercial/servicos", label: "Serviços", icon: Briefcase },
+  { to: "/comercial/contratos", label: "Contratos / Propostas", icon: FileSignature },
 ];
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function ComercialLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top bar */}
       <header className="sticky top-0 z-50 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
         <div className="container flex h-14 items-center gap-6">
           <div className="flex items-center gap-2">
@@ -24,7 +19,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               CP
             </div>
             <span className="font-bold text-lg tracking-tight hidden sm:inline">Ciperprag</span>
-            <span className="text-xs text-muted-foreground hidden md:inline ml-1">Hub de Operações</span>
+            <span className="text-xs text-muted-foreground hidden md:inline ml-1 bg-primary/20 text-primary-foreground px-2 py-0.5 rounded-full">Comercial</span>
           </div>
 
           <nav className="flex items-center gap-1 ml-auto overflow-x-auto">
@@ -46,11 +41,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               );
             })}
             <Link
-              to="/comercial/clientes"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-surface-dark-foreground/50 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10 ml-2 border-l border-surface-dark-foreground/20 pl-4 whitespace-nowrap"
+              to="/"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-surface-dark-foreground/50 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10 ml-2 border-l border-surface-dark-foreground/20 pl-4"
             >
-              <Briefcase className="h-4 w-4" />
-              <span className="hidden sm:inline">Comercial</span>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Operacional</span>
             </Link>
           </nav>
         </div>
