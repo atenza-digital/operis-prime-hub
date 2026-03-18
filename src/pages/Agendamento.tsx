@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { contratos } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import { CalendarPlus, ShieldAlert, Send } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Agendamento() {
+  const navigate = useNavigate();
   const [clienteSel, setClienteSel] = useState("");
   const [contratoSel, setContratoSel] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
@@ -34,9 +36,12 @@ export default function Agendamento() {
   const handleAgendar = () => {
     setEnviado(true);
     toast.success("Card operacional enviado para o Helena CRM", {
-      description: `Agendamento criado para ${contratoAtivo?.servico}`,
+      description: `Agendamento criado para ${contratoAtivo?.servico}. Redirecionando para gerar a OS...`,
     });
-    setTimeout(() => setEnviado(false), 3000);
+    setTimeout(() => {
+      setEnviado(false);
+      navigate("/os-gerar");
+    }, 2000);
   };
 
   return (

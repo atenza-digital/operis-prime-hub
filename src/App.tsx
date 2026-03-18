@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Agendamento from "@/pages/Agendamento";
+import OSGerar from "@/pages/OSGerar";
 import OSFinalizar from "@/pages/OSFinalizar";
 import Visualizador from "@/pages/Visualizador";
 import NotFound from "@/pages/NotFound";
@@ -22,6 +23,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/agendar" element={<Agendamento />} />
+            <Route path="/os-gerar" element={<OSGerar />} />
             <Route path="/os-finalizar" element={<OSFinalizar />} />
             <Route path="/visualizar" element={<Visualizador />} />
             <Route path="*" element={<NotFound />} />
