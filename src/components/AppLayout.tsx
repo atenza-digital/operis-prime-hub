@@ -45,6 +45,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            <Link
+              to="/comercial/clientes"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-surface-dark-foreground/50 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10 ml-2 border-l border-surface-dark-foreground/20 pl-4 whitespace-nowrap"
+            >
+              <Briefcase className="h-4 w-4" />
+              <span className="hidden sm:inline">Comercial</span>
+            </Link>
           </nav>
         </div>
       </header>
