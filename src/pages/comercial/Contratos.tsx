@@ -1,5 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { contratosTemplates as templatesMock, clientes, servicosCatalogo, type ContratoTemplate, type ContratoServico } from "@/data/comercialData";
+import { empresaConfig } from "@/data/empresaData";
+import { numeracaoConfig, gerarNumero } from "@/data/empresaData";
+import logoImg from "@/assets/logo_ciperprag.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSignature, Plus, Pencil, Search, Trash2 } from "lucide-react";
+import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight, Printer } from "lucide-react";
 import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -42,6 +45,8 @@ export default function Contratos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<ContratoTemplate, "id">>(emptyTemplate);
+  const [pdfItem, setPdfItem] = useState<ContratoTemplate | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   const filtrados = lista.filter((t) => {
     const cliente = clientes.find((c) => c.id === t.clienteId);
@@ -49,7 +54,15 @@ export default function Contratos() {
       (cliente?.razaoSocial.toLowerCase().includes(busca.toLowerCase()));
   });
 
-  const openNew = () => { setEditId(null); setForm({ ...emptyTemplate, servicos: [{ ...emptyServico }] }); setDialogOpen(true); };
+  const openNew = (tipo: "proposta" | "contrato" = "proposta") => {
+    setEditId(null);
+    const nextNum = tipo === "proposta"
+      ? gerarNumero(numeracaoConfig.propostaFormato, numeracaoConfig.propostaUltimo + lista.filter(l => l.tipo === "proposta").length + 1)
+      : gerarNumero(numeracaoConfig.contratoFormato, numeracaoConfig.contratoUltimo + lista.filter(l => l.tipo === "contrato").length + 1);
+    setForm({ ...emptyTemplate, tipo, numero: nextNum, servicos: [{ ...emptyServico }] });
+    setDialogOpen(true);
+  };
+
   const openEdit = (t: ContratoTemplate) => { setEditId(t.id); const { id, ...rest } = t; setForm(rest); setDialogOpen(true); };
 
   const handleSave = () => {
@@ -62,6 +75,35 @@ export default function Contratos() {
       toast.success("Registro criado");
     }
     setDialogOpen(false);
+  };
+
+  const gerarContratoFromProposta = (proposta: ContratoTemplate) => {
+    if (proposta.status !== "aprovado") {
+      toast.error("Apenas propostas aprovadas podem gerar contratos");
+      return;
+    }
+    const nextNum = gerarNumero(numeracaoConfig.contratoFormato, numeracaoConfig.contratoUltimo + lista.filter(l => l.tipo === "contrato").length + 1);
+    const novoContrato: ContratoTemplate = {
+      ...proposta,
+      id: `TPL-${String(lista.length + 1).padStart(3, "0")}`,
+      numero: nextNum,
+      tipo: "contrato",
+      status: "vigente",
+      dataCriacao: new Date().toISOString().split("T")[0],
+      observacoes: `Gerado a partir da proposta ${proposta.numero}. ${proposta.observacoes}`,
+    };
+    setLista((prev) => [...prev, novoContrato]);
+    toast.success(`Contrato ${nextNum} gerado a partir da proposta ${proposta.numero}`);
+  };
+
+  const handleStatusChange = (item: ContratoTemplate, newStatus: ContratoTemplate["status"]) => {
+    setLista((prev) => prev.map((t) => t.id === item.id ? { ...t, status: newStatus } : t));
+    toast.success(`Status alterado para ${statusLabels[newStatus]}`);
+  };
+
+  const openPdf = (item: ContratoTemplate) => {
+    setPdfItem(item);
+    setTimeout(() => window.print(), 300);
   };
 
   const updateServico = (idx: number, field: keyof ContratoServico, value: string | number) => {
@@ -79,18 +121,21 @@ export default function Contratos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <FileSignature className="h-6 w-6 text-primary" />
             Contratos e Propostas
           </h1>
-          <p className="text-muted-foreground text-sm">Gerencie templates de contratos e propostas comerciais</p>
+          <p className="text-muted-foreground text-sm">Gerencie propostas, aprove e gere contratos</p>
         </div>
-        <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Novo</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => openNew("contrato")}><Plus className="h-4 w-4 mr-2" />Novo Contrato</Button>
+          <Button onClick={() => openNew("proposta")}><Plus className="h-4 w-4 mr-2" />Nova Proposta</Button>
+        </div>
       </div>
 
-      <Card>
+      <Card className="print:hidden">
         <CardHeader className="pb-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -108,7 +153,7 @@ export default function Contratos() {
                 <TableHead>Valor Total</TableHead>
                 <TableHead>Vigência</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
+                <TableHead className="w-[180px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -135,9 +180,24 @@ export default function Contratos() {
                       <Badge variant={statusColors[t.status]}>{statusLabels[t.status]}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(t)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" title="Editar" onClick={() => openEdit(t)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" title="Gerar PDF" onClick={() => openPdf(t)}>
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                        {t.tipo === "proposta" && t.status === "enviado" && (
+                          <Button size="icon" variant="ghost" title="Aprovar" onClick={() => handleStatusChange(t, "aprovado")}>
+                            <Badge variant="default" className="text-[9px] px-1">OK</Badge>
+                          </Button>
+                        )}
+                        {t.tipo === "proposta" && t.status === "aprovado" && (
+                          <Button size="sm" variant="outline" title="Gerar Contrato" onClick={() => gerarContratoFromProposta(t)} className="text-xs gap-1">
+                            <ArrowRight className="h-3 w-3" />CT
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -147,10 +207,110 @@ export default function Contratos() {
         </CardContent>
       </Card>
 
+      {/* Printable PDF Document */}
+      {pdfItem && (() => {
+        const cliente = clientes.find((c) => c.id === pdfItem.clienteId);
+        const total = calcTotal(pdfItem.servicos);
+        const titulo = pdfItem.tipo === "contrato" ? "CONTRATO DE PRESTAÇÃO DE SERVIÇOS" : "PROPOSTA TÉCNICA COMERCIAL";
+        return (
+          <div className="hidden print:block" ref={printRef}>
+            <div className="max-w-[210mm] mx-auto p-8 text-sm font-sans">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b-2 border-primary pb-4 mb-6">
+                <img src={logoImg} alt="Ciperprag" className="h-12" />
+                <div className="text-right text-xs">
+                  <p className="font-bold">{empresaConfig.razaoSocial}</p>
+                  <p>CNPJ: {empresaConfig.cnpj}</p>
+                  <p>{empresaConfig.endereco}</p>
+                  <p>{empresaConfig.telefone} | {empresaConfig.email}</p>
+                </div>
+              </div>
+
+              <h1 className="text-center text-lg font-bold mb-1">{titulo}</h1>
+              <p className="text-center text-xs text-muted-foreground mb-6">Nº {pdfItem.numero}</p>
+
+              {/* Client info */}
+              <div className="rounded border p-4 mb-4 space-y-1 text-xs">
+                <h3 className="font-bold text-sm mb-2">DADOS DO CONTRATANTE</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <p><strong>Razão Social:</strong> {cliente?.razaoSocial}</p>
+                  <p><strong>CNPJ:</strong> {cliente?.cnpj}</p>
+                  <p><strong>Endereço:</strong> {cliente?.endereco}, {cliente?.bairro}</p>
+                  <p><strong>Município/UF:</strong> {cliente?.municipio}/{cliente?.uf}</p>
+                </div>
+              </div>
+
+              {/* Services table */}
+              <div className="mb-4">
+                <h3 className="font-bold text-sm mb-2">SERVIÇOS</h3>
+                <table className="w-full text-xs border">
+                  <thead>
+                    <tr className="bg-muted">
+                      <th className="border p-2 text-left">Serviço</th>
+                      <th className="border p-2 text-center">Qtd</th>
+                      <th className="border p-2 text-center">Frequência</th>
+                      <th className="border p-2 text-right">Valor Unit.</th>
+                      <th className="border p-2 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pdfItem.servicos.map((s, i) => {
+                      const srv = servicosCatalogo.find((sv) => sv.id === s.servicoId);
+                      return (
+                        <tr key={i}>
+                          <td className="border p-2">{srv?.nome || "—"}</td>
+                          <td className="border p-2 text-center">{s.quantidade}</td>
+                          <td className="border p-2 text-center">{s.frequencia}</td>
+                          <td className="border p-2 text-right">R$ {s.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                          <td className="border p-2 text-right font-bold">R$ {(s.quantidade * s.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-muted font-bold">
+                      <td className="border p-2" colSpan={4}>VALOR TOTAL</td>
+                      <td className="border p-2 text-right">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Conditions */}
+              <div className="text-xs space-y-2 mb-6">
+                <h3 className="font-bold text-sm">CONDIÇÕES</h3>
+                <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
+                <p><strong>Forma de Pagamento:</strong> {pdfItem.formaPagamento}</p>
+                <p><strong>Prazo de Pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
+                {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 gap-8 mt-16 text-xs text-center">
+                <div className="border-t pt-2">
+                  <p className="font-bold">{empresaConfig.razaoSocial}</p>
+                  <p>{empresaConfig.responsavelExecucao}</p>
+                  <p>{empresaConfig.cargoResponsavel}</p>
+                </div>
+                <div className="border-t pt-2">
+                  <p className="font-bold">{cliente?.razaoSocial}</p>
+                  <p>Representante Legal</p>
+                </div>
+              </div>
+
+              <p className="text-center text-[10px] text-muted-foreground mt-8">
+                {empresaConfig.razaoSocial} — CNPJ: {empresaConfig.cnpj} — Alvará: {empresaConfig.alvara}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editId ? "Editar" : "Novo"} {form.tipo === "contrato" ? "Contrato" : "Proposta"}</DialogTitle>
+            <DialogTitle>{editId ? "Editar" : "Novo(a)"} {form.tipo === "contrato" ? "Contrato" : "Proposta"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -212,7 +372,7 @@ export default function Contratos() {
             {/* Serviços */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Serviços do Contrato</Label>
+                <Label className="text-base font-semibold">Serviços</Label>
                 <Button type="button" variant="outline" size="sm" onClick={addServico}><Plus className="h-3 w-3 mr-1" />Serviço</Button>
               </div>
               {form.servicos.map((s, i) => (

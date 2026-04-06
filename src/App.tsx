@@ -11,10 +11,12 @@ import OSGerar from "@/pages/OSGerar";
 import OSFinalizar from "@/pages/OSFinalizar";
 import Historico from "@/pages/Historico";
 import Medicao from "@/pages/Medicao";
+import Equipes from "@/pages/Equipes";
 import Visualizador from "@/pages/Visualizador";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
+import Configuracoes from "@/pages/comercial/Configuracoes";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,12 +35,14 @@ const App = () => (
           <Route element={<AppLayout><OSFinalizar /></AppLayout>} path="/os-finalizar" />
           <Route element={<AppLayout><Historico /></AppLayout>} path="/historico" />
           <Route element={<AppLayout><Medicao /></AppLayout>} path="/medicao" />
+          <Route element={<AppLayout><Equipes /></AppLayout>} path="/equipes" />
           <Route element={<AppLayout><Visualizador /></AppLayout>} path="/visualizar" />
 
           {/* Comercial */}
           <Route element={<ComercialLayout><Clientes /></ComercialLayout>} path="/comercial/clientes" />
           <Route element={<ComercialLayout><Servicos /></ComercialLayout>} path="/comercial/servicos" />
           <Route element={<ComercialLayout><Contratos /></ComercialLayout>} path="/comercial/contratos" />
+          <Route element={<ComercialLayout><Configuracoes /></ComercialLayout>} path="/comercial/configuracoes" />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

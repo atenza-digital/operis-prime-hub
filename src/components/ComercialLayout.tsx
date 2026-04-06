@@ -1,10 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { Users, Briefcase, FileSignature, ArrowLeft } from "lucide-react";
+import { Users, Briefcase, FileSignature, Settings, ArrowLeft } from "lucide-react";
+import logoImg from "@/assets/logo_ciperprag.png";
 
 const navItems = [
   { to: "/comercial/clientes", label: "Clientes", icon: Users },
   { to: "/comercial/servicos", label: "Serviços", icon: Briefcase },
   { to: "/comercial/contratos", label: "Contratos / Propostas", icon: FileSignature },
+  { to: "/comercial/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export default function ComercialLayout({ children }: { children: React.ReactNode }) {
@@ -15,10 +17,7 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-50 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
         <div className="container flex h-14 items-center gap-6">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center font-bold text-primary-foreground text-sm">
-              CP
-            </div>
-            <span className="font-bold text-lg tracking-tight hidden sm:inline">Ciperprag</span>
+            <img src={logoImg} alt="Ciperprag" className="h-8" />
             <span className="text-xs text-muted-foreground hidden md:inline ml-1 bg-primary/20 text-primary-foreground px-2 py-0.5 rounded-full">Comercial</span>
           </div>
 
