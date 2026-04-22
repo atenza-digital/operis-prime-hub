@@ -8,11 +8,12 @@ import ComercialLayout from "@/components/ComercialLayout";
 import Dashboard from "@/pages/Dashboard";
 import Agendamento from "@/pages/Agendamento";
 import OSGerar from "@/pages/OSGerar";
-import OSFinalizar from "@/pages/OSFinalizar";
+import OrdensServico from "@/pages/OrdensServico";
 import Historico from "@/pages/Historico";
 import Medicao from "@/pages/Medicao";
 import Equipes from "@/pages/Equipes";
 import Visualizador from "@/pages/Visualizador";
+import Certificados from "@/pages/Certificados";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
@@ -32,9 +33,11 @@ const App = () => (
           <Route element={<AppLayout><Dashboard /></AppLayout>} path="/" />
           <Route element={<AppLayout><Agendamento /></AppLayout>} path="/agendar" />
           <Route element={<AppLayout><OSGerar /></AppLayout>} path="/os-gerar" />
-          <Route element={<AppLayout><OSFinalizar /></AppLayout>} path="/os-finalizar" />
+          <Route element={<AppLayout><OrdensServico /></AppLayout>} path="/ordens" />
+          <Route element={<AppLayout><OrdensServico /></AppLayout>} path="/os-finalizar" />
           <Route element={<AppLayout><Historico /></AppLayout>} path="/historico" />
           <Route element={<AppLayout><Medicao /></AppLayout>} path="/medicao" />
+          <Route element={<AppLayout><Certificados /></AppLayout>} path="/certificados" />
           <Route element={<AppLayout><Equipes /></AppLayout>} path="/equipes" />
           <Route element={<AppLayout><Visualizador /></AppLayout>} path="/visualizar" />
 
