@@ -10,11 +10,14 @@ import {
   Menu,
   Receipt,
   Settings,
+  LogOut,
   Users,
   X,
 } from "lucide-react";
 import logoCiperprag from "@/assets/logo_ciperprag.png";
+import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
 
@@ -122,6 +125,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const currentMeta = useMemo(() => routeMeta[location.pathname] ?? routeMeta["/"], [location.pathname]);
   const topLinks = navGroups[0].items.slice(0, 5);
@@ -139,6 +143,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className={cn("px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45", collapsed && "px-0 text-center")}>
             {collapsed ? `v${APP_VERSION}` : APP_VERSION_LABEL}
           </div>
+          {!collapsed && user ? (
+            <div className="mb-2 rounded-xl border border-sidebar-border bg-sidebar-accent/35 px-3 py-2">
+              <p className="truncate text-xs font-semibold text-sidebar-foreground">{user.nome}</p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">{user.email}</p>
+            </div>
+          ) : null}
+          <button
+            onClick={() => logout()}
+            className="mb-1 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            title="Sair"
+          >
+            <LogOut className="h-4 w-4" />
+            {!collapsed ? <span>Sair</span> : null}
+          </button>
           <button
             onClick={() => setCollapsed((value) => !value)}
             className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
@@ -164,6 +182,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex-1 overflow-y-auto">
               <SidebarContent onLinkClick={() => setMobileOpen(false)} />
             </div>
+            {user ? (
+              <div className="border-t border-sidebar-border px-4 py-3">
+                <p className="truncate text-xs font-semibold text-sidebar-foreground">{user.nome}</p>
+                <p className="truncate text-[11px] text-sidebar-foreground/55">{user.email}</p>
+                <button onClick={() => logout()} className="mt-2 flex items-center gap-2 rounded-xl px-0 py-1 text-xs text-sidebar-foreground/70">
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </button>
+              </div>
+            ) : null}
             <div className="border-t border-sidebar-border px-4 py-3 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45">
               {APP_VERSION_LABEL}
             </div>
@@ -186,6 +214,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
               <p className="truncate text-sm text-muted-foreground">{currentMeta.description}</p>
             </div>
+
+            <EnvironmentBadge className="hidden md:inline-flex" />
 
             <div className="hidden items-center gap-2 xl:flex">
               {topLinks.map((item) => {

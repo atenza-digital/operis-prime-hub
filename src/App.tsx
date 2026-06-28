@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "@/components/AppLayout";
 import ComercialLayout from "@/components/ComercialLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Dashboard from "@/pages/Dashboard";
 import Agendamento from "@/pages/Agendamento";
 import OSGerar from "@/pages/OSGerar";
@@ -19,6 +21,7 @@ import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
 import Configuracoes from "@/pages/comercial/Configuracoes";
+import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,31 +31,35 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Operacional */}
-          <Route element={<AppLayout><Dashboard /></AppLayout>} path="/" />
-          <Route element={<AppLayout><Agendamento /></AppLayout>} path="/agendar" />
-          <Route element={<AppLayout><OSGerar /></AppLayout>} path="/os-gerar" />
-          <Route element={<AppLayout><OrdensServico /></AppLayout>} path="/ordens" />
-          <Route element={<AppLayout><OrdensServico /></AppLayout>} path="/os-finalizar" />
-          <Route element={<AppLayout><Historico /></AppLayout>} path="/historico" />
-          <Route element={<AppLayout><Medicao /></AppLayout>} path="/medicao" />
-          <Route element={<AppLayout><Certificados /></AppLayout>} path="/certificados" />
-          <Route element={<AppLayout><Equipes /></AppLayout>} path="/equipes" />
-          <Route element={<AppLayout><Visualizador /></AppLayout>} path="/visualizar" />
-          <Route path="/validar-certificado" element={<ValidarCertificado />} />
-          <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/validar-certificado" element={<ValidarCertificado />} />
+            <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
 
-          {/* Comercial */}
-          <Route element={<ComercialLayout><Clientes /></ComercialLayout>} path="/comercial/clientes" />
-          <Route element={<ComercialLayout><Servicos /></ComercialLayout>} path="/comercial/servicos" />
-          <Route element={<ComercialLayout><Contratos /></ComercialLayout>} path="/comercial/contratos" />
-          <Route element={<ComercialLayout><Configuracoes /></ComercialLayout>} path="/comercial/configuracoes" />
+            {/* Operacional */}
+            <Route element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path="/" />
+            <Route element={<ProtectedRoute><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path="/agendar" />
+            <Route element={<ProtectedRoute><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path="/os-gerar" />
+            <Route element={<ProtectedRoute><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/ordens" />
+            <Route element={<ProtectedRoute><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
+            <Route element={<ProtectedRoute><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
+            <Route element={<ProtectedRoute><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
+            <Route element={<ProtectedRoute><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
+            <Route element={<ProtectedRoute><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
+            <Route element={<ProtectedRoute><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+            {/* Comercial */}
+            <Route element={<ProtectedRoute><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />
+            <Route element={<ProtectedRoute><ComercialLayout><Servicos /></ComercialLayout></ProtectedRoute>} path="/comercial/servicos" />
+            <Route element={<ProtectedRoute><ComercialLayout><Contratos /></ComercialLayout></ProtectedRoute>} path="/comercial/contratos" />
+            <Route element={<ProtectedRoute><ComercialLayout><Configuracoes /></ComercialLayout></ProtectedRoute>} path="/comercial/configuracoes" />
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

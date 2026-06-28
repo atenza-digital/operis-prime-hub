@@ -40,6 +40,25 @@ A base atual deve ser tratada como homologação. A produção será criada em b
 
 O sistema deve manter versionamento explícito no código e exibir ambiente/versão na interface, para facilitar suporte, validação com usuários e rastreio de mudanças entre homologação e produção.
 
+A interface também deve diferenciar visualmente homologação e produção. Na homologação, o sistema exibe um badge amarelo de `Homologação` para reduzir o risco de usuários confundirem testes com operação real.
+
+## Autenticação Interna
+
+`002_internal_auth.sql` adiciona sessões internas para login por e-mail e senha:
+
+- campos de segurança em `usuarios`
+- tabela `usuario_sessoes`
+- índices para sessões ativas
+- log de auditoria da migração
+
+Depois de aplicar a migração, crie ou redefina o administrador inicial com:
+
+```bash
+ADMIN_EMAIL="admin@empresa.com.br" ADMIN_PASSWORD="senha-segura" ADMIN_NAME="Administrador" npm run auth:create-admin
+```
+
+Nunca grave senha em SQL ou no repositório. O script gera `senha_hash` usando hash seguro antes de persistir.
+
 ## Aplicação Manual
 
 Exemplo:

@@ -276,16 +276,59 @@ export interface BootstrapData {
   recurrenceSuggestions: RecorrenciaSuggestionApp[];
 }
 
+const AUTH_TOKEN_KEY = "ciperprag_hub_auth_token";
+
+export interface AuthUser {
+  id: string;
+  nome: string;
+  email: string;
+  status: string;
+  ultimoLoginEm?: string;
+  tenant: {
+    id: string;
+    slug: string;
+    nome: string;
+  };
+  perfis: Array<{ codigo: string; nome: string }>;
+  permissoes: string[];
+}
+
+export interface AuthSession {
+  token: string;
+  expiresAt: string;
+  user: AuthUser;
+}
+
+export function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(`/api${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers || {}),
     },
     ...init,
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Erro na API" }));
+    if (response.status === 401 && !path.startsWith("/auth/login")) {
+      clearAuthToken();
+      if (window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
+    }
     throw new Error(error.error || "Erro na API");
   }
   return response.json();
@@ -298,6 +341,10 @@ export const addDays = (dateStr: string, days: number) => {
 };
 
 export const getBootstrap = () => api<BootstrapData>("/bootstrap");
+export const login = (payload: { email: string; password: string }) =>
+  api<{ ok: boolean } & AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) });
+export const getCurrentUser = () => api<{ ok: boolean; user: AuthUser }>("/auth/me");
+export const logout = () => api<{ ok: boolean }>("/auth/logout", { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
 export const saveTechnician = (payload: Partial<Tecnico>) => api("/technicians", { method: "POST", body: JSON.stringify(payload) });

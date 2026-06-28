@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "start": "node --env-file=.env server/index.mjs",
+    "auth:create-admin": "node --env-file=.env scripts/create-admin-user.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

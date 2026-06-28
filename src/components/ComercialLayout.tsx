@@ -1,7 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Briefcase, FileSignature, Settings, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, FileSignature, LogOut, Settings, Users } from "lucide-react";
 import logoImg from "@/assets/logo_ciperprag.png";
+import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { PageHeader } from "@/components/PageHeader";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
@@ -21,6 +23,7 @@ const meta: Record<string, { title: string; description: string }> = {
 
 export default function ComercialLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
+  const { logout } = useAuth();
   const current = meta[pathname] ?? meta["/comercial/clientes"];
 
   return (
@@ -35,6 +38,8 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
               <p className="truncate text-xs text-surface-dark-foreground/55">Origem dos dados que sustentam a operação</p>
             </div>
           </div>
+
+          <EnvironmentBadge className="hidden lg:inline-flex" />
 
           <nav className="ml-auto hidden items-center gap-2 xl:flex">
             {navItems.map(({ to, label, icon: Icon }) => {
@@ -62,6 +67,13 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
               <ArrowLeft className="h-4 w-4" />
               Operacional
             </Link>
+            <button
+              onClick={() => logout()}
+              className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-surface-dark-foreground/70 transition-colors hover:bg-white/8 hover:text-surface-dark-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
           </nav>
         </div>
       </header>

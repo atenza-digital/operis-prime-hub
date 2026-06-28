@@ -2256,9 +2256,45 @@ A base atual deve ser considerada de homologação. Ela serve para validação f
 
 O sistema deve manter versionamento explícito em código e exibir ambiente/versão na interface. Nesta etapa inicial, a aplicação passa a identificar a versão como `Homologação v0.1.0`, permitindo que equipe, cliente e suporte saibam exatamente qual build está sendo validada.
 
+Além do texto da versão, a interface deve diferenciar visualmente homologação e produção. A homologação usa um badge amarelo de alerta com o texto `Homologação`, visível no login e nas áreas internas, para evitar que usuários confundam testes com operação real.
+
 Quando a produção for criada, o ambiente deverá ter banco próprio, variáveis próprias, backup próprio e versionamento compatível com o histórico homologado.
 
-## 21. Resumo Executivo Final
+## 21. Autenticação Interna
+
+O sistema passa a usar login interno da plataforma com e-mail e senha. O acesso às telas operacionais e comerciais deve exigir sessão ativa.
+
+Rotas públicas:
+
+- `/login`
+- `/validar-certificado`
+- `/validar-certificado/:hash`
+- `/api/health`
+- `/api/certificates/:hash`
+- `/api/auth/login`
+
+Rotas privadas:
+
+- dashboard
+- agendamentos
+- ordens de serviço
+- certificados e histórico
+- medição
+- equipes
+- comercial
+- endpoints de cadastro, edição, encerramento e emissão
+
+O backend usa hash de senha antes de gravar no banco e armazena sessões na tabela `usuario_sessoes`. O token de sessão é enviado pelo frontend no cabeçalho `Authorization: Bearer`.
+
+Para criar ou redefinir o primeiro administrador, deve ser usado o script:
+
+```bash
+ADMIN_EMAIL="admin@empresa.com.br" ADMIN_PASSWORD="senha-segura" ADMIN_NAME="Administrador" npm run auth:create-admin
+```
+
+Senhas não devem ser gravadas em SQL, documentação, repositório ou mensagens de deploy.
+
+## 22. Resumo Executivo Final
 
 O Ciperprag Hub é uma aplicação web de gestão operacional e comercial para empresas de serviços, especialmente voltada à rotina da Ciperprag. O sistema centraliza cadastros comerciais, contratos, serviços, equipes, veículos, agendamentos, Ordens de Serviço, certificados, histórico e medição.
 

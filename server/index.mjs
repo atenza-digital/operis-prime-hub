@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { authenticateToken, loginWithPassword, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,6 +12,28 @@ const PORT = Number(process.env.PORT || 3001);
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
+
+function getRequestIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket.remoteAddress || null;
+}
+
+function getBearerToken(req) {
+  const authorization = String(req.headers.authorization || "");
+  if (!authorization.toLowerCase().startsWith("bearer ")) return null;
+  return authorization.slice(7).trim();
+}
+
+async function requireAuth(req, res, next) {
+  try {
+    const auth = await authenticateToken(getBearerToken(req));
+    if (!auth) return res.status(401).json({ error: "Sessao expirada ou nao autenticada." });
+    req.auth = auth;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
 
 function addDays(dateStr, days) {
   const date = new Date(`${dateStr}T12:00:00`);
@@ -506,14 +529,35 @@ app.get("/api/health", async (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/bootstrap", async (_req, res) => {
-  res.json(await getBootstrap());
-});
-
 app.get("/api/certificates/:hash", async (req, res) => {
   const certificate = await getCertificateByHash(req.params.hash);
   if (!certificate) return res.status(404).json({ error: "Certificado nao encontrado" });
   res.json({ ok: true, certificate, verifiedAt: new Date().toISOString() });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const result = await loginWithPassword({
+    email: req.body.email,
+    password: req.body.password,
+    ip: getRequestIp(req),
+    userAgent: req.headers["user-agent"],
+  });
+  res.json({ ok: true, ...result });
+});
+
+app.use("/api", requireAuth);
+
+app.get("/api/auth/me", async (req, res) => {
+  res.json({ ok: true, user: req.auth.user });
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  await revokeSession(req.auth.tokenHash);
+  res.json({ ok: true });
+});
+
+app.get("/api/bootstrap", async (_req, res) => {
+  res.json(await getBootstrap());
 });
 
 app.post("/api/clients", async (req, res) => {
