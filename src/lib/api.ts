@@ -283,6 +283,7 @@ export interface AuthUser {
   nome: string;
   email: string;
   status: string;
+  senhaTemporaria: boolean;
   ultimoLoginEm?: string;
   tenant: {
     id: string;
@@ -343,6 +344,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Erro na API" }));
+    if (response.status === 428 && window.location.pathname !== "/alterar-senha") {
+      window.location.assign("/alterar-senha");
+    }
     if (response.status === 401 && !path.startsWith("/auth/login")) {
       clearAuthToken();
       if (window.location.pathname !== "/login") {
@@ -365,6 +369,8 @@ export const login = (payload: { email: string; password: string }) =>
   api<{ ok: boolean } & AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) });
 export const getCurrentUser = () => api<{ ok: boolean; user: AuthUser }>("/auth/me");
 export const logout = () => api<{ ok: boolean }>("/auth/logout", { method: "POST" });
+export const changePassword = (payload: { currentPassword: string; newPassword: string }) =>
+  api<{ ok: boolean; user: AuthUser }>("/auth/change-password", { method: "POST", body: JSON.stringify(payload) });
 export const getRoles = () => api<{ ok: boolean; roles: RoleApp[] }>("/roles");
 export const getUsers = () => api<{ ok: boolean; users: UserApp[] }>("/users");
 export const saveUser = (payload: { id?: string; nome: string; email: string; status: UserApp["status"]; perfilCodigos: string[] }) =>

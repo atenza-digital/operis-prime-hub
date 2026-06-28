@@ -18,6 +18,7 @@ import Visualizador from "@/pages/Visualizador";
 import Certificados from "@/pages/Certificados";
 import ValidarCertificado from "@/pages/ValidarCertificado";
 import Usuarios from "@/pages/Usuarios";
+import AlterarSenha from "@/pages/AlterarSenha";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
@@ -36,6 +37,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/alterar-senha" element={<AlterarSenha />} />
             <Route path="/validar-certificado" element={<ValidarCertificado />} />
             <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
 

@@ -18,6 +18,7 @@ export function ProtectedRoute({ children, permission }: { children: React.React
   }
 
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (user.senhaTemporaria && location.pathname !== "/alterar-senha") return <Navigate to="/alterar-senha" replace />;
   if (permission && !hasPermission(permission)) return <Navigate to="/" replace />;
 
   return <>{children}</>;

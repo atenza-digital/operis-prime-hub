@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { authenticateToken, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
+import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,6 +37,9 @@ async function requireAuth(req, res, next) {
 
 function requirePermission(...permissions) {
   return (req, res, next) => {
+    if (req.auth?.user?.senhaTemporaria) {
+      return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
+    }
     const granted = new Set(req.auth?.user?.permissoes || []);
     if (permissions.some((permission) => granted.has(permission))) return next();
     return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
@@ -640,7 +643,21 @@ app.post("/api/auth/logout", async (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/auth/change-password", async (req, res) => {
+  const user = await changePassword({
+    userId: req.auth.user.id,
+    tenantId: req.auth.user.tenant.id,
+    currentPassword: req.body.currentPassword,
+    newPassword: req.body.newPassword,
+    sessionTokenHash: req.auth.tokenHash,
+    ip: getRequestIp(req),
+    userAgent: req.headers["user-agent"],
+  });
+  res.json({ ok: true, user });
+});
+
 app.get("/api/bootstrap", async (_req, res) => {
+  if (_req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
   res.json(await getBootstrap());
 });
 
@@ -694,8 +711,8 @@ app.post("/api/users", requirePermission("usuarios.manage"), async (req, res) =>
         )
       : await client.query(
           `INSERT INTO ciperprag_hub.usuarios
-           (tenant_id, nome, email, senha_hash, status, senha_alterada_em)
-           VALUES ($1,$2,$3,$4,$5,NOW())
+           (tenant_id, nome, email, senha_hash, status, senha_alterada_em, senha_temporaria)
+           VALUES ($1,$2,$3,$4,$5,NOW(),TRUE)
            RETURNING id, nome, email, status`,
           [tenantId, String(body.nome).trim(), email, passwordHash, status],
         );
@@ -745,6 +762,7 @@ app.post("/api/users/:id/reset-password", requirePermission("usuarios.manage"), 
   const { rowCount } = await query(
     `UPDATE ciperprag_hub.usuarios
      SET senha_hash = $3,
+         senha_temporaria = TRUE,
          senha_alterada_em = NOW(),
          tentativas_login = 0,
          bloqueado_ate = NULL,

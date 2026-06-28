@@ -5,8 +5,9 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   hasPermission: (...permissions: string[]) => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
+  setAuthenticatedUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await loginRequest({ email, password });
     setAuthToken(response.token);
     setUser(response.user);
+    return response.user;
   }
 
   async function handleLogout() {
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, hasPermission, login: handleLogin, logout: handleLogout }}>
+    <AuthContext.Provider value={{ user, loading, hasPermission, login: handleLogin, logout: handleLogout, setAuthenticatedUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

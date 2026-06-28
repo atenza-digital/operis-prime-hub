@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 import logoCiperprag from "@/assets/logo_ciperprag.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
@@ -13,6 +13,7 @@ import { APP_VERSION_LABEL } from "@/lib/version";
 export default function Login() {
   const { user, login } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,14 +21,15 @@ export default function Login() {
 
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
 
-  if (user) return <Navigate to={from} replace />;
+  if (user) return <Navigate to={user.senhaTemporaria ? "/alterar-senha" : from} replace />;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      await login(email, password);
+      const authenticatedUser = await login(email, password);
+      navigate(authenticatedUser.senhaTemporaria ? "/alterar-senha" : from, { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar.");
     } finally {

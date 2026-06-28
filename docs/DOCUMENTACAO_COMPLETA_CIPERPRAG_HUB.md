@@ -2293,6 +2293,8 @@ As permissões cadastradas em banco passam a ser usadas em duas camadas:
 
 O módulo `Usuários e Perfis` permite que administradores da empresa criem usuários, editem nome/e-mail/status, atribuam perfis e gerem senha temporária. A senha temporária é exibida apenas no momento da criação ou reset e deve ser enviada ao usuário por canal seguro.
 
+Usuários criados com senha temporária ou que tiveram senha resetada são obrigados a acessar `/alterar-senha` e definir uma senha definitiva antes de usar qualquer módulo privado. Enquanto `senha_temporaria` estiver ativa, o backend bloqueia endpoints privados com status `428`.
+
 Para criar ou redefinir o primeiro administrador, deve ser usado o script:
 
 ```bash

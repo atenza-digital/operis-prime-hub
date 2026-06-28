@@ -47,6 +47,7 @@ async function getUserPayload(client, userId) {
        u.nome,
        u.email,
        u.status,
+       u.senha_temporaria,
        u.ultimo_login_em,
        t.id AS tenant_id,
        t.slug AS tenant_slug,
@@ -79,6 +80,7 @@ async function getUserPayload(client, userId) {
     nome: user.nome,
     email: user.email,
     status: user.status,
+    senhaTemporaria: Boolean(user.senha_temporaria),
     ultimoLoginEm: user.ultimo_login_em?.toISOString?.() ?? user.ultimo_login_em,
     tenant: {
       id: user.tenant_id,
@@ -206,4 +208,69 @@ export async function revokeSession(tokenHash) {
      WHERE token_hash = $1 AND revoked_at IS NULL`,
     [tokenHash],
   );
+}
+
+export async function changePassword({ userId, tenantId, currentPassword, newPassword, sessionTokenHash, ip, userAgent }) {
+  if (!currentPassword || !newPassword) {
+    const error = new Error("Informe a senha atual e a nova senha.");
+    error.status = 400;
+    throw error;
+  }
+  if (String(newPassword).length < 8) {
+    const error = new Error("A nova senha deve ter pelo menos 8 caracteres.");
+    error.status = 400;
+    throw error;
+  }
+  if (currentPassword === newPassword) {
+    const error = new Error("A nova senha precisa ser diferente da senha atual.");
+    error.status = 400;
+    throw error;
+  }
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, senha_hash
+       FROM ciperprag_hub.usuarios
+       WHERE id = $1 AND tenant_id = $2 AND status = 'ativo'
+       LIMIT 1`,
+      [userId, tenantId],
+    );
+    const user = rows[0];
+    if (!user || !(await verifyPassword(currentPassword, user.senha_hash))) {
+      const error = new Error("Senha atual inválida.");
+      error.status = 401;
+      throw error;
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    await client.query(
+      `UPDATE ciperprag_hub.usuarios
+       SET senha_hash = $3,
+           senha_temporaria = FALSE,
+           senha_alterada_em = NOW(),
+           tentativas_login = 0,
+           bloqueado_ate = NULL,
+           updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2`,
+      [userId, tenantId, passwordHash],
+    );
+
+    await client.query(
+      `UPDATE ciperprag_hub.usuario_sessoes
+       SET revoked_at = NOW()
+       WHERE usuario_id = $1
+         AND revoked_at IS NULL
+         AND token_hash <> $2`,
+      [userId, sessionTokenHash],
+    );
+
+    await client.query(
+      `INSERT INTO ciperprag_hub.audit_logs
+       (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo, ip, user_agent)
+       VALUES ($1,$2,'usuario',$3,'password_changed','Senha alterada pelo usuario',$4,$5)`,
+      [tenantId, userId, userId, ip || null, userAgent || null],
+    );
+
+    return getUserPayload(client, userId);
+  });
 }

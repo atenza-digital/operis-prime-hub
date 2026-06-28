@@ -59,6 +59,8 @@ ADMIN_EMAIL="admin@empresa.com.br" ADMIN_PASSWORD="senha-segura" ADMIN_NAME="Adm
 
 Nunca grave senha em SQL ou no repositório. O script gera `senha_hash` usando hash seguro antes de persistir.
 
+`003_password_change_flow.sql` adiciona o controle `senha_temporaria`. Usuários criados pela tela administrativa ou com senha resetada ficam obrigados a alterar a senha no primeiro acesso antes de usar os módulos do sistema.
+
 ## Aplicação Manual
 
 Exemplo:
