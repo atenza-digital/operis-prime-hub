@@ -2291,6 +2291,8 @@ As permissões cadastradas em banco passam a ser usadas em duas camadas:
 - Backend: endpoints de criação, edição, encerramento, emissão e configuração exigem permissões específicas.
 - Frontend: menus e rotas privadas são filtrados conforme o perfil do usuário logado.
 
+O módulo `Usuários e Perfis` permite que administradores da empresa criem usuários, editem nome/e-mail/status, atribuam perfis e gerem senha temporária. A senha temporária é exibida apenas no momento da criação ou reset e deve ser enviada ao usuário por canal seguro.
+
 Para criar ou redefinir o primeiro administrador, deve ser usado o script:
 
 ```bash

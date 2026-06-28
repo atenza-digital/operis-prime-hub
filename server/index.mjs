@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { authenticateToken, loginWithPassword, revokeSession } from "./auth.mjs";
+import { authenticateToken, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,6 +71,15 @@ async function generateUniqueCertificateHash(db = { query }) {
 
 function makeId(prefix) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function createTemporaryPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!#$%&*+-=?";
+  let password = "";
+  for (let index = 0; index < 16; index += 1) {
+    password += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return password;
 }
 
 function rowsToClientMap(rows) {
@@ -440,6 +449,73 @@ async function getRecurrenceSuggestions() {
   }));
 }
 
+async function getRolesForTenant(tenantId) {
+  const { rows } = await query(
+    `SELECT
+       p.id,
+       p.codigo,
+       p.nome,
+       p.descricao,
+       p.sistema,
+       COALESCE(
+         ARRAY_AGG(DISTINCT perm.codigo) FILTER (WHERE perm.codigo IS NOT NULL),
+         '{}'
+       ) AS permissoes
+     FROM ciperprag_hub.perfis p
+     LEFT JOIN ciperprag_hub.perfil_permissoes pp ON pp.perfil_id = p.id
+     LEFT JOIN ciperprag_hub.permissoes perm ON perm.id = pp.permissao_id
+     WHERE p.tenant_id = $1
+     GROUP BY p.id
+     ORDER BY p.sistema DESC, p.nome`,
+    [tenantId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    codigo: row.codigo,
+    nome: row.nome,
+    descricao: row.descricao,
+    sistema: row.sistema,
+    permissoes: row.permissoes ?? [],
+  }));
+}
+
+async function getUsersForTenant(tenantId) {
+  const { rows } = await query(
+    `SELECT
+       u.id,
+       u.nome,
+       u.email,
+       u.status,
+       u.ultimo_login_em,
+       u.created_at,
+       u.updated_at,
+       COALESCE(
+         JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('codigo', p.codigo, 'nome', p.nome))
+           FILTER (WHERE p.id IS NOT NULL),
+         '[]'
+       ) AS perfis
+     FROM ciperprag_hub.usuarios u
+     LEFT JOIN ciperprag_hub.usuario_perfis up ON up.usuario_id = u.id
+     LEFT JOIN ciperprag_hub.perfis p ON p.id = up.perfil_id
+     WHERE u.tenant_id = $1
+     GROUP BY u.id
+     ORDER BY u.nome`,
+    [tenantId],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    email: row.email,
+    status: row.status,
+    ultimoLoginEm: row.ultimo_login_em?.toISOString?.() ?? row.ultimo_login_em,
+    criadoEm: row.created_at?.toISOString?.() ?? row.created_at,
+    atualizadoEm: row.updated_at?.toISOString?.() ?? row.updated_at,
+    perfis: row.perfis ?? [],
+  }));
+}
+
 async function getBootstrap() {
   const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions] =
     await Promise.all([
@@ -566,6 +642,133 @@ app.post("/api/auth/logout", async (req, res) => {
 
 app.get("/api/bootstrap", async (_req, res) => {
   res.json(await getBootstrap());
+});
+
+app.get("/api/roles", requirePermission("usuarios.manage"), async (req, res) => {
+  res.json({ ok: true, roles: await getRolesForTenant(req.auth.user.tenant.id) });
+});
+
+app.get("/api/users", requirePermission("usuarios.manage"), async (req, res) => {
+  res.json({ ok: true, users: await getUsersForTenant(req.auth.user.tenant.id) });
+});
+
+app.post("/api/users", requirePermission("usuarios.manage"), async (req, res) => {
+  const body = req.body;
+  const tenantId = req.auth.user.tenant.id;
+  const email = normalizeEmail(body.email);
+  const status = body.status || "ativo";
+  const roleCodes = Array.isArray(body.perfilCodigos) ? body.perfilCodigos : [];
+
+  if (!String(body.nome || "").trim()) return res.status(400).json({ error: "Nome obrigatorio." });
+  if (!email) return res.status(400).json({ error: "E-mail obrigatorio." });
+  if (!["ativo", "convidado", "bloqueado", "inativo"].includes(status)) return res.status(400).json({ error: "Status invalido." });
+  if (roleCodes.length === 0) return res.status(400).json({ error: "Selecione pelo menos um perfil." });
+  if (body.id === req.auth.user.id && status !== "ativo") return res.status(400).json({ error: "Voce nao pode bloquear ou inativar seu proprio usuario." });
+
+  const temporaryPassword = body.id ? null : createTemporaryPassword();
+  const passwordHash = temporaryPassword ? await hashPassword(temporaryPassword) : null;
+
+  const user = await withTransaction(async (client) => {
+    const { rows: roleRows } = await client.query(
+      `SELECT id, codigo
+       FROM ciperprag_hub.perfis
+       WHERE tenant_id = $1 AND codigo = ANY($2::text[])`,
+      [tenantId, roleCodes],
+    );
+    if (roleRows.length !== roleCodes.length) {
+      const error = new Error("Um ou mais perfis informados nao existem.");
+      error.status = 400;
+      throw error;
+    }
+
+    const { rows } = body.id
+      ? await client.query(
+          `UPDATE ciperprag_hub.usuarios
+           SET nome = $3,
+               email = $4,
+               status = $5,
+               updated_at = NOW()
+           WHERE id = $1 AND tenant_id = $2
+           RETURNING id, nome, email, status`,
+          [body.id, tenantId, String(body.nome).trim(), email, status],
+        )
+      : await client.query(
+          `INSERT INTO ciperprag_hub.usuarios
+           (tenant_id, nome, email, senha_hash, status, senha_alterada_em)
+           VALUES ($1,$2,$3,$4,$5,NOW())
+           RETURNING id, nome, email, status`,
+          [tenantId, String(body.nome).trim(), email, passwordHash, status],
+        );
+
+    const savedUser = rows[0];
+    if (!savedUser) {
+      const error = new Error("Usuario nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    await client.query("DELETE FROM ciperprag_hub.usuario_perfis WHERE usuario_id = $1", [savedUser.id]);
+    for (const role of roleRows) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.usuario_perfis (usuario_id, perfil_id)
+         VALUES ($1,$2)
+         ON CONFLICT DO NOTHING`,
+        [savedUser.id, role.id],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO ciperprag_hub.audit_logs
+       (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo)
+       VALUES ($1,$2,'usuario',$3,$4,$5)`,
+      [
+        tenantId,
+        req.auth.user.id,
+        savedUser.id,
+        body.id ? "user_updated" : "user_created",
+        body.id ? `Usuario ${savedUser.email} atualizado` : `Usuario ${savedUser.email} criado`,
+      ],
+    );
+
+    return savedUser;
+  });
+
+  res.json({ ok: true, user, temporaryPassword });
+});
+
+app.post("/api/users/:id/reset-password", requirePermission("usuarios.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const userId = req.params.id;
+  const temporaryPassword = createTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+
+  const { rowCount } = await query(
+    `UPDATE ciperprag_hub.usuarios
+     SET senha_hash = $3,
+         senha_alterada_em = NOW(),
+         tentativas_login = 0,
+         bloqueado_ate = NULL,
+         updated_at = NOW()
+     WHERE id = $1 AND tenant_id = $2`,
+    [userId, tenantId, passwordHash],
+  );
+  if (!rowCount) return res.status(404).json({ error: "Usuario nao encontrado." });
+
+  await query(
+    `UPDATE ciperprag_hub.usuario_sessoes
+     SET revoked_at = NOW()
+     WHERE usuario_id = $1 AND revoked_at IS NULL`,
+    [userId],
+  );
+
+  await query(
+    `INSERT INTO ciperprag_hub.audit_logs
+     (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo)
+     VALUES ($1,$2,'usuario',$3,'password_reset','Senha temporaria gerada')`,
+    [tenantId, req.auth.user.id, userId],
+  );
+
+  res.json({ ok: true, temporaryPassword });
 });
 
 app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) => {

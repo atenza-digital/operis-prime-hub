@@ -17,6 +17,7 @@ import Equipes from "@/pages/Equipes";
 import Visualizador from "@/pages/Visualizador";
 import Certificados from "@/pages/Certificados";
 import ValidarCertificado from "@/pages/ValidarCertificado";
+import Usuarios from "@/pages/Usuarios";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
@@ -49,6 +50,7 @@ const App = () => (
             <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
             <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
             <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
+            <Route element={<ProtectedRoute permission="usuarios.manage"><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} path="/usuarios" />
 
             {/* Comercial */}
             <Route element={<ProtectedRoute permission="clientes.manage"><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />

@@ -45,6 +45,10 @@ const navGroups = [
       { to: "/comercial/configuracoes", label: "Configurações", shortLabel: "Config.", icon: Settings, permission: "configuracoes.manage" },
     ],
   },
+  {
+    label: "Administração",
+    items: [{ to: "/usuarios", label: "Usuários e Perfis", shortLabel: "Usuários", icon: Users, permission: "usuarios.manage" }],
+  },
 ];
 
 const routeMeta: Record<string, { section: string; title: string; description: string }> = {
@@ -55,6 +59,7 @@ const routeMeta: Record<string, { section: string; title: string; description: s
   "/certificados": { section: "Operacional", title: "Certificados e Histórico", description: "Consulte certificados emitidos e o histórico completo dos serviços." },
   "/medicao": { section: "Operacional", title: "Medição", description: "Consolide OS encerradas em períodos faturáveis e gere a medição." },
   "/equipes": { section: "Equipes", title: "Quadro Semanal", description: "Visualize a alocação operacional de técnicos e veículos." },
+  "/usuarios": { section: "Administração", title: "Usuários e Perfis", description: "Gerencie contas, perfis e resets de senha da plataforma." },
 };
 
 function NavLink({

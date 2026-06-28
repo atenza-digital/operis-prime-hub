@@ -299,6 +299,26 @@ export interface AuthSession {
   user: AuthUser;
 }
 
+export interface RoleApp {
+  id: string;
+  codigo: string;
+  nome: string;
+  descricao?: string;
+  sistema: boolean;
+  permissoes: string[];
+}
+
+export interface UserApp {
+  id: string;
+  nome: string;
+  email: string;
+  status: "ativo" | "convidado" | "bloqueado" | "inativo";
+  ultimoLoginEm?: string | null;
+  criadoEm?: string;
+  atualizadoEm?: string;
+  perfis: Array<{ codigo: string; nome: string }>;
+}
+
 export function getAuthToken() {
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }
@@ -345,6 +365,12 @@ export const login = (payload: { email: string; password: string }) =>
   api<{ ok: boolean } & AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) });
 export const getCurrentUser = () => api<{ ok: boolean; user: AuthUser }>("/auth/me");
 export const logout = () => api<{ ok: boolean }>("/auth/logout", { method: "POST" });
+export const getRoles = () => api<{ ok: boolean; roles: RoleApp[] }>("/roles");
+export const getUsers = () => api<{ ok: boolean; users: UserApp[] }>("/users");
+export const saveUser = (payload: { id?: string; nome: string; email: string; status: UserApp["status"]; perfilCodigos: string[] }) =>
+  api<{ ok: boolean; user: UserApp; temporaryPassword?: string }>("/users", { method: "POST", body: JSON.stringify(payload) });
+export const resetUserPassword = (id: string) =>
+  api<{ ok: boolean; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
 export const saveTechnician = (payload: Partial<Tecnico>) => api("/technicians", { method: "POST", body: JSON.stringify(payload) });
