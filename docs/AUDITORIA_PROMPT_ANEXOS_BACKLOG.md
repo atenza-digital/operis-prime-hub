@@ -187,3 +187,24 @@ Backlog remanescente da Etapa 6A:
 - Adicionar assinatura digital/assinatura coletada em campo.
 - Registrar auditoria detalhada de alteracao/encerramento/cancelamento de OS.
 - Criar status especifico de OS nao executada, caso o cliente queira diferenciar visualmente de encerrada.
+
+## Atualizacao - Etapa 8A executada
+
+Status: concluida no escopo minimo de certificado com snapshot.
+
+Entregas realizadas:
+
+- Certificados passaram a armazenar snapshot JSON dos dados finais de OS, cliente, servico e empresa.
+- Emissao de certificado foi centralizada em uma funcao unica para encerramento de OS e geracao manual.
+- Numeracao de certificado passou a usar configuracao persistida em numeracao_config.
+- Certificado impresso passou a preferir dados do snapshot, evitando alteracao retroativa quando cadastros forem editados.
+- Validacao publica passou a reconhecer certificado revogado.
+- Banco recebeu campos para status, revogacao e motivo de revogacao.
+
+Backlog remanescente da Etapa 8A:
+
+- Criar interface administrativa para revogar certificado e informar motivo.
+- Popular snapshot para certificados antigos ja existentes.
+- Remover rota antiga duplicada de geracao de certificado apos limpeza completa de encoding do arquivo server/index.mjs.
+- Assinar/hashar criptograficamente o snapshot para verificacao forte de integridade.
+- Exibir na tela publica um resumo mais completo do snapshot validado.

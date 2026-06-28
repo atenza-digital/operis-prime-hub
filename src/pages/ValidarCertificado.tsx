@@ -52,6 +52,14 @@ export default function ValidarCertificado() {
   const status = certificate?.status ?? null;
   const statusBlock = useMemo(() => {
     if (!certificate) return null;
+    if (certificate.certificateStatus === "revogado") {
+      return {
+        icon: ShieldAlert,
+        title: "Certificado revogado",
+        description: certificate.motivoRevogacao || "Este certificado existe na base oficial, mas foi revogado e nao deve ser aceito como valido.",
+        tone: "border-red-200 bg-red-50 text-red-900",
+      };
+    }
     if (status === "valid") {
       return {
         icon: ShieldCheck,

@@ -7,12 +7,12 @@ import templateCertificado from "@/template_certificado_dinamico.html?raw";
 import QRCode from "qrcode";
 
 function fmtDate(date: string) {
-  if (!date) return "—";
+  if (!date) return "-";
   return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
-function escapeHtml(value: string) {
-  return value
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -38,18 +38,17 @@ function toBase64Img(url: string): Promise<string> {
   });
 }
 
+function snapshotSection(cert: CertificadoApp, section: string) {
+  return (cert.snapshotDados?.[section] ?? {}) as Record<string, unknown>;
+}
+
 function renderGaleria(fotos: string[]) {
   if (!fotos.length) return "";
   return `
     <div class="gallery">
       ${fotos
         .slice(0, 3)
-        .map(
-          (foto, index) => `
-            <div class="gallery-item">
-              <img src="${foto}" alt="Evidencia ${index + 1}" />
-            </div>`,
-        )
+        .map((foto, index) => `<div class="gallery-item"><img src="${foto}" alt="Evidencia ${index + 1}" /></div>`)
         .join("")}
     </div>
   `;
@@ -60,7 +59,7 @@ function renderProdutos(cert: CertificadoApp) {
     ? cert.produtosDetalhados!
     : (cert.produtosQuimicos ?? []).map((nome) => ({
         nome,
-        grupoQuimico: "—",
+        grupoQuimico: "-",
         qtUso: "Conf. necessidade",
         diluente: "Agua",
         volAplicado: "Conf. area",
@@ -68,16 +67,14 @@ function renderProdutos(cert: CertificadoApp) {
         antidoto: "Anti-histaminico",
       }));
 
-  if (!produtos.length) {
-    return `<tr><td colspan="7" style="text-align:center;color:#888">Nao aplicavel para este servico</td></tr>`;
-  }
+  if (!produtos.length) return `<tr><td colspan="7" style="text-align:center;color:#888">Nao aplicavel para este servico</td></tr>`;
 
   return produtos
     .map(
       (produto) => `
         <tr>
           <td>${escapeHtml(produto.nome)}</td>
-          <td>${escapeHtml(produto.grupoQuimico ?? "—")}</td>
+          <td>${escapeHtml(produto.grupoQuimico ?? "-")}</td>
           <td>${escapeHtml(produto.qtUso ?? "Conf. necessidade")}</td>
           <td>${escapeHtml(produto.diluente ?? "Agua")}</td>
           <td>${escapeHtml(produto.volAplicado ?? "Conf. area")}</td>
@@ -90,23 +87,26 @@ function renderProdutos(cert: CertificadoApp) {
 
 function renderLicencas(cert: CertificadoApp, bootstrap: BootstrapData) {
   const company = bootstrap.companyConfig;
+  const empresa = snapshotSection(cert, "empresa");
   return [
     { titulo: "CERTIFICADO", valor: cert.numero },
     { titulo: "MTRR", valor: "151012245873" },
     { titulo: "MEIO AMBIENTE", valor: "Nº102/2024" },
-    { titulo: "C.R.02", valor: company?.cr02 || "—" },
+    { titulo: "C.R.02", valor: empresa.cr02 || company?.cr02 || "-" },
     { titulo: "CTR02", valor: "1657521/2024" },
-    { titulo: "ALVARA", valor: company?.alvara || "—" },
-    { titulo: "VIG. SANITARIA", valor: company?.vigilanciaSanitaria || "—" },
+    { titulo: "ALVARA", valor: empresa.alvara || company?.alvara || "-" },
+    { titulo: "VIG. SANITARIA", valor: empresa.vigilanciaSanitaria || company?.vigilanciaSanitaria || "-" },
   ]
-    .map(({ titulo, valor }) => `<div><strong>${escapeHtml(titulo)}</strong><br>${escapeHtml(valor)}</div>`)
+    .map(({ titulo, valor }) => `<div><strong>${escapeHtml(titulo)}</strong><br>${escapeHtml(String(valor))}</div>`)
     .join("");
 }
 
 export async function imprimirCertificado(cert: CertificadoApp) {
   const bootstrap = await getBootstrap();
   const os = bootstrap.orders.find((item) => item.id === cert.osId);
-  const fotos = os?.fotos ?? [];
+  const snapshotOs = snapshotSection(cert, "os");
+  const snapshotEmpresa = snapshotSection(cert, "empresa");
+  const fotos = (snapshotOs.fotos as string[] | undefined) ?? os?.fotos ?? [];
   const validadeInicio = fmtDate(cert.dataExecucao);
   const validadeFim = cert.validadeDias > 0 ? fmtDate(addDays(cert.dataExecucao, cert.validadeDias)) : "Indeterminado";
   const verifyUrl = buildCertificateVerificationUrl(cert.hash);
@@ -119,11 +119,14 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     toBase64Img(iconeLateral),
   ]);
 
-  const textoCertificado = `Certificamos para os devidos fins que a empresa <strong>${escapeHtml(
-    cert.clienteNome,
-  )}</strong> recebeu a execucao do servico de <strong>${escapeHtml(
-    cert.servico,
-  )}</strong>, conforme os procedimentos tecnicos aplicaveis e em conformidade com as exigencias sanitarias vigentes, inclusive a RDC 652/2022 quando cabivel.`;
+  const tagTexto = String(snapshotOs.tagEquipamentoServico || os?.tagEquipamentoServico || "");
+  const servicoTexto = tagTexto ? `${cert.servico} - ${tagTexto}` : cert.servico;
+  const textoLegal = String(
+    snapshotEmpresa.certificadoTextoLegal ||
+      bootstrap.companyConfig?.certificadoTextoLegal ||
+      "conforme os procedimentos tecnicos aplicaveis e em conformidade com as exigencias sanitarias vigentes, inclusive a RDC 652/2022 quando cabivel",
+  );
+  const textoCertificado = `Certificamos para os devidos fins que a empresa <strong>${escapeHtml(cert.clienteNome)}</strong> recebeu a execucao do servico de <strong>${escapeHtml(servicoTexto)}</strong>, ${escapeHtml(textoLegal)}.`;
 
   const html = templateCertificado
     .replaceAll("{{icone_lateral}}", lateralSrc)
@@ -132,12 +135,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     .replaceAll("{{assinatura_responsavel}}", assinaturaSrc)
     .replaceAll("{{validade_inicio}}", validadeInicio)
     .replaceAll("{{validade_fim}}", validadeFim)
-    .replaceAll(
-      "{{logo_cliente_html}}",
-      cert.clienteLogoUrl
-        ? `<img class="logo-cliente" src="${cert.clienteLogoUrl}" alt="Logo do cliente" />`
-        : "",
-    )
+    .replaceAll("{{logo_cliente_html}}", cert.clienteLogoUrl ? `<img class="logo-cliente" src="${cert.clienteLogoUrl}" alt="Logo do cliente" />` : "")
     .replaceAll("{{empresa_nome}}", escapeHtml(cert.clienteNome))
     .replaceAll("{{cliente_cnpj}}", escapeHtml(cert.clienteCnpj))
     .replaceAll("{{cliente_endereco}}", escapeHtml(cert.clienteEndereco ?? ""))
@@ -152,7 +150,6 @@ export async function imprimirCertificado(cert: CertificadoApp) {
 
   const printWindow = window.open("", "_blank", "width=1100,height=800");
   if (!printWindow) return;
-
   printWindow.document.write(`${html}<script>window.onload = function(){ window.print(); }</script>`);
   printWindow.document.close();
 }

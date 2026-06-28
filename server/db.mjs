@@ -252,6 +252,30 @@ export async function ensureDatabaseShape() {
   `);
 
   await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.certificados
+    ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
+    ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT
+  `);
+
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'certificados_status_check'
+          AND conrelid = 'ciperprag_hub.certificados'::regclass
+      ) THEN
+        ALTER TABLE ciperprag_hub.certificados
+          ADD CONSTRAINT certificados_status_check
+          CHECK (status IN ('emitido','revogado'));
+      END IF;
+    END $$;
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.recorrencia_sugestoes (
       id VARCHAR(30) PRIMARY KEY,
       cliente_id VARCHAR(20),

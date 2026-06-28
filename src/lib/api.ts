@@ -172,6 +172,10 @@ export interface CertificadoApp {
   validadeDias: number;
   produtosQuimicos?: string[];
   produtosDetalhados?: Array<Record<string, string>>;
+  snapshotDados?: Record<string, unknown>;
+  status?: "emitido" | "revogado";
+  revogadoEm?: string | null;
+  motivoRevogacao?: string | null;
 }
 
 export interface CertificateVerification {
@@ -196,6 +200,10 @@ export interface CertificateVerification {
   status: "valid" | "expired";
   produtosQuimicos?: string[];
   produtosDetalhados?: Array<Record<string, string>>;
+  snapshotDados?: Record<string, unknown>;
+  certificateStatus?: "emitido" | "revogado";
+  revogadoEm?: string | null;
+  motivoRevogacao?: string | null;
   tagEquipamentoServico?: string;
   quantidade?: number;
   unidade?: string;

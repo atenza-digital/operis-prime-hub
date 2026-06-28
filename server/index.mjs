@@ -76,6 +76,77 @@ function makeId(prefix) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
 }
 
+function formatSequential(format, value) {
+  const year = new Date().getFullYear();
+  return String(format || "CERT-{SEQ}/{ANO}")
+    .replaceAll("{SEQ}", String(value).padStart(3, "0"))
+    .replaceAll("{ANO}", String(year));
+}
+
+function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias }) {
+  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
+  const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
+  const tag = order.tag_equipamento_servico || order.tags || null;
+  return {
+    certificado: {
+      hash,
+      numero: number,
+      status: "emitido",
+      emitidoEm: new Date().toISOString(),
+      validadeDias: Number(validadeDias || 0),
+      validadeAte,
+    },
+    cliente: {
+      id: order.cliente_id,
+      nome: order.cliente,
+      cnpj: order.cnpj,
+      endereco: clienteEndereco,
+      logoUrl: customer?.logo_url || order.cliente_logo_url || null,
+    },
+    os: {
+      id: order.id,
+      numero: order.numero,
+      contratoId: order.contrato_id,
+      dataExecucao,
+      quantidade: Number(order.quantidade || 0),
+      unidade: order.unidade,
+      localExecucao: order.local_execucao,
+      tagEquipamentoServico: tag,
+      tecnicoNome: order.tecnico,
+      fotos: order.fotos || [],
+    },
+    servico: {
+      nome: order.servico,
+      tipo: order.tipo,
+      geraCertificado: service?.gera_certificado ?? true,
+      produtosQuimicos: service?.produtos_quimicos || [],
+      produtosDetalhados: service?.produtos_detalhados || [],
+      normasAplicaveis: service?.normas_aplicaveis || [],
+      popCodigo: service?.pop_codigo || null,
+      popTitulo: service?.pop_titulo || null,
+      popVersao: service?.pop_versao || null,
+    },
+    empresa: {
+      razaoSocial: company?.razao_social || null,
+      nomeFantasia: company?.nome_fantasia || null,
+      cnpj: company?.cnpj || null,
+      endereco: company?.endereco || null,
+      telefone: company?.telefone || null,
+      email: company?.email || null,
+      alvara: company?.alvara || null,
+      cr02: company?.cr02 || null,
+      anvisa: company?.anvisa || null,
+      vigilanciaSanitaria: company?.vigilancia_sanitaria || null,
+      responsavelTecnico: company?.responsavel_tecnico || null,
+      responsavelExecucao: company?.responsavel_execucao || null,
+      cargoResponsavel: company?.cargo_responsavel || null,
+      certificadoTextoLegal: company?.certificado_texto_legal || null,
+      certificadoTextoFixacao: company?.certificado_texto_fixacao || null,
+      telefoneEmergencia: company?.telefone_emergencia || null,
+    },
+  };
+}
+
 function createTemporaryPassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!#$%&*+-=?";
   let password = "";
@@ -314,6 +385,10 @@ async function getCertificates() {
     validadeDias: row.validade_dias,
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: row.produtos_detalhados ?? [],
+    snapshotDados: row.snapshot_dados ?? {},
+    status: row.status,
+    revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
+    motivoRevogacao: row.motivo_revogacao,
   }));
 }
 
@@ -356,14 +431,71 @@ async function getCertificateByHash(hash) {
     emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
     validadeDias: Number(row.validade_dias || 0),
     validadeAte,
-    status: buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
+    status: row.status === "revogado" ? "expired" : buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
+    certificateStatus: row.status,
+    revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
+    motivoRevogacao: row.motivo_revogacao,
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: row.produtos_detalhados ?? [],
+    snapshotDados: row.snapshot_dados ?? {},
     tagEquipamentoServico: row.tag_equipamento_servico,
     quantidade: Number(row.quantidade || 0),
     unidade: row.unidade,
     fotos: row.fotos ?? [],
   };
+}
+
+async function issueCertificateForOrder(client, order, { dataExecucao } = {}) {
+  const { rows: serviceRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
+  const service = serviceRows[0];
+  const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
+  const customer = customerRows[0];
+  const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+  const company = companyRows[0];
+  const { rows: numRows } = await client.query(
+    `UPDATE ciperprag_hub.numeracao_config
+     SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
+     WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)
+     RETURNING certificado_formato, certificado_ultimo`,
+  );
+
+  const certId = makeId("CERT");
+  const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
+  const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
+  const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
+  const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
+  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
+  const snapshot = buildCertificateSnapshot({ order, customer, service, company, hash, number: certNumber, dataExecucao: executionDate, validadeDias });
+
+  await client.query(
+    `INSERT INTO ciperprag_hub.certificados
+     (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17,$18,$19,'emitido')
+     ON CONFLICT (hash) DO NOTHING`,
+    [
+      certId,
+      hash,
+      certNumber,
+      order.id,
+      order.numero,
+      order.cliente_id,
+      order.cliente,
+      order.cnpj,
+      clienteEndereco,
+      customer?.logo_url || order.cliente_logo_url || null,
+      order.contrato_id,
+      order.servico,
+      order.tecnico,
+      order.local_execucao,
+      executionDate,
+      validadeDias,
+      service?.produtos_quimicos || [],
+      service?.produtos_detalhados || [],
+      JSON.stringify(snapshot),
+    ],
+  );
+  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [order.id, hash]);
+  return hash;
 }
 
 async function getCompanyConfig() {
@@ -1186,8 +1318,6 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const contract = contractRows[0];
     const { rows: serviceRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
     const service = serviceRows[0];
-    const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
-    const customer = clientRows[0];
     const qty = Number(quantidade || 1);
     const isNotExecuted = Boolean(naoExecutada);
 
@@ -1244,19 +1374,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     let certificateHash = null;
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
-      const certId = makeId("CERT");
-      const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
-      const countResult = await client.query("SELECT COUNT(*)::int AS total FROM ciperprag_hub.certificados");
-      const certNumber = `${7297 + countResult.rows[0].total}/${new Date().getFullYear()}`;
-      await client.query(
-        `INSERT INTO ciperprag_hub.certificados
-         (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17)
-         ON CONFLICT (hash) DO NOTHING`,
-        [certId, hash, certNumber, order.id, order.numero, order.cliente_id, order.cliente, order.cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco, customer?.logo_url || order.cliente_logo_url || null, order.contrato_id, order.servico, order.tecnico, order.local_execucao, dataExecucao, service?.validade_certificado_dias || 0, service?.produtos_quimicos || []],
-      );
-      await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [orderId, hash]);
-      certificateHash = hash;
+      certificateHash = await issueCertificateForOrder(client, { ...order, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] }, { dataExecucao });
     }
 
     const recorrenciaDias = Number(service?.recorrencia_dias || contract?.validade_dias || 0);
@@ -1273,6 +1391,16 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
   });
 
   res.json({ ok: true, ...response });
+});
+
+app.post("/api/orders/:id/certificado", requirePermission("certificados.manage"), async (req, res) => {
+  const orderId = req.params.id;
+  const { rows: orderRows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
+  const order = orderRows[0];
+  if (!order) return res.status(404).json({ error: "OS nao encontrada" });
+  if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
+  const hash = await withTransaction(async (client) => issueCertificateForOrder(client, order));
+  res.json({ ok: true, hash });
 });
 
 app.post("/api/orders/:id/certificado", requirePermission("certificados.manage"), async (req, res) => {
