@@ -125,6 +125,12 @@ Impacto: POP e checklist devem virar dados estruturados, nao apenas anexos solto
 - Painel do dono do SaaS para controle de tenants, planos, pagamentos, bloqueios e cobranca.
 - Help center e onboarding guiado.
 
+### Oportunidades identificadas fora do prompt
+
+- Criar observabilidade basica para SaaS: logs estruturados, monitoramento de uptime, alertas de erro, trilha de deploy e painel simples de saude do ambiente.
+- Definir rotina automatizada de backup/restauracao testada para homologacao e producao.
+- Criar checklist interno de QA por release, com versao, data, responsavel, itens testados e links dos documentos gerados.
+
 ## Recomendacao de proxima etapa
 
 Seguir com uma etapa intermediaria chamada **Etapa 2A - Cadastros e parametrizacao documental minima**.
@@ -157,6 +163,27 @@ Entregas realizadas:
 Backlog remanescente da Etapa 2A:
 
 - Aplicar isolamento por tenant em todas as consultas operacionais.
-- Vincular equipamentos/tags diretamente no agendamento, OS e encerramento.
-- Fazer OS, certificado e medicao consumirem os novos campos documentais.
+- Fazer certificado e medicao consumirem os novos campos documentais.
 - Criar cadastro completo de POP com versionamento, aprovacao e anexos.
+
+## Atualizacao - Etapa 6A executada
+
+Status: concluida no escopo minimo de OS operacional.
+
+Entregas realizadas:
+
+- Agendamento passou a permitir selecionar equipamentos/tags cadastrados do cliente.
+- OS passou a persistir checklist respondido, nao execucao e motivo de nao execucao.
+- Encerramento da OS passou a usar checklist configurado no servico.
+- Encerramento da OS passou a respeitar exigencia de foto configurada no servico.
+- Encerramento da OS passou a permitir registro de nao execucao quando o servico permitir.
+- Seleção de tag no encerramento passou a ser guiada pelos equipamentos do cliente quando existirem.
+- Impressao da OS passou a mostrar POP vinculado, checklist operacional, tags e motivo de nao execucao.
+
+Backlog remanescente da Etapa 6A:
+
+- Melhorar edicao da OS aberta para selecionar local/tag por listas guiadas em vez de campo livre.
+- Corrigir acentuacao completa das telas antigas de Agendamento e Ordens de Servico.
+- Adicionar assinatura digital/assinatura coletada em campo.
+- Registrar auditoria detalhada de alteracao/encerramento/cancelamento de OS.
+- Criar status especifico de OS nao executada, caso o cliente queira diferenciar visualmente de encerrada.

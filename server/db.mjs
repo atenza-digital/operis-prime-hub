@@ -215,7 +215,10 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS tags TEXT,
     ADD COLUMN IF NOT EXISTS tag_equipamento_servico TEXT,
     ADD COLUMN IF NOT EXISTS observacao TEXT,
-    ADD COLUMN IF NOT EXISTS data_emissao DATE DEFAULT CURRENT_DATE
+    ADD COLUMN IF NOT EXISTS data_emissao DATE DEFAULT CURRENT_DATE,
+    ADD COLUMN IF NOT EXISTS checklist_respostas JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS nao_executada BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT
   `);
 
   await query(`

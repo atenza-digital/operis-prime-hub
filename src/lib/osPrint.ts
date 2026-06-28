@@ -77,6 +77,12 @@ function inferProcedures(service?: ServicoCatalogo) {
   ];
 }
 
+function inferChecklist(service?: ServicoCatalogo, os?: OSApp) {
+  if (os?.checklistRespostas?.length) return os.checklistRespostas.map((item) => `${item.concluido ? "( X )" : "(   )"} ${item.item}`);
+  if (service?.checklistItens?.length) return service.checklistItens.map((item) => `(   ) ${item}`);
+  return [];
+}
+
 function inferPreventiveMeasures(service?: ServicoCatalogo) {
   const items = [
     "O transporte manual de peso deve respeitar a capacidade fisica do colaborador, evitando sobrecarga e lombalgias.",
@@ -114,6 +120,7 @@ export function buildOsPrintHtml(
   const service = bootstrap?.services.find((item) => item.nome === os.servico);
   const leadTech = bootstrap?.technicians.find((item) => item.nome === os.tecnicoNome);
   const procedimentos = inferProcedures(service);
+  const checklist = inferChecklist(service, os);
   const medidas = inferPreventiveMeasures(service);
   const obrigacoes = inferEmployeeDuties();
   const epiList = service?.epis?.length ? service.epis : contract?.epis ?? [];
@@ -193,7 +200,10 @@ export function buildOsPrintHtml(
     </table>
 
     <div class="section-title">Descricao das Atividades:</div>
-    <div class="box tall-box">${escapeHtml(inferActivityLine(os, contract, service))}</div>
+    <div class="box tall-box">
+      ${escapeHtml(inferActivityLine(os, contract, service))}
+      ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versao ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
+    </div>
 
     <div class="section-title">Observacao</div>
     <div class="box large-box">
@@ -205,6 +215,7 @@ export function buildOsPrintHtml(
         <tr><td style="border:0;padding:0;">${escapeHtml(os.quantidade)}</td><td style="border:0;padding:0 0 0 10px;">${escapeHtml(os.servico)}</td></tr>
       </table>
       <div style="margin-top: 4px;">TAGs: ${escapeHtml(os.tagEquipamentoServico || os.tags || "")}<span style="display:inline-block;border-bottom:1px solid #222;min-width:180px;height:12px;"></span></div>
+      ${os.naoExecutada ? `<div style="margin-top:8px;"><strong>NAO EXECUTADA:</strong> ${escapeHtml(os.motivoNaoExecucao || "")}</div>` : ""}
     </div>
 
     <div class="section-title">Riscos da Atividade:</div>
@@ -220,6 +231,8 @@ export function buildOsPrintHtml(
     <div class="box">
       <ul class="bullets">${renderBulletList(procedimentos)}</ul>
     </div>
+
+    ${checklist.length > 0 ? `<div class="section-title">Checklist Operacional:</div><div class="box"><ul class="bullets">${renderBulletList(checklist)}</ul></div>` : ""}
 
     <div class="section-title">Em caso de emergencia:</div>
     <div class="box small">Caso o alarme de emergencia seja acionado, os profissionais deverao evacuar a area seguindo a rota de fuga ao ponto de encontro mais proximo.</div>

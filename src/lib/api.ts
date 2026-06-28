@@ -147,6 +147,9 @@ export interface OSApp {
   status: "aberta" | "encerrada";
   fotos: string[];
   certificadoHash?: string;
+  checklistRespostas?: Array<{ item: string; concluido: boolean; observacao?: string }>;
+  naoExecutada?: boolean;
+  motivoNaoExecucao?: string;
 }
 
 export interface CertificadoApp {
@@ -436,7 +439,7 @@ export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendame
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[] }) =>
+export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string }) =>
   api<{ ok: boolean; certificateHash?: string }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
 export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string }>(`/orders/${id}/certificado`, { method: "POST" });
 export const getCertificateVerification = (hash: string) =>

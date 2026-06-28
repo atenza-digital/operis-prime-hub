@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Award, CheckCircle2, ClipboardList, Eye, FileCheck2, MapPin, PenLine, Printer, Search, Tag, User, Users, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Award, BookOpen, CheckCircle2, ClipboardList, Eye, FileCheck2, MapPin, PenLine, Printer, Search, Tag, User, Users, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 function fmtDate(date: string) {
@@ -43,6 +45,9 @@ export default function OrdensServico() {
   const [dataExecucao, setDataExecucao] = useState("");
   const [quantidade, setQuantidade] = useState("1");
   const [tagEquipamento, setTagEquipamento] = useState("");
+  const [checklist, setChecklist] = useState<Array<{ item: string; concluido: boolean; observacao?: string }>>([]);
+  const [naoExecutada, setNaoExecutada] = useState(false);
+  const [motivoNaoExecucao, setMotivoNaoExecucao] = useState("");
   const [fotos, setFotos] = useState<{ preview: string; base64: string }[]>([]);
   const [encerrada, setEncerrada] = useState(false);
   const [certHash, setCertHash] = useState("");
@@ -50,6 +55,7 @@ export default function OrdensServico() {
   const [editOs, setEditOs] = useState<OSApp | null>(null);
   const [editTecnico, setEditTecnico] = useState("");
   const [editLocal, setEditLocal] = useState("");
+  const [editTag, setEditTag] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
@@ -71,6 +77,9 @@ export default function OrdensServico() {
   const ordens = data?.orders ?? [];
   const tecnicos = data?.technicians ?? [];
   const osSelecionada = ordens.find((item) => item.id === encOsId);
+  const servicoSelecionado = data?.services.find((item) => item.nome === osSelecionada?.servico);
+  const clienteSelecionado = data?.clients.find((item) => item.id === osSelecionada?.clienteId || item.cnpj === osSelecionada?.clienteCnpj);
+  const equipamentosOs = clienteSelecionado?.equipamentos?.filter((item) => item.ativo) ?? [];
 
   const ordensFiltradas = useMemo(() => {
     let list = [...ordens].reverse();
@@ -107,10 +116,15 @@ export default function OrdensServico() {
   }
 
   function openEnc(osId: string) {
+    const os = ordens.find((item) => item.id === osId);
+    const service = data?.services.find((item) => item.nome === os?.servico);
     setEncOsId(osId);
     setDataExecucao(todayInputDateBr());
     setQuantidade("1");
-    setTagEquipamento("");
+    setTagEquipamento(os?.tagEquipamentoServico || os?.tags?.split(",")[0]?.trim() || "");
+    setChecklist((service?.checklistItens ?? []).map((item) => ({ item, concluido: false, observacao: "" })));
+    setNaoExecutada(false);
+    setMotivoNaoExecucao("");
     setFotos([]);
     setEncerrada(false);
     setCertHash("");
@@ -119,11 +133,22 @@ export default function OrdensServico() {
 
   async function handleEncerrar() {
     if (!osSelecionada || !dataExecucao) return;
+    if (servicoSelecionado?.exigeFoto && !naoExecutada && fotos.length === 0) {
+      toast.error("Este serviço exige ao menos uma foto de evidência.");
+      return;
+    }
+    if (naoExecutada && !motivoNaoExecucao.trim()) {
+      toast.error("Informe o motivo da não execução.");
+      return;
+    }
     const response = await closeOrder(osSelecionada.id, {
       dataExecucao,
       quantidade: Number(quantidade || 1),
       tagEquipamentoServico: tagEquipamento,
       fotos: fotos.map((item) => item.base64),
+      checklistRespostas: checklist,
+      naoExecutada,
+      motivoNaoExecucao,
     });
     setCertHash(response.certificateHash || "");
     setEncerrada(true);
@@ -139,11 +164,12 @@ export default function OrdensServico() {
     setEditOs(os);
     setEditTecnico(os.tecnicoNome);
     setEditLocal(os.localExecucao);
+    setEditTag(os.tagEquipamentoServico || os.tags || "");
   }
 
   async function handleSaveEdit() {
     if (!editOs) return;
-    await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal });
+    await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal, tagEquipamentoServico: editTag, tags: editTag });
     toast.success("OS atualizada!");
     setEditOs(null);
     reload();
@@ -221,6 +247,8 @@ export default function OrdensServico() {
                       <div className="flex items-center gap-1 text-muted-foreground"><User className="h-3 w-3" /> {os.tecnicoNome}</div>
                       <div className="flex items-center gap-1 text-muted-foreground"><Users className="h-3 w-3" /> {os.equipeTecnicosNomes?.join(" • ") || os.tecnicoNome}</div>
                       <div className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" /> {os.localExecucao}</div>
+                      {(os.tagEquipamentoServico || os.tags) ? <div className="flex items-center gap-1 text-muted-foreground"><Tag className="h-3 w-3" /> {os.tagEquipamentoServico || os.tags}</div> : null}
+                      {os.naoExecutada ? <div className="flex items-center gap-1 font-medium text-destructive"><XCircle className="h-3 w-3" /> Não executada</div> : null}
                       {os.certificadoHash ? <div className="flex items-center gap-1 font-medium text-primary"><Award className="h-3 w-3" /> {os.certificadoHash}</div> : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5 border-t pt-1">
@@ -255,7 +283,47 @@ export default function OrdensServico() {
                 <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
               </div>
-              <div className="space-y-1.5"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag do equipamento atendido</Label><Input value={tagEquipamento} onChange={(event) => setTagEquipamento(event.target.value)} placeholder="Ex: BEB-02, CX-01, ARM-03" /></div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag do equipamento atendido</Label>
+                {equipamentosOs.length > 0 ? (
+                  <Select value={tagEquipamento || "sem-tag"} onValueChange={(value) => setTagEquipamento(value === "sem-tag" ? "" : value)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sem-tag">Sem tag específica</SelectItem>
+                      {equipamentosOs.map((equipamento) => <SelectItem key={equipamento.id || equipamento.tag} value={equipamento.tag}>{equipamento.tag} — {equipamento.descricao || equipamento.tipo || "Equipamento"}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={tagEquipamento} onChange={(event) => setTagEquipamento(event.target.value)} placeholder="Ex: BEB-02, CX-01, ARM-03" />
+                )}
+              </div>
+              {servicoSelecionado?.popCodigo || servicoSelecionado?.popTitulo ? (
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+                  <p className="flex items-center gap-1.5 font-semibold"><BookOpen className="h-3.5 w-3.5 text-primary" /> POP vinculado</p>
+                  <p className="mt-1 text-muted-foreground">{servicoSelecionado.popCodigo || "POP"} {servicoSelecionado.popVersao ? `· versão ${servicoSelecionado.popVersao}` : ""}</p>
+                  {servicoSelecionado.popTitulo ? <p className="font-medium">{servicoSelecionado.popTitulo}</p> : null}
+                </div>
+              ) : null}
+              {checklist.length > 0 ? (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label className="flex items-center gap-1.5"><ClipboardList className="h-3.5 w-3.5" /> Checklist do serviço</Label>
+                  {checklist.map((item, index) => (
+                    <label key={`${item.item}-${index}`} className="flex items-start gap-2 rounded-md border p-2 text-xs">
+                      <Checkbox checked={item.concluido} onCheckedChange={(checked) => setChecklist((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, concluido: Boolean(checked) } : entry))} />
+                      <span>{item.item}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              {servicoSelecionado?.permiteNaoExecucao ? (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox checked={naoExecutada} onCheckedChange={(checked) => setNaoExecutada(Boolean(checked))} />
+                    Registrar como não executada
+                  </label>
+                  {naoExecutada ? <Textarea value={motivoNaoExecucao} onChange={(event) => setMotivoNaoExecucao(event.target.value)} placeholder="Informe o motivo da não execução..." rows={3} /> : null}
+                </div>
+              ) : null}
               <div className="space-y-2"><Label>Fotos de evidência <span className="text-xs text-muted-foreground">(até 3)</span></Label><input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotoChange} /><div className="flex gap-3">{[0, 1, 2].map((index) => <div key={index} className="relative">{fotos[index] ? <div className="group relative h-24 w-24 overflow-hidden rounded-lg border-2 border-primary"><img src={fotos[index].preview} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" /><button onClick={() => setFotos((prev) => prev.filter((_, fotoIndex) => fotoIndex !== index))} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5"><X className="h-3 w-3 text-white" /></button></div> : <button onClick={() => fileInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50">Foto {index + 1}</button>}</div>)}</div></div>
               <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)}>Cancelar</Button><Button onClick={handleEncerrar}>Encerrar OS</Button></DialogFooter>
             </div>

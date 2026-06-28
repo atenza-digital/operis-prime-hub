@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, User, Users, XCircle } from "lucide-react";
+import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { printOsDocument } from "@/lib/osPrint";
@@ -54,6 +54,7 @@ export default function Agendamento() {
   const [contratoId, setContratoId] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
+  const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
   const [tecnicosSelecionados, setTecnicosSelecionados] = useState<string[]>([]);
   const [veiculoId, setVeiculoId] = useState("");
@@ -88,9 +89,12 @@ export default function Agendamento() {
   const recorrencias = (data?.recurrenceSuggestions ?? []).filter((item) => item.status === "pendente");
 
   const clienteNomeSel = useMemo(() => clientesAtivos.find((item) => item.id === clienteId)?.razaoSocial ?? clienteId, [clienteId, clientesAtivos]);
+  const clienteAtivo = useMemo(() => clientesAtivos.find((item) => item.id === clienteId), [clienteId, clientesAtivos]);
   const contratosCliente = useMemo(() => contratos.filter((item) => item.cliente === clienteNomeSel), [clienteNomeSel, contratos]);
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
-  const locaisContrato = contratoAtivo?.locais ?? [];
+  const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
+  const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
+  const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
   const agFiltrados = useMemo(() => {
@@ -113,6 +117,7 @@ export default function Agendamento() {
     setContratoId("");
     setDataAgendada("");
     setLocalExecucao("");
+    setTagsSelecionadas([]);
     setObservacao("");
     setTecnicosSelecionados([]);
     setVeiculoId("");
@@ -138,6 +143,7 @@ export default function Agendamento() {
       tipo: contratoAtivo.tipo,
       dataAgendada,
       localExecucao,
+      tags: tagsSelecionadas.join(", "),
       observacao,
       tecnicosIds: equipe.map((item) => item.id),
       tecnicosNomes: equipe.map((item) => item.nome),
@@ -262,7 +268,7 @@ export default function Agendamento() {
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
-                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); }}>
+                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); setTagsSelecionadas([]); }}>
                   <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
                   <SelectContent>{contratosCliente.map((item) => <SelectItem key={item.id} value={item.id}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id})</span></SelectItem>)}</SelectContent>
                 </Select>
@@ -284,6 +290,28 @@ export default function Agendamento() {
                 <Input placeholder="Ex: República Administrativa 01, Bloco A" value={localExecucao} onChange={(event) => setLocalExecucao(event.target.value)} disabled={!contratoId} />
               )}
             </div>
+
+            {equipamentosCliente.length > 0 && (
+              <div className="rounded-xl border p-4 space-y-3">
+                <Label className="flex items-center gap-1.5 text-xs"><Tag className="h-3.5 w-3.5" /> Equipamentos/tags previstos</Label>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {equipamentosCliente.map((equipamento) => (
+                    <label key={equipamento.id || equipamento.tag} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                      <Checkbox
+                        checked={tagsSelecionadas.includes(equipamento.tag)}
+                        onCheckedChange={() => {
+                          setTagsSelecionadas((prev) => (prev.includes(equipamento.tag) ? prev.filter((item) => item !== equipamento.tag) : [...prev, equipamento.tag]));
+                        }}
+                      />
+                      <span>
+                        <strong>{equipamento.tag}</strong>
+                        <span className="block text-muted-foreground">{equipamento.descricao || equipamento.tipo || equipamento.setor || "Equipamento cadastrado"}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="rounded-xl border p-4 space-y-3">

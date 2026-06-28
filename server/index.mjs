@@ -286,6 +286,9 @@ async function getOrders() {
     status: row.status,
     fotos: row.fotos ?? [],
     certificadoHash: row.certificado_hash,
+    checklistRespostas: row.checklist_respostas ?? [],
+    naoExecutada: row.nao_executada ?? false,
+    motivoNaoExecucao: row.motivo_nao_execucao,
   }));
 }
 
@@ -1161,18 +1164,18 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
   const body = { ...current, ...req.body };
   await query(
     `UPDATE ciperprag_hub.ordens_servico SET
-      tecnico=$2, local_execucao=$3, observacao=$4, updated_at=NOW()
+      tecnico=$2, local_execucao=$3, observacao=$4, tags=$5, tag_equipamento_servico=$6, updated_at=NOW()
      WHERE id = $1`,
-    [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null],
+    [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null],
   ).catch(async () => {
-    await query(`UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4 WHERE id = $1`, [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null]);
+    await query(`UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4, tags=$5, tag_equipamento_servico=$6 WHERE id = $1`, [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null]);
   });
   res.json({ ok: true });
 });
 
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
-  const { dataExecucao, quantidade, tagEquipamentoServico, fotos } = req.body;
+  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao } = req.body;
 
   const response = await withTransaction(async (client) => {
     const { rows: orderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
@@ -1186,39 +1189,61 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
     const customer = clientRows[0];
     const qty = Number(quantidade || 1);
+    const isNotExecuted = Boolean(naoExecutada);
+
+    if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
+      const error = new Error("Informe o motivo da nao execucao.");
+      error.status = 400;
+      throw error;
+    }
+
+    if (!isNotExecuted && service?.exige_foto && (!Array.isArray(fotos) || fotos.length === 0)) {
+      const error = new Error("Este servico exige ao menos uma foto de evidencia.");
+      error.status = 400;
+      throw error;
+    }
 
     await client.query(
       `UPDATE ciperprag_hub.ordens_servico
-       SET status = 'encerrada', data_execucao = $2, quantidade = $3, tag_equipamento_servico = $4, fotos = $5
+       SET status = 'encerrada',
+           data_execucao = $2,
+           quantidade = $3,
+           tag_equipamento_servico = $4,
+           fotos = $5,
+           checklist_respostas = $6,
+           nao_executada = $7,
+           motivo_nao_execucao = $8
        WHERE id = $1`,
-      [orderId, dataExecucao, qty, tagEquipamentoServico || null, fotos || []],
+      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, fotos || [], JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null],
     );
 
-    await client.query(
-      `UPDATE ciperprag_hub.contratos
-       SET executado = COALESCE(executado, 0) + $2,
-           ultima_execucao = $3,
-           status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END,
-           atualizado_em = NOW()
-       WHERE id = $1`,
-      [order.contrato_id, qty, dataExecucao],
-    ).catch(async () => {
+    if (!isNotExecuted) {
       await client.query(
         `UPDATE ciperprag_hub.contratos
          SET executado = COALESCE(executado, 0) + $2,
              ultima_execucao = $3,
-             status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END
+             status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END,
+             atualizado_em = NOW()
          WHERE id = $1`,
         [order.contrato_id, qty, dataExecucao],
-      );
-    });
+      ).catch(async () => {
+        await client.query(
+          `UPDATE ciperprag_hub.contratos
+           SET executado = COALESCE(executado, 0) + $2,
+               ultima_execucao = $3,
+               status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END
+           WHERE id = $1`,
+          [order.contrato_id, qty, dataExecucao],
+        );
+      });
+    }
 
     if (order.agendamento_id) {
       await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'encerrado' WHERE id = $1", [order.agendamento_id]);
     }
 
     let certificateHash = null;
-    if (service?.gera_certificado || order.tipo === "sanitario") {
+    if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
       const certId = makeId("CERT");
       const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
       const countResult = await client.query("SELECT COUNT(*)::int AS total FROM ciperprag_hub.certificados");
@@ -1235,7 +1260,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     }
 
     const recorrenciaDias = Number(service?.recorrencia_dias || contract?.validade_dias || 0);
-    if (recorrenciaDias > 0) {
+    if (!isNotExecuted && recorrenciaDias > 0) {
       await client.query(
         `INSERT INTO ciperprag_hub.recorrencia_sugestoes
          (id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
@@ -1299,7 +1324,7 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({ error: error.message || "Erro interno no servidor" });
+  res.status(error.status || 500).json({ error: error.message || "Erro interno no servidor" });
 });
 
 if (process.env.NODE_ENV === "production") {
