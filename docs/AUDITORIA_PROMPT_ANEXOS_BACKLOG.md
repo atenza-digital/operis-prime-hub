@@ -139,3 +139,24 @@ Escopo recomendado:
 - Base para OS, certificado e medicao consumirem dados reais e persistidos.
 
 Motivo: essa etapa destrava os documentos operacionais sem pular direto para telas finais que depois precisariam ser refeitas.
+
+## Atualizacao - Etapa 2A executada
+
+Status: concluida no escopo minimo de base cadastral.
+
+Entregas realizadas:
+
+- Criadas estruturas para locais de execucao do cliente.
+- Criadas estruturas para equipamentos/tags do cliente.
+- Contatos de cliente passaram a aceitar funcao no fluxo e observacoes.
+- Configuracoes da empresa passaram a armazenar textos e padroes de certificado e medicao.
+- Numeracao passou a contemplar certificados e medicoes.
+- Servicos passaram a armazenar checklist, exigencia de foto, exigencia de assinatura, permissao de nao execucao e dados de POP.
+- Telas de Clientes, Servicos e Configuracoes foram atualizadas para editar esses dados com acentuacao corrigida.
+
+Backlog remanescente da Etapa 2A:
+
+- Aplicar isolamento por tenant em todas as consultas operacionais.
+- Vincular equipamentos/tags diretamente no agendamento, OS e encerramento.
+- Fazer OS, certificado e medicao consumirem os novos campos documentais.
+- Criar cadastro completo de POP com versionamento, aprovacao e anexos.

@@ -46,6 +46,108 @@ export async function ensureDatabaseShape() {
   await query("SET search_path TO ciperprag_hub");
 
   await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.empresa_config
+    ADD COLUMN IF NOT EXISTS certificado_validade_padrao_dias INTEGER NOT NULL DEFAULT 30,
+    ADD COLUMN IF NOT EXISTS certificado_texto_legal TEXT,
+    ADD COLUMN IF NOT EXISTS certificado_texto_fixacao TEXT DEFAULT 'FIXAR OBRIGATORIAMENTE EM LOCAL VISIVEL',
+    ADD COLUMN IF NOT EXISTS telefone_emergencia VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS medicao_forma_pagamento_padrao TEXT,
+    ADD COLUMN IF NOT EXISTS medicao_local_entrega_padrao TEXT
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.numeracao_config
+    ADD COLUMN IF NOT EXISTS certificado_formato VARCHAR(50) DEFAULT 'CERT-{SEQ}/{ANO}',
+    ADD COLUMN IF NOT EXISTS certificado_ultimo INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS medicao_formato VARCHAR(50) DEFAULT 'MED-{SEQ}/{ANO}',
+    ADD COLUMN IF NOT EXISTS medicao_ultimo INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contatos_cliente
+    ADD COLUMN IF NOT EXISTS funcao VARCHAR(40) DEFAULT 'operacional',
+    ADD COLUMN IF NOT EXISTS observacoes TEXT
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.servicos_catalogo
+    ADD COLUMN IF NOT EXISTS checklist_itens TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS exige_foto BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS exige_assinatura BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS permite_nao_execucao BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS pop_codigo VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS pop_titulo TEXT,
+    ADD COLUMN IF NOT EXISTS pop_versao VARCHAR(20)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.cliente_locais_execucao (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
+      cliente_id VARCHAR(20) NOT NULL REFERENCES ciperprag_hub.clientes(id) ON DELETE CASCADE,
+      nome TEXT NOT NULL,
+      endereco TEXT,
+      bairro TEXT,
+      municipio TEXT,
+      uf CHAR(2),
+      cep VARCHAR(10),
+      observacoes TEXT,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.cliente_equipamentos (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
+      cliente_id VARCHAR(20) NOT NULL REFERENCES ciperprag_hub.clientes(id) ON DELETE CASCADE,
+      local_id VARCHAR(30) REFERENCES ciperprag_hub.cliente_locais_execucao(id) ON DELETE SET NULL,
+      tag VARCHAR(80) NOT NULL,
+      descricao TEXT,
+      tipo VARCHAR(80),
+      setor TEXT,
+      observacoes TEXT,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT cliente_equipamentos_tag_unique UNIQUE (cliente_id, tag)
+    )
+  `);
+
+  await query("CREATE INDEX IF NOT EXISTS idx_cliente_locais_cliente ON ciperprag_hub.cliente_locais_execucao(cliente_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_cliente_locais_tenant ON ciperprag_hub.cliente_locais_execucao(tenant_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_cliente_equipamentos_cliente ON ciperprag_hub.cliente_equipamentos(cliente_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_cliente_equipamentos_local ON ciperprag_hub.cliente_equipamentos(local_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_cliente_equipamentos_tenant ON ciperprag_hub.cliente_equipamentos(tenant_id)");
+
+  await query(`
+    WITH tenant AS (
+      SELECT id FROM ciperprag_hub.tenants WHERE slug = 'ciperprag' LIMIT 1
+    )
+    INSERT INTO ciperprag_hub.cliente_locais_execucao (id, tenant_id, cliente_id, nome, endereco, bairro, municipio, uf, cep, ativo)
+    SELECT
+      'LOC-' || c.id,
+      tenant.id,
+      c.id,
+      COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social),
+      c.endereco,
+      c.bairro,
+      c.municipio,
+      c.uf,
+      c.cep,
+      TRUE
+    FROM ciperprag_hub.clientes c
+    CROSS JOIN tenant
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM ciperprag_hub.cliente_locais_execucao l
+      WHERE l.cliente_id = c.id
+    )
+  `);
+
+  await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.contratos
     ADD COLUMN IF NOT EXISTS locais TEXT[] DEFAULT '{}'
   `);

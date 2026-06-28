@@ -1,9 +1,36 @@
 export interface ContatoCliente {
   nome: string;
   cargo: string;
+  funcao?: "operacional" | "financeiro" | "contratos" | "tecnico" | "emergencia" | "outro";
   telefone: string;
   email: string;
   principal: boolean;
+  observacoes?: string;
+}
+
+export interface ClienteLocalExecucao {
+  id?: string;
+  clienteId?: string;
+  nome: string;
+  endereco?: string;
+  bairro?: string;
+  municipio?: string;
+  uf?: string;
+  cep?: string;
+  observacoes?: string;
+  ativo: boolean;
+}
+
+export interface ClienteEquipamento {
+  id?: string;
+  clienteId?: string;
+  localId?: string;
+  tag: string;
+  descricao?: string;
+  tipo?: string;
+  setor?: string;
+  observacoes?: string;
+  ativo: boolean;
 }
 
 export interface Cliente {
@@ -20,6 +47,8 @@ export interface Cliente {
   logoUrl?: string;
   ativo: boolean;
   contatos: ContatoCliente[];
+  locaisExecucao: ClienteLocalExecucao[];
+  equipamentos: ClienteEquipamento[];
 }
 
 export interface ServicoCatalogo {
@@ -36,6 +65,13 @@ export interface ServicoCatalogo {
   riscos: string[];
   normasAplicaveis: string[];
   procedimentos: string[];
+  checklistItens: string[];
+  exigeFoto: boolean;
+  exigeAssinatura: boolean;
+  permiteNaoExecucao: boolean;
+  popCodigo?: string;
+  popTitulo?: string;
+  popVersao?: string;
   ativo: boolean;
 }
 
@@ -227,6 +263,12 @@ export interface EmpresaConfig {
   responsavelTecnico: string;
   responsavelExecucao: string;
   cargoResponsavel: string;
+  certificadoValidadePadraoDias: number;
+  certificadoTextoLegal?: string;
+  certificadoTextoFixacao?: string;
+  telefoneEmergencia?: string;
+  medicaoFormaPagamentoPadrao?: string;
+  medicaoLocalEntregaPadrao?: string;
 }
 
 export interface NumeracaoConfig {
@@ -236,6 +278,10 @@ export interface NumeracaoConfig {
   contratoUltimo: number;
   osFormato: string;
   osUltimo: number;
+  certificadoFormato: string;
+  certificadoUltimo: number;
+  medicaoFormato: string;
+  medicaoUltimo: number;
 }
 
 export interface RecorrenciaSuggestionApp {

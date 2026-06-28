@@ -103,15 +103,19 @@ function rowsToClientMap(rows) {
         logoUrl: row.logo_url,
         ativo: row.ativo,
         contatos: [],
+        locaisExecucao: [],
+        equipamentos: [],
       });
     }
     if (row.contato_nome) {
       map.get(row.id).contatos.push({
         nome: row.contato_nome,
         cargo: row.contato_cargo,
+        funcao: row.contato_funcao || "operacional",
         telefone: row.contato_telefone,
         email: row.contato_email,
         principal: row.contato_principal,
+        observacoes: row.contato_observacoes,
       });
     }
   }
@@ -124,15 +128,55 @@ async function getClients() {
       c.*,
       ct.nome AS contato_nome,
       ct.cargo AS contato_cargo,
+      ct.funcao AS contato_funcao,
       ct.telefone AS contato_telefone,
       ct.email AS contato_email,
-      ct.principal AS contato_principal
+      ct.principal AS contato_principal,
+      ct.observacoes AS contato_observacoes
     FROM ciperprag_hub.clientes c
     LEFT JOIN ciperprag_hub.contatos_cliente ct
       ON ct.cliente_id = c.id
     ORDER BY c.id, ct.principal DESC, ct.id
   `);
-  return rowsToClientMap(rows);
+  const clients = rowsToClientMap(rows);
+  const byId = new Map(clients.map((client) => [client.id, client]));
+
+  const { rows: locationRows } = await query("SELECT * FROM ciperprag_hub.cliente_locais_execucao ORDER BY cliente_id, ativo DESC, nome");
+  for (const row of locationRows) {
+    const client = byId.get(row.cliente_id);
+    if (!client) continue;
+    client.locaisExecucao.push({
+      id: row.id,
+      clienteId: row.cliente_id,
+      nome: row.nome,
+      endereco: row.endereco,
+      bairro: row.bairro,
+      municipio: row.municipio,
+      uf: row.uf,
+      cep: row.cep,
+      observacoes: row.observacoes,
+      ativo: row.ativo,
+    });
+  }
+
+  const { rows: equipmentRows } = await query("SELECT * FROM ciperprag_hub.cliente_equipamentos ORDER BY cliente_id, ativo DESC, tag");
+  for (const row of equipmentRows) {
+    const client = byId.get(row.cliente_id);
+    if (!client) continue;
+    client.equipamentos.push({
+      id: row.id,
+      clienteId: row.cliente_id,
+      localId: row.local_id,
+      tag: row.tag,
+      descricao: row.descricao,
+      tipo: row.tipo,
+      setor: row.setor,
+      observacoes: row.observacoes,
+      ativo: row.ativo,
+    });
+  }
+
+  return clients;
 }
 
 async function getServices() {
@@ -151,6 +195,13 @@ async function getServices() {
     riscos: row.riscos ?? [],
     normasAplicaveis: row.normas_aplicaveis ?? [],
     procedimentos: row.procedimentos ?? [],
+    checklistItens: row.checklist_itens ?? [],
+    exigeFoto: row.exige_foto,
+    exigeAssinatura: row.exige_assinatura,
+    permiteNaoExecucao: row.permite_nao_execucao,
+    popCodigo: row.pop_codigo,
+    popTitulo: row.pop_titulo,
+    popVersao: row.pop_versao,
     ativo: row.ativo,
   }));
 }
@@ -331,6 +382,12 @@ async function getCompanyConfig() {
     responsavelTecnico: row.responsavel_tecnico,
     responsavelExecucao: row.responsavel_execucao,
     cargoResponsavel: row.cargo_responsavel,
+    certificadoValidadePadraoDias: row.certificado_validade_padrao_dias,
+    certificadoTextoLegal: row.certificado_texto_legal,
+    certificadoTextoFixacao: row.certificado_texto_fixacao,
+    telefoneEmergencia: row.telefone_emergencia,
+    medicaoFormaPagamentoPadrao: row.medicao_forma_pagamento_padrao,
+    medicaoLocalEntregaPadrao: row.medicao_local_entrega_padrao,
   };
 }
 
@@ -345,6 +402,10 @@ async function getNumberingConfig() {
     contratoUltimo: row.contrato_ultimo,
     osFormato: row.os_formato,
     osUltimo: row.os_ultimo,
+    certificadoFormato: row.certificado_formato,
+    certificadoUltimo: row.certificado_ultimo,
+    medicaoFormato: row.medicao_formato,
+    medicaoUltimo: row.medicao_ultimo,
   };
 }
 
@@ -814,9 +875,35 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
     await client.query("DELETE FROM ciperprag_hub.contatos_cliente WHERE cliente_id = $1", [id]);
     for (const contato of body.contatos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contatos_cliente (cliente_id, nome, cargo, telefone, email, principal)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [id, contato.nome, contato.cargo, contato.telefone, contato.email, contato.principal],
+        `INSERT INTO ciperprag_hub.contatos_cliente (cliente_id, nome, cargo, funcao, telefone, email, principal, observacoes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [id, contato.nome, contato.cargo, contato.funcao || "operacional", contato.telefone, contato.email, contato.principal, contato.observacoes || null],
+      );
+    }
+
+    await client.query("DELETE FROM ciperprag_hub.cliente_equipamentos WHERE cliente_id = $1", [id]);
+    await client.query("DELETE FROM ciperprag_hub.cliente_locais_execucao WHERE cliente_id = $1", [id]);
+
+    const savedLocationIds = new Set();
+    for (const local of body.locaisExecucao || []) {
+      const localId = local.id || makeId("LOC");
+      savedLocationIds.add(localId);
+      await client.query(
+        `INSERT INTO ciperprag_hub.cliente_locais_execucao
+         (id, tenant_id, cliente_id, nome, endereco, bairro, municipio, uf, cep, observacoes, ativo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [localId, req.auth.user.tenant.id, id, local.nome, local.endereco || null, local.bairro || null, local.municipio || null, local.uf || null, local.cep || null, local.observacoes || null, local.ativo ?? true],
+      );
+    }
+
+    for (const equipamento of body.equipamentos || []) {
+      const equipamentoId = equipamento.id || makeId("EQP");
+      const localId = equipamento.localId && savedLocationIds.has(equipamento.localId) ? equipamento.localId : null;
+      await client.query(
+        `INSERT INTO ciperprag_hub.cliente_equipamentos
+         (id, tenant_id, cliente_id, local_id, tag, descricao, tipo, setor, observacoes, ativo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [equipamentoId, req.auth.user.tenant.id, id, localId, equipamento.tag, equipamento.descricao || null, equipamento.tipo || null, equipamento.setor || null, equipamento.observacoes || null, equipamento.ativo ?? true],
       );
     }
   });
@@ -829,8 +916,9 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   await query(
     `INSERT INTO ciperprag_hub.servicos_catalogo (
       id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
-      produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, ativo
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
+      exige_foto, exige_assinatura, permite_nao_execucao, pop_codigo, pop_titulo, pop_versao, ativo
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
     ON CONFLICT (id) DO UPDATE SET
       nome = EXCLUDED.nome,
       tipo = EXCLUDED.tipo,
@@ -844,6 +932,13 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
       riscos = EXCLUDED.riscos,
       normas_aplicaveis = EXCLUDED.normas_aplicaveis,
       procedimentos = EXCLUDED.procedimentos,
+      checklist_itens = EXCLUDED.checklist_itens,
+      exige_foto = EXCLUDED.exige_foto,
+      exige_assinatura = EXCLUDED.exige_assinatura,
+      permite_nao_execucao = EXCLUDED.permite_nao_execucao,
+      pop_codigo = EXCLUDED.pop_codigo,
+      pop_titulo = EXCLUDED.pop_titulo,
+      pop_versao = EXCLUDED.pop_versao,
       ativo = EXCLUDED.ativo,
       atualizado_em = NOW()`,
     [
@@ -860,6 +955,13 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
       body.riscos || [],
       body.normasAplicaveis || [],
       body.procedimentos || [],
+      body.checklistItens || [],
+      body.exigeFoto ?? false,
+      body.exigeAssinatura ?? true,
+      body.permiteNaoExecucao ?? true,
+      body.popCodigo || null,
+      body.popTitulo || null,
+      body.popVersao || null,
       body.ativo,
     ],
   );
@@ -907,9 +1009,32 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
   await query(
     `UPDATE ciperprag_hub.empresa_config SET
       razao_social=$1, nome_fantasia=$2, cnpj=$3, endereco=$4, telefone=$5, email=$6, logo_url=$7,
-      alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14, atualizado_em=NOW()
+      alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
+      certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
+      medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20, atualizado_em=NOW()
       WHERE id = (SELECT id FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1)`,
-    [body.razaoSocial, body.nomeFantasia, body.cnpj, body.endereco, body.telefone, body.email, body.logoUrl, body.alvara, body.cr02, body.anvisa, body.vigilanciaSanitaria, body.responsavelTecnico, body.responsavelExecucao, body.cargoResponsavel],
+    [
+      body.razaoSocial,
+      body.nomeFantasia,
+      body.cnpj,
+      body.endereco,
+      body.telefone,
+      body.email,
+      body.logoUrl,
+      body.alvara,
+      body.cr02,
+      body.anvisa,
+      body.vigilanciaSanitaria,
+      body.responsavelTecnico,
+      body.responsavelExecucao,
+      body.cargoResponsavel,
+      body.certificadoValidadePadraoDias ?? 30,
+      body.certificadoTextoLegal || null,
+      body.certificadoTextoFixacao || null,
+      body.telefoneEmergencia || null,
+      body.medicaoFormaPagamentoPadrao || null,
+      body.medicaoLocalEntregaPadrao || null,
+    ],
   );
   res.json({ ok: true });
 });
@@ -918,9 +1043,21 @@ app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), as
   const body = req.body;
   await query(
     `UPDATE ciperprag_hub.numeracao_config SET
-      proposta_formato=$1, proposta_ultimo=$2, contrato_formato=$3, contrato_ultimo=$4, os_formato=$5, os_ultimo=$6, atualizado_em = NOW()
+      proposta_formato=$1, proposta_ultimo=$2, contrato_formato=$3, contrato_ultimo=$4, os_formato=$5, os_ultimo=$6,
+      certificado_formato=$7, certificado_ultimo=$8, medicao_formato=$9, medicao_ultimo=$10, atualizado_em = NOW()
       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)`,
-    [body.propostaFormato, body.propostaUltimo, body.contratoFormato, body.contratoUltimo, body.osFormato, body.osUltimo],
+    [
+      body.propostaFormato,
+      body.propostaUltimo,
+      body.contratoFormato,
+      body.contratoUltimo,
+      body.osFormato,
+      body.osUltimo,
+      body.certificadoFormato,
+      body.certificadoUltimo,
+      body.medicaoFormato,
+      body.medicaoUltimo,
+    ],
   );
   res.json({ ok: true });
 });

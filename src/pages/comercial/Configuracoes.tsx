@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Settings, Building2, Hash, ShieldCheck, Save, Image } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Settings, Building2, Hash, ShieldCheck, Save, Image, FileCheck2, ReceiptText } from "lucide-react";
 import { toast } from "sonner";
 
 const defaultEmpresa: EmpresaConfig = {
@@ -24,6 +25,12 @@ const defaultEmpresa: EmpresaConfig = {
   responsavelTecnico: "",
   responsavelExecucao: "",
   cargoResponsavel: "",
+  certificadoValidadePadraoDias: 30,
+  certificadoTextoLegal: "",
+  certificadoTextoFixacao: "FIXAR OBRIGATORIAMENTE EM LOCAL VISÍVEL",
+  telefoneEmergencia: "",
+  medicaoFormaPagamentoPadrao: "Medição mensal - NF/Boleto",
+  medicaoLocalEntregaPadrao: "",
 };
 
 const defaultNumeracao: NumeracaoConfig = {
@@ -33,12 +40,45 @@ const defaultNumeracao: NumeracaoConfig = {
   contratoUltimo: 0,
   osFormato: "OS-{SEQ}/{ANO}",
   osUltimo: 0,
+  certificadoFormato: "CERT-{SEQ}/{ANO}",
+  certificadoUltimo: 0,
+  medicaoFormato: "MED-{SEQ}/{ANO}",
+  medicaoUltimo: 0,
 };
 
 function gerarNumero(formato: string, sequencia: number) {
   return formato
     .replace("{SEQ}", String(sequencia).padStart(3, "0"))
     .replace("{ANO}", String(new Date().getFullYear()));
+}
+
+function NumberingCard({
+  title,
+  formato,
+  ultimo,
+  onFormato,
+  onUltimo,
+}: {
+  title: string;
+  formato: string;
+  ultimo: number;
+  onFormato: (value: string) => void;
+  onUltimo: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <h4 className="text-sm font-semibold">{title}</h4>
+      <div className="space-y-2">
+        <Label className="text-xs">Formato</Label>
+        <Input value={formato} onChange={(event) => onFormato(event.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs">Último número</Label>
+        <Input type="number" value={ultimo} onChange={(event) => onUltimo(Number(event.target.value))} />
+      </div>
+      <p className="text-xs text-muted-foreground">Próximo: <span className="font-mono font-bold">{gerarNumero(formato, ultimo + 1)}</span></p>
+    </div>
+  );
 }
 
 export default function Configuracoes() {
@@ -106,11 +146,11 @@ export default function Configuracoes() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
           <Settings className="h-6 w-6 text-primary" />
           Configurações
         </h2>
-        <p className="text-muted-foreground text-sm">Dados da empresa, logo e numeração persistidos no banco</p>
+        <p className="text-sm text-muted-foreground">Identidade, licenças, textos e numerações usados nos documentos operacionais.</p>
       </div>
 
       {loading ? (
@@ -126,14 +166,10 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
                 <div className="flex h-20 w-full max-w-60 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-card">
-                  {empresa.logoUrl ? (
-                    <img src={empresa.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
-                  ) : (
-                    <span className="text-muted-foreground text-sm">Sem logo</span>
-                  )}
+                  {empresa.logoUrl ? <img src={empresa.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" /> : <span className="text-sm text-muted-foreground">Sem logo</span>}
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
-                  <Label>Alterar Logo</Label>
+                  <Label>Alterar logo</Label>
                   <Input type="file" accept="image/*" onChange={handleLogoChange} className="w-full max-w-md text-sm" />
                   <p className="text-xs text-muted-foreground">A logo será usada nos documentos e no topo do sistema.</p>
                 </div>
@@ -188,14 +224,14 @@ export default function Configuracoes() {
               <Separator />
 
               <div>
-                <h3 className="font-semibold text-sm flex items-center gap-2 mb-3"><ShieldCheck className="h-4 w-4 text-primary" />Licenças e Registros</h3>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-primary" />Licenças e registros</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Alvará</Label>
                     <Input value={empresa.alvara} onChange={(event) => setEmpresa({ ...empresa, alvara: event.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <Label>CR.02 (IBAMA)</Label>
+                    <Label>CR.02 / Registro ambiental</Label>
                     <Input value={empresa.cr02} onChange={(event) => setEmpresa({ ...empresa, cr02: event.target.value })} />
                   </div>
                   <div className="space-y-2">
@@ -207,73 +243,80 @@ export default function Configuracoes() {
                     <Input value={empresa.vigilanciaSanitaria} onChange={(event) => setEmpresa({ ...empresa, vigilanciaSanitaria: event.target.value })} />
                   </div>
                 </div>
-                <div className="space-y-2 mt-4">
+                <div className="mt-4 space-y-2">
                   <Label>Responsável Técnico</Label>
                   <Input value={empresa.responsavelTecnico} onChange={(event) => setEmpresa({ ...empresa, responsavelTecnico: event.target.value })} />
                 </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={handleSaveEmpresa} disabled={savingEmpresa}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {savingEmpresa ? "Salvando..." : "Salvar Dados da Empresa"}
-                </Button>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg"><FileCheck2 className="h-5 w-5" />Certificados</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Validade padrão (dias)</Label>
+                  <Input type="number" value={empresa.certificadoValidadePadraoDias} onChange={(event) => setEmpresa({ ...empresa, certificadoValidadePadraoDias: Number(event.target.value) })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone de emergência/toxicologia</Label>
+                  <Input value={empresa.telefoneEmergencia || ""} onChange={(event) => setEmpresa({ ...empresa, telefoneEmergencia: event.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Texto legal padrão</Label>
+                <Textarea value={empresa.certificadoTextoLegal || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoLegal: event.target.value })} rows={3} />
+              </div>
+              <div className="space-y-2">
+                <Label>Texto de fixação</Label>
+                <Input value={empresa.certificadoTextoFixacao || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoFixacao: event.target.value })} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg"><ReceiptText className="h-5 w-5" />Medição</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Forma de pagamento padrão</Label>
+                <Input value={empresa.medicaoFormaPagamentoPadrao || ""} onChange={(event) => setEmpresa({ ...empresa, medicaoFormaPagamentoPadrao: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Local de entrega padrão</Label>
+                <Input value={empresa.medicaoLocalEntregaPadrao || ""} onChange={(event) => setEmpresa({ ...empresa, medicaoLocalEntregaPadrao: event.target.value })} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveEmpresa} disabled={savingEmpresa}>
+              <Save className="mr-2 h-4 w-4" />
+              {savingEmpresa ? "Salvando..." : "Salvar configurações da empresa"}
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg"><Hash className="h-5 w-5" />Configuração de Numeração</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-xs text-muted-foreground">Use <code className="bg-muted px-1 rounded">{"{SEQ}"}</code> para a sequência e <code className="bg-muted px-1 rounded">{"{ANO}"}</code> para o ano.</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="rounded-lg border p-4 space-y-3">
-                  <h4 className="font-semibold text-sm">Propostas</h4>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Formato</Label>
-                    <Input value={numeracao.propostaFormato} onChange={(event) => setNumeracao({ ...numeracao, propostaFormato: event.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Último Número</Label>
-                    <Input type="number" value={numeracao.propostaUltimo} onChange={(event) => setNumeracao({ ...numeracao, propostaUltimo: Number(event.target.value) })} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Próximo: <span className="font-mono font-bold">{gerarNumero(numeracao.propostaFormato, numeracao.propostaUltimo + 1)}</span></p>
-                </div>
-
-                <div className="rounded-lg border p-4 space-y-3">
-                  <h4 className="font-semibold text-sm">Contratos</h4>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Formato</Label>
-                    <Input value={numeracao.contratoFormato} onChange={(event) => setNumeracao({ ...numeracao, contratoFormato: event.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Último Número</Label>
-                    <Input type="number" value={numeracao.contratoUltimo} onChange={(event) => setNumeracao({ ...numeracao, contratoUltimo: Number(event.target.value) })} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Próximo: <span className="font-mono font-bold">{gerarNumero(numeracao.contratoFormato, numeracao.contratoUltimo + 1)}</span></p>
-                </div>
-
-                <div className="rounded-lg border p-4 space-y-3">
-                  <h4 className="font-semibold text-sm">Ordens de Serviço</h4>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Formato</Label>
-                    <Input value={numeracao.osFormato} onChange={(event) => setNumeracao({ ...numeracao, osFormato: event.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Último Número</Label>
-                    <Input type="number" value={numeracao.osUltimo} onChange={(event) => setNumeracao({ ...numeracao, osUltimo: Number(event.target.value) })} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Próximo: <span className="font-mono font-bold">{gerarNumero(numeracao.osFormato, numeracao.osUltimo + 1)}</span></p>
-                </div>
+              <p className="text-xs text-muted-foreground">Use <code className="rounded bg-muted px-1">{"{SEQ}"}</code> para a sequência e <code className="rounded bg-muted px-1">{"{ANO}"}</code> para o ano.</p>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <NumberingCard title="Propostas" formato={numeracao.propostaFormato} ultimo={numeracao.propostaUltimo} onFormato={(value) => setNumeracao({ ...numeracao, propostaFormato: value })} onUltimo={(value) => setNumeracao({ ...numeracao, propostaUltimo: value })} />
+                <NumberingCard title="Contratos" formato={numeracao.contratoFormato} ultimo={numeracao.contratoUltimo} onFormato={(value) => setNumeracao({ ...numeracao, contratoFormato: value })} onUltimo={(value) => setNumeracao({ ...numeracao, contratoUltimo: value })} />
+                <NumberingCard title="Ordens de Serviço" formato={numeracao.osFormato} ultimo={numeracao.osUltimo} onFormato={(value) => setNumeracao({ ...numeracao, osFormato: value })} onUltimo={(value) => setNumeracao({ ...numeracao, osUltimo: value })} />
+                <NumberingCard title="Certificados" formato={numeracao.certificadoFormato} ultimo={numeracao.certificadoUltimo} onFormato={(value) => setNumeracao({ ...numeracao, certificadoFormato: value })} onUltimo={(value) => setNumeracao({ ...numeracao, certificadoUltimo: value })} />
+                <NumberingCard title="Medições" formato={numeracao.medicaoFormato} ultimo={numeracao.medicaoUltimo} onFormato={(value) => setNumeracao({ ...numeracao, medicaoFormato: value })} onUltimo={(value) => setNumeracao({ ...numeracao, medicaoUltimo: value })} />
               </div>
-
               <div className="flex justify-end">
                 <Button onClick={handleSaveNumeracao} disabled={savingNumeracao}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {savingNumeracao ? "Salvando..." : "Salvar Numeração"}
+                  <Save className="mr-2 h-4 w-4" />
+                  {savingNumeracao ? "Salvando..." : "Salvar numeração"}
                 </Button>
               </div>
             </CardContent>
