@@ -34,6 +34,12 @@ O projeto ainda possui a rotina `ensureDatabaseShape()` em `server/db.mjs`, cria
 
 Esta migração não ativa login, não bloqueia endpoints e não altera regras funcionais existentes. Ela prepara o banco para as próximas etapas.
 
+## Ambientes e Versão
+
+A base atual deve ser tratada como homologação. A produção será criada em base separada quando o fluxo estiver validado.
+
+O sistema deve manter versionamento explícito no código e exibir ambiente/versão na interface, para facilitar suporte, validação com usuários e rastreio de mudanças entre homologação e produção.
+
 ## Aplicação Manual
 
 Exemplo:

@@ -16,6 +16,7 @@ import {
 import logoCiperprag from "@/assets/logo_ciperprag.png";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
 
 const navGroups = [
   {
@@ -135,6 +136,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <SidebarContent collapsed={collapsed} />
         <div className="border-t border-sidebar-border p-2">
+          <div className={cn("px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45", collapsed && "px-0 text-center")}>
+            {collapsed ? `v${APP_VERSION}` : APP_VERSION_LABEL}
+          </div>
           <button
             onClick={() => setCollapsed((value) => !value)}
             className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
@@ -159,6 +163,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1 overflow-y-auto">
               <SidebarContent onLinkClick={() => setMobileOpen(false)} />
+            </div>
+            <div className="border-t border-sidebar-border px-4 py-3 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45">
+              {APP_VERSION_LABEL}
             </div>
           </aside>
         </div>

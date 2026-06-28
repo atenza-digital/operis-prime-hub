@@ -3,6 +3,7 @@ import { ArrowLeft, Briefcase, FileSignature, Settings, Users } from "lucide-rea
 import logoImg from "@/assets/logo_ciperprag.png";
 import { PageHeader } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
+import { APP_VERSION_LABEL } from "@/lib/version";
 
 const navItems = [
   { to: "/comercial/clientes", label: "Clientes", icon: Users, description: "Cadastros e contatos" },
@@ -30,6 +31,7 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
             <img src={logoImg} alt="Ciperprag" className="h-9 object-contain" />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">Hub Comercial</p>
+              <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-surface-dark-foreground/40">{APP_VERSION_LABEL}</p>
               <p className="truncate text-xs text-surface-dark-foreground/55">Origem dos dados que sustentam a operação</p>
             </div>
           </div>

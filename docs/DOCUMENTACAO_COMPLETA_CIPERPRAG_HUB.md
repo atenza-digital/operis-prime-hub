@@ -2250,7 +2250,15 @@ Template comercial:
 
 Registro em `contratos_templates` usado para proposta/contrato comercial imprimível.
 
-## 20. Resumo Executivo Final
+## 20. Versionamento e Ambientes
+
+A base atual deve ser considerada de homologação. Ela serve para validação funcional, testes com usuários e evolução controlada antes da criação de uma base de produção separada.
+
+O sistema deve manter versionamento explícito em código e exibir ambiente/versão na interface. Nesta etapa inicial, a aplicação passa a identificar a versão como `Homologação v0.1.0`, permitindo que equipe, cliente e suporte saibam exatamente qual build está sendo validada.
+
+Quando a produção for criada, o ambiente deverá ter banco próprio, variáveis próprias, backup próprio e versionamento compatível com o histórico homologado.
+
+## 21. Resumo Executivo Final
 
 O Ciperprag Hub é uma aplicação web de gestão operacional e comercial para empresas de serviços, especialmente voltada à rotina da Ciperprag. O sistema centraliza cadastros comerciais, contratos, serviços, equipes, veículos, agendamentos, Ordens de Serviço, certificados, histórico e medição.
 
