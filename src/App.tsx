@@ -39,22 +39,22 @@ const App = () => (
             <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
 
             {/* Operacional */}
-            <Route element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path="/" />
-            <Route element={<ProtectedRoute><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path="/agendar" />
-            <Route element={<ProtectedRoute><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path="/os-gerar" />
-            <Route element={<ProtectedRoute><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/ordens" />
-            <Route element={<ProtectedRoute><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
-            <Route element={<ProtectedRoute><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
-            <Route element={<ProtectedRoute><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
-            <Route element={<ProtectedRoute><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
-            <Route element={<ProtectedRoute><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
-            <Route element={<ProtectedRoute><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
+            <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path="/" />
+            <Route element={<ProtectedRoute permission="agenda.manage"><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path="/agendar" />
+            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path="/os-gerar" />
+            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/ordens" />
+            <Route element={<ProtectedRoute permission="os.close"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
+            <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
+            <Route element={<ProtectedRoute permission="medicoes.manage"><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
+            <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
+            <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
+            <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
 
             {/* Comercial */}
-            <Route element={<ProtectedRoute><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />
-            <Route element={<ProtectedRoute><ComercialLayout><Servicos /></ComercialLayout></ProtectedRoute>} path="/comercial/servicos" />
-            <Route element={<ProtectedRoute><ComercialLayout><Contratos /></ComercialLayout></ProtectedRoute>} path="/comercial/contratos" />
-            <Route element={<ProtectedRoute><ComercialLayout><Configuracoes /></ComercialLayout></ProtectedRoute>} path="/comercial/configuracoes" />
+            <Route element={<ProtectedRoute permission="clientes.manage"><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />
+            <Route element={<ProtectedRoute permission="servicos.manage"><ComercialLayout><Servicos /></ComercialLayout></ProtectedRoute>} path="/comercial/servicos" />
+            <Route element={<ProtectedRoute permission="contratos.manage"><ComercialLayout><Contratos /></ComercialLayout></ProtectedRoute>} path="/comercial/contratos" />
+            <Route element={<ProtectedRoute permission="configuracoes.manage"><ComercialLayout><Configuracoes /></ComercialLayout></ProtectedRoute>} path="/comercial/configuracoes" />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

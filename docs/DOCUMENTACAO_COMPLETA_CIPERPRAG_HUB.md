@@ -2286,6 +2286,11 @@ Rotas privadas:
 
 O backend usa hash de senha antes de gravar no banco e armazena sessões na tabela `usuario_sessoes`. O token de sessão é enviado pelo frontend no cabeçalho `Authorization: Bearer`.
 
+As permissões cadastradas em banco passam a ser usadas em duas camadas:
+
+- Backend: endpoints de criação, edição, encerramento, emissão e configuração exigem permissões específicas.
+- Frontend: menus e rotas privadas são filtrados conforme o perfil do usuário logado.
+
 Para criar ou redefinir o primeiro administrador, deve ser usado o script:
 
 ```bash

@@ -25,24 +25,24 @@ const navGroups = [
   {
     label: "Operacional",
     items: [
-      { to: "/", label: "Dashboard", shortLabel: "Visão geral", icon: LayoutDashboard },
-      { to: "/agendar", label: "Agendamentos", shortLabel: "Agenda", icon: CalendarPlus },
-      { to: "/ordens", label: "Ordens de Serviço", shortLabel: "OS", icon: ClipboardList },
-      { to: "/certificados", label: "Certificados e Histórico", shortLabel: "Certificados", icon: Award },
-      { to: "/medicao", label: "Medição", shortLabel: "Medição", icon: Receipt },
+      { to: "/", label: "Dashboard", shortLabel: "Visão geral", icon: LayoutDashboard, permission: "dashboard.view" },
+      { to: "/agendar", label: "Agendamentos", shortLabel: "Agenda", icon: CalendarPlus, permission: "agenda.manage" },
+      { to: "/ordens", label: "Ordens de Serviço", shortLabel: "OS", icon: ClipboardList, permission: "os.manage" },
+      { to: "/certificados", label: "Certificados e Histórico", shortLabel: "Certificados", icon: Award, permission: "certificados.manage" },
+      { to: "/medicao", label: "Medição", shortLabel: "Medição", icon: Receipt, permission: "medicoes.manage" },
     ],
   },
   {
     label: "Equipes",
-    items: [{ to: "/equipes", label: "Quadro Semanal", shortLabel: "Equipes", icon: CalendarDays }],
+    items: [{ to: "/equipes", label: "Quadro Semanal", shortLabel: "Equipes", icon: CalendarDays, permission: "equipes.manage" }],
   },
   {
     label: "Comercial",
     items: [
-      { to: "/comercial/clientes", label: "Clientes", shortLabel: "Clientes", icon: Users },
-      { to: "/comercial/servicos", label: "Serviços", shortLabel: "Serviços", icon: ClipboardList },
-      { to: "/comercial/contratos", label: "Contratos", shortLabel: "Contratos", icon: Receipt },
-      { to: "/comercial/configuracoes", label: "Configurações", shortLabel: "Config.", icon: Settings },
+      { to: "/comercial/clientes", label: "Clientes", shortLabel: "Clientes", icon: Users, permission: "clientes.manage" },
+      { to: "/comercial/servicos", label: "Serviços", shortLabel: "Serviços", icon: ClipboardList, permission: "servicos.manage" },
+      { to: "/comercial/contratos", label: "Contratos", shortLabel: "Contratos", icon: Receipt, permission: "contratos.manage" },
+      { to: "/comercial/configuracoes", label: "Configurações", shortLabel: "Config.", icon: Settings, permission: "configuracoes.manage" },
     ],
   },
 ];
@@ -97,6 +97,14 @@ function NavLink({
 }
 
 function SidebarContent({ collapsed = false, onLinkClick }: { collapsed?: boolean; onLinkClick?: () => void }) {
+  const { hasPermission } = useAuth();
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => hasPermission(item.permission)),
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
     <div className="flex h-full flex-col">
       <div className={cn("min-h-[92px] border-b border-sidebar-border px-4", collapsed ? "flex items-center justify-center px-2" : "flex items-center justify-center")}>
@@ -106,7 +114,7 @@ function SidebarContent({ collapsed = false, onLinkClick }: { collapsed?: boolea
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <section key={group.label}>
             {!collapsed ? <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.22em] text-sidebar-foreground/52">{group.label}</p> : <div className="mx-2 mb-2 border-t border-sidebar-border" />}
             <div className="space-y-1">
@@ -125,10 +133,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
 
   const currentMeta = useMemo(() => routeMeta[location.pathname] ?? routeMeta["/"], [location.pathname]);
-  const topLinks = navGroups[0].items.slice(0, 5);
+  const topLinks = navGroups[0].items.filter((item) => hasPermission(item.permission)).slice(0, 5);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top_right,_rgba(22,163,74,0.10),_transparent_28%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(246,247,245,0.96))]">

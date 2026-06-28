@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
 const navItems = [
-  { to: "/comercial/clientes", label: "Clientes", icon: Users, description: "Cadastros e contatos" },
-  { to: "/comercial/servicos", label: "Serviços", icon: Briefcase, description: "Portfólio e regras técnicas" },
-  { to: "/comercial/contratos", label: "Contratos", icon: FileSignature, description: "Propostas e vigências" },
-  { to: "/comercial/configuracoes", label: "Configurações", icon: Settings, description: "Empresa, logo e numeração" },
+  { to: "/comercial/clientes", label: "Clientes", icon: Users, description: "Cadastros e contatos", permission: "clientes.manage" },
+  { to: "/comercial/servicos", label: "Serviços", icon: Briefcase, description: "Portfólio e regras técnicas", permission: "servicos.manage" },
+  { to: "/comercial/contratos", label: "Contratos", icon: FileSignature, description: "Propostas e vigências", permission: "contratos.manage" },
+  { to: "/comercial/configuracoes", label: "Configurações", icon: Settings, description: "Empresa, logo e numeração", permission: "configuracoes.manage" },
 ];
 
 const meta: Record<string, { title: string; description: string }> = {
@@ -23,8 +23,9 @@ const meta: Record<string, { title: string; description: string }> = {
 
 export default function ComercialLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
-  const { logout } = useAuth();
+  const { logout, hasPermission } = useAuth();
   const current = meta[pathname] ?? meta["/comercial/clientes"];
+  const visibleNavItems = navItems.filter((item) => hasPermission(item.permission));
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,_rgba(248,248,246,1),_rgba(243,245,242,1))]">
@@ -42,7 +43,7 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
           <EnvironmentBadge className="hidden lg:inline-flex" />
 
           <nav className="ml-auto hidden items-center gap-2 xl:flex">
-            {navItems.map(({ to, label, icon: Icon }) => {
+            {visibleNavItems.map(({ to, label, icon: Icon }) => {
               const active = pathname === to;
               return (
                 <Link
@@ -91,7 +92,7 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
         />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {navItems.map(({ to, label, icon: Icon, description }) => {
+          {visibleNavItems.map(({ to, label, icon: Icon, description }) => {
             const active = pathname === to;
             return (
               <Link

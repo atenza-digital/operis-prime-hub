@@ -4,6 +4,7 @@ import { clearAuthToken, getAuthToken, getCurrentUser, login as loginRequest, lo
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  hasPermission: (...permissions: string[]) => boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -57,8 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  function hasPermission(...permissions: string[]) {
+    if (!user) return false;
+    const granted = new Set(user.permissoes || []);
+    return permissions.some((permission) => granted.has(permission));
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login: handleLogin, logout: handleLogout }}>
+    <AuthContext.Provider value={{ user, loading, hasPermission, login: handleLogin, logout: handleLogout }}>
       {children}
     </AuthContext.Provider>
   );

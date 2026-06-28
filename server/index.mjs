@@ -35,6 +35,14 @@ async function requireAuth(req, res, next) {
   }
 }
 
+function requirePermission(...permissions) {
+  return (req, res, next) => {
+    const granted = new Set(req.auth?.user?.permissoes || []);
+    if (permissions.some((permission) => granted.has(permission))) return next();
+    return res.status(403).json({ error: "Usuario sem permissao para esta acao." });
+  };
+}
+
 function addDays(dateStr, days) {
   const date = new Date(`${dateStr}T12:00:00`);
   date.setDate(date.getDate() + days);
@@ -560,7 +568,7 @@ app.get("/api/bootstrap", async (_req, res) => {
   res.json(await getBootstrap());
 });
 
-app.post("/api/clients", async (req, res) => {
+app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `CLI-${String(Date.now()).slice(-6)}`;
   await withTransaction(async (client) => {
@@ -594,7 +602,7 @@ app.post("/api/clients", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.post("/api/services", async (req, res) => {
+app.post("/api/services", requirePermission("servicos.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `SRV-${String(Date.now()).slice(-6)}`;
   await query(
@@ -637,7 +645,7 @@ app.post("/api/services", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.post("/api/technicians", async (req, res) => {
+app.post("/api/technicians", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;
   await query(
@@ -649,7 +657,7 @@ app.post("/api/technicians", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.post("/api/vehicles", async (req, res) => {
+app.post("/api/vehicles", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `VEI-${String(Date.now()).slice(-6)}`;
   await query(
@@ -661,7 +669,7 @@ app.post("/api/vehicles", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.post("/api/allocations", async (req, res) => {
+app.post("/api/allocations", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `AL-${String(Date.now()).slice(-6)}`;
   await query(
@@ -673,7 +681,7 @@ app.post("/api/allocations", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.patch("/api/company-config", async (req, res) => {
+app.patch("/api/company-config", requirePermission("configuracoes.manage"), async (req, res) => {
   const body = req.body;
   await query(
     `UPDATE ciperprag_hub.empresa_config SET
@@ -685,7 +693,7 @@ app.patch("/api/company-config", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.patch("/api/numbering-config", async (req, res) => {
+app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), async (req, res) => {
   const body = req.body;
   await query(
     `UPDATE ciperprag_hub.numeracao_config SET
@@ -696,7 +704,7 @@ app.patch("/api/numbering-config", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/contract-templates", async (req, res) => {
+app.post("/api/contract-templates", requirePermission("contratos.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `TPL-${String(Date.now()).slice(-6)}`;
   await withTransaction(async (client) => {
@@ -718,7 +726,7 @@ app.post("/api/contract-templates", async (req, res) => {
   res.json({ ok: true, id });
 });
 
-app.post("/api/contract-templates/:id/generate-contract", async (req, res) => {
+app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const next = await nextSequential("contrato_ultimo");
   const year = new Date().getFullYear();
@@ -745,19 +753,19 @@ app.post("/api/contract-templates/:id/generate-contract", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/agendamentos", async (req, res) => {
+app.post("/api/agendamentos", requirePermission("agenda.manage"), async (req, res) => {
   const id = await upsertSchedule(req.body);
   res.json({ ok: true, id });
 });
 
-app.patch("/api/agendamentos/:id", async (req, res) => {
+app.patch("/api/agendamentos/:id", requirePermission("agenda.manage"), async (req, res) => {
   const current = (await getSchedules()).find((item) => item.id === req.params.id);
   if (!current) return res.status(404).json({ error: "Agendamento não encontrado" });
   const id = await upsertSchedule({ ...current, ...req.body, id: req.params.id });
   res.json({ ok: true, id });
 });
 
-app.post("/api/agendamentos/:id/gerar-os", async (req, res) => {
+app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async (req, res) => {
   const agendamentoId = req.params.id;
   const leaderName = req.body.tecnicoNome;
   const result = await withTransaction(async (client) => {
@@ -789,7 +797,7 @@ app.post("/api/agendamentos/:id/gerar-os", async (req, res) => {
   res.json({ ok: true, id: result });
 });
 
-app.patch("/api/orders/:id", async (req, res) => {
+app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) => {
   const current = (await getOrders()).find((item) => item.id === req.params.id);
   if (!current) return res.status(404).json({ error: "OS não encontrada" });
   const body = { ...current, ...req.body };
@@ -804,7 +812,7 @@ app.patch("/api/orders/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/orders/:id/encerrar", async (req, res) => {
+app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
   const { dataExecucao, quantidade, tagEquipamentoServico, fotos } = req.body;
 
@@ -884,7 +892,7 @@ app.post("/api/orders/:id/encerrar", async (req, res) => {
   res.json({ ok: true, ...response });
 });
 
-app.post("/api/orders/:id/certificado", async (req, res) => {
+app.post("/api/orders/:id/certificado", requirePermission("certificados.manage"), async (req, res) => {
   const orderId = req.params.id;
   const { rows: orderRows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
   const order = orderRows[0];
@@ -907,7 +915,7 @@ app.post("/api/orders/:id/certificado", async (req, res) => {
   res.json({ ok: true, hash });
 });
 
-app.patch("/api/recurrence-suggestions/:id", async (req, res) => {
+app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {
   const id = req.params.id;
   const action = req.body.action;
   const { rows } = await query("SELECT * FROM ciperprag_hub.recorrencia_sugestoes WHERE id = $1", [id]);
