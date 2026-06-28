@@ -648,6 +648,59 @@ async function getRecurrenceSuggestions() {
   }));
 }
 
+async function getMeasurements() {
+  const { rows } = await query(`
+    SELECT
+      m.*,
+      COALESCE(
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', i.id,
+            'osId', i.os_id,
+            'osNumero', i.os_numero,
+            'contratoId', i.contrato_id,
+            'servico', i.servico,
+            'dataExecucao', i.data_execucao,
+            'quantidade', i.quantidade,
+            'unidade', i.unidade,
+            'valorUnitario', i.valor_unitario,
+            'valorTotal', i.valor_total
+          )
+          ORDER BY i.data_execucao, i.os_numero
+        ) FILTER (WHERE i.id IS NOT NULL),
+        '[]'
+      ) AS itens
+    FROM ciperprag_hub.medicoes m
+    LEFT JOIN ciperprag_hub.medicao_itens i ON i.medicao_id = m.id
+    GROUP BY m.id
+    ORDER BY m.criado_em DESC
+  `);
+
+  return rows.map((row) => ({
+    id: row.id,
+    numero: row.numero,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    clienteCnpj: row.cliente_cnpj,
+    clienteEndereco: row.cliente_endereco,
+    periodoInicio: row.periodo_inicio?.toISOString?.().split("T")[0] ?? row.periodo_inicio,
+    periodoFim: row.periodo_fim?.toISOString?.().split("T")[0] ?? row.periodo_fim,
+    status: row.status,
+    total: Number(row.total || 0),
+    formaPagamento: row.forma_pagamento,
+    localEntrega: row.local_entrega,
+    snapshotDados: row.snapshot_dados ?? {},
+    criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
+    itens: (row.itens ?? []).map((item) => ({
+      ...item,
+      dataExecucao: item.dataExecucao?.toISOString?.().split("T")[0] ?? item.dataExecucao,
+      quantidade: Number(item.quantidade || 0),
+      valorUnitario: Number(item.valorUnitario || 0),
+      valorTotal: Number(item.valorTotal || 0),
+    })),
+  }));
+}
+
 async function getRolesForTenant(tenantId) {
   const { rows } = await query(
     `SELECT
@@ -716,7 +769,7 @@ async function getUsersForTenant(tenantId) {
 }
 
 async function getBootstrap() {
-  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions] =
+  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements] =
     await Promise.all([
       getCompanyConfig(),
       getNumberingConfig(),
@@ -731,6 +784,7 @@ async function getBootstrap() {
       getAllocations(),
       getContractTemplates(),
       getRecurrenceSuggestions(),
+      getMeasurements(),
     ]);
 
   return {
@@ -747,6 +801,7 @@ async function getBootstrap() {
     allocations,
     contractTemplates,
     recurrenceSuggestions,
+    measurements,
   };
 }
 
@@ -1243,6 +1298,133 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
       );
     }
   });
+  res.json({ ok: true });
+});
+
+app.post("/api/measurements/generate", requirePermission("medicoes.manage"), async (req, res) => {
+  const { clienteNome, dataInicio, dataFim } = req.body;
+  if (!clienteNome || !dataInicio || !dataFim) return res.status(400).json({ error: "Cliente e periodo sao obrigatorios." });
+
+  const measurement = await withTransaction(async (client) => {
+    const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+    const company = companyRows[0];
+    const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE razao_social = $1 OR nome_fantasia = $1 LIMIT 1", [clienteNome]);
+    const customer = clientRows[0];
+    const { rows: numRows } = await client.query(
+      `UPDATE ciperprag_hub.numeracao_config
+       SET medicao_ultimo = medicao_ultimo + 1, atualizado_em = NOW()
+       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)
+       RETURNING medicao_formato, medicao_ultimo`,
+    );
+    const number = formatSequential(numRows[0]?.medicao_formato, numRows[0]?.medicao_ultimo || 1);
+
+    const { rows: orderRows } = await client.query(
+      `SELECT
+         o.*,
+         c.valor_unitario
+       FROM ciperprag_hub.ordens_servico o
+       LEFT JOIN ciperprag_hub.contratos c ON c.id = o.contrato_id
+       WHERE o.status = 'encerrada'
+         AND COALESCE(o.nao_executada, FALSE) = FALSE
+         AND o.cliente = $1
+         AND COALESCE(o.data_execucao, o.data_emissao) BETWEEN $2 AND $3
+         AND NOT EXISTS (
+           SELECT 1
+           FROM ciperprag_hub.medicao_itens mi
+           JOIN ciperprag_hub.medicoes m_exist ON m_exist.id = mi.medicao_id
+           WHERE mi.os_id = o.id
+             AND m_exist.status <> 'cancelada'
+         )
+       ORDER BY COALESCE(o.data_execucao, o.data_emissao), o.numero`,
+      [clienteNome, dataInicio, dataFim],
+    );
+
+    if (!orderRows.length) {
+      const error = new Error("Nenhuma OS encerrada e ainda nao medida foi encontrada para o periodo.");
+      error.status = 400;
+      throw error;
+    }
+
+    const items = orderRows.map((order) => {
+      const quantidade = Number(order.quantidade || 0);
+      const valorUnitario = Number(order.valor_unitario || 0);
+      return {
+        osId: order.id,
+        osNumero: order.numero,
+        contratoId: order.contrato_id,
+        servico: order.servico,
+        dataExecucao: order.data_execucao?.toISOString?.().split("T")[0] ?? order.data_execucao ?? order.data_emissao?.toISOString?.().split("T")[0] ?? order.data_emissao,
+        quantidade,
+        unidade: order.unidade,
+        valorUnitario,
+        valorTotal: quantidade * valorUnitario,
+      };
+    });
+    const total = items.reduce((sum, item) => sum + item.valorTotal, 0);
+    const id = makeId("MED");
+    const endereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null;
+    const snapshot = {
+      numero: number,
+      cliente: {
+        id: customer?.id || null,
+        nome: clienteNome,
+        cnpj: customer?.cnpj || orderRows[0]?.cnpj || null,
+        endereco,
+      },
+      periodo: { inicio: dataInicio, fim: dataFim },
+      empresa: {
+        razaoSocial: company?.razao_social || null,
+        nomeFantasia: company?.nome_fantasia || null,
+        cnpj: company?.cnpj || null,
+        endereco: company?.endereco || null,
+      },
+      formaPagamento: company?.medicao_forma_pagamento_padrao || null,
+      localEntrega: company?.medicao_local_entrega_padrao || null,
+      itens: items,
+      total,
+    };
+
+    await client.query(
+      `INSERT INTO ciperprag_hub.medicoes
+       (id, numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, periodo_inicio, periodo_fim, status, total, forma_pagamento, local_entrega, snapshot_dados)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'emitida',$9,$10,$11,$12)`,
+      [id, number, customer?.id || null, clienteNome, customer?.cnpj || orderRows[0]?.cnpj || null, endereco, dataInicio, dataFim, total, company?.medicao_forma_pagamento_padrao || null, company?.medicao_local_entrega_padrao || null, JSON.stringify(snapshot)],
+    );
+
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.medicao_itens
+         (medicao_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [id, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
+      );
+    }
+
+    return {
+      id,
+      numero: number,
+      clienteId: customer?.id || null,
+      clienteNome,
+      clienteCnpj: customer?.cnpj || orderRows[0]?.cnpj || null,
+      clienteEndereco: endereco,
+      periodoInicio: dataInicio,
+      periodoFim: dataFim,
+      status: "emitida",
+      total,
+      formaPagamento: company?.medicao_forma_pagamento_padrao || null,
+      localEntrega: company?.medicao_local_entrega_padrao || null,
+      snapshotDados: snapshot,
+      criadoEm: new Date().toISOString(),
+      itens: items,
+    };
+  });
+
+  res.json({ ok: true, measurement });
+});
+
+app.patch("/api/measurements/:id/cancel", requirePermission("medicoes.manage"), async (req, res) => {
+  const { rowCount } = await query("UPDATE ciperprag_hub.medicoes SET status = 'cancelada', atualizado_em = NOW() WHERE id = $1", [req.params.id]);
+  if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
   res.json({ ok: true });
 });
 

@@ -317,6 +317,37 @@ export interface RecorrenciaSuggestionApp {
   createdAt: string;
 }
 
+export interface MedicaoItemApp {
+  id?: number;
+  osId: string;
+  osNumero?: string;
+  contratoId?: string;
+  servico: string;
+  dataExecucao: string;
+  quantidade: number;
+  unidade?: string;
+  valorUnitario: number;
+  valorTotal: number;
+}
+
+export interface MedicaoApp {
+  id: string;
+  numero: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj?: string;
+  clienteEndereco?: string;
+  periodoInicio: string;
+  periodoFim: string;
+  status: "emitida" | "cancelada";
+  total: number;
+  formaPagamento?: string;
+  localEntrega?: string;
+  snapshotDados?: Record<string, unknown>;
+  criadoEm: string;
+  itens: MedicaoItemApp[];
+}
+
 export interface BootstrapData {
   companyConfig: EmpresaConfig | null;
   numberingConfig: NumeracaoConfig | null;
@@ -331,6 +362,7 @@ export interface BootstrapData {
   allocations: AlocacaoSemanal[];
   contractTemplates: ContratoTemplate[];
   recurrenceSuggestions: RecorrenciaSuggestionApp[];
+  measurements: MedicaoApp[];
 }
 
 const AUTH_TOKEN_KEY = "ciperprag_hub_auth_token";
@@ -454,3 +486,7 @@ export const getCertificateVerification = (hash: string) =>
   api<{ ok: boolean; certificate: CertificateVerification; verifiedAt: string }>(`/certificates/${encodeURIComponent(hash)}`);
 export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dismiss") =>
   api(`/recurrence-suggestions/${id}`, { method: "PATCH", body: JSON.stringify({ action }) });
+export const generateMeasurement = (payload: { clienteNome: string; dataInicio: string; dataFim: string }) =>
+  api<{ ok: boolean; measurement: MedicaoApp }>("/measurements/generate", { method: "POST", body: JSON.stringify(payload) });
+export const cancelMeasurement = (id: string) =>
+  api<{ ok: boolean }>(`/measurements/${id}/cancel`, { method: "PATCH" });

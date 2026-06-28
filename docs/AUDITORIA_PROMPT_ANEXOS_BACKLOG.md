@@ -33,7 +33,7 @@ O ponto mais critico antes de novas telas grandes e organizar a base operacional
 | Etapa 6 - OS robusta | Parcial | OS gerada e ajustada para se aproximar do modelo em duas paginas. | Persistir mais campos da OS, suportar cancelamento/nao execucao, acompanhantes, assinaturas, varios itens, riscos, EPI/EPC e textos parametrizados. |
 | Etapa 7 - Evidencias/fotos/anexos | Parcial | Encerramento aceita fotos de forma limitada. | Criar armazenamento estruturado de anexos, metadados, limites por tipo, preview, download e associacao com OS/certificado/medicao. |
 | Etapa 8 - Certificados antifraude | Parcial | Certificado com QR Code e rota publica de validacao foram implementados. | Persistir snapshot final, status, revogacao, hash imutavel, divergencia entre certificado e relatorio e aderencia total ao modelo original. |
-| Etapa 9 - Medicao | Parcial | Tela e PDF de medicao existem, mas ainda precisam de persistencia robusta. | Criar entidade de medicao, status, itens medidos, baixa contratual, anexos, numero, NF e PDF historico. |
+| Etapa 9 - Medicao | Parcial avancado | Medicao persistida com itens, status, historico, snapshot, reimpressao e cancelamento inicial. | Evoluir baixa contratual detalhada, anexos, NF, PDF historico server-side e auditoria de cancelamento. |
 | Etapa 10 - POPs/checklists | Pendente | Anexos mostram POPs reais, mas o sistema ainda nao gerencia POP/checklist por servico. | Criar cadastro de POPs, versoes, checklist vinculado ao servico e uso na OS/encerramento. |
 | Etapa 11 - Estoque simples | Pendente | Nao identificado fluxo de estoque operacional. | Manter em backlog apos OS, certificados e medicao. |
 | Etapa 12 - Ajuda, UX e dashboards | Parcial | UI foi melhorada e o menu foi reorganizado. | Adicionar ajuda contextual, indicadores por perfil, telas vazias melhores e fluxo guiado. |
@@ -208,3 +208,28 @@ Backlog remanescente da Etapa 8A:
 - Remover rota antiga duplicada de geracao de certificado apos limpeza completa de encoding do arquivo server/index.mjs.
 - Assinar/hashar criptograficamente o snapshot para verificacao forte de integridade.
 - Exibir na tela publica um resumo mais completo do snapshot validado.
+
+## Atualizacao - Etapa 9A executada
+
+Status: concluida no escopo minimo de medicao persistida.
+
+Entregas realizadas:
+
+- Criadas tabelas `medicoes` e `medicao_itens` para armazenar medicoes historicas no banco.
+- Bootstrap passou a carregar medicoes emitidas/canceladas junto com os dados operacionais.
+- Tela de Medicao passou a gerar medicao persistida por cliente e intervalo de datas.
+- Geracao da medicao passou a considerar apenas OS encerradas, executadas e ainda nao medidas em medicao ativa.
+- Medicoes passaram a armazenar snapshot JSON com cliente, empresa, periodo, forma de pagamento, local de entrega, itens e total.
+- Historico de medicoes passou a permitir busca, visualizacao, reimpressao e cancelamento.
+- Cancelamento de medicao libera as OS para uma nova medicao sem apagar o historico cancelado.
+- Impressao da medicao passou a usar o registro persistido, evitando documento temporario sem rastreabilidade.
+
+Backlog remanescente da Etapa 9A:
+
+- Criar PDF server-side de medicao e armazenar versao historica assinada/imutavel.
+- Permitir selecao manual de itens antes de emitir a medicao quando o cliente nao quiser medir todas as OS do periodo.
+- Adicionar motivo de cancelamento, usuario responsavel e trilha de auditoria detalhada.
+- Bloquear cancelamento quando houver nota fiscal/faturamento vinculado.
+- Incluir anexos de medicao, numero de NF, data de faturamento e status financeiro.
+- Amarrar baixa contratual por item de contrato com saldo medido/pendente mais explicito.
+- Evoluir painel Atenza/dono do SaaS para controlar tenants, planos, pagamentos, bloqueios, cobranca e inadimplencia.
