@@ -158,8 +158,8 @@ export async function loginWithPassword({ email, password, ip, userAgent }) {
     await client.query(
       `INSERT INTO ciperprag_hub.audit_logs
        (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo, ip, user_agent)
-       VALUES ($1,$2,'usuario',$2,'login','Login realizado com sucesso',$3,$4)`,
-      [user.tenant_id, user.id, ip || null, userAgent || null],
+       VALUES ($1,$2,'usuario',$3,'login','Login realizado com sucesso',$4,$5)`,
+      [user.tenant_id, user.id, user.id, ip || null, userAgent || null],
     );
 
     return {

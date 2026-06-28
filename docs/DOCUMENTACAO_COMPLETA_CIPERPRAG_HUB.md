@@ -2294,12 +2294,31 @@ ADMIN_EMAIL="admin@empresa.com.br" ADMIN_PASSWORD="senha-segura" ADMIN_NAME="Adm
 
 Senhas não devem ser gravadas em SQL, documentação, repositório ou mensagens de deploy.
 
-## 22. Resumo Executivo Final
+## 22. Backlog SaaS Atenza
+
+Esta seção registra itens estratégicos que devem ser implementados antes da operação comercial do produto como SaaS, mas que podem ser tratados ao final da evolução funcional inicial.
+
+Gestão do dono do SaaS:
+
+- Criar painel administrativo da Atenza para gerenciar tenants/clientes.
+- Permitir ativar, suspender e inativar empresas contratantes.
+- Controlar planos, limites, módulos contratados e recursos liberados por tenant.
+- Controlar pagamentos, vencimentos, inadimplência, bloqueio por atraso e reativação.
+- Registrar dados comerciais do cliente SaaS, responsável financeiro, contato técnico e histórico de atendimento.
+- Criar trilha de auditoria para ações feitas pela Atenza sobre tenants.
+- Diferenciar permissões de administrador Atenza e administrador da empresa cliente.
+- Preparar faturamento/integração futura com gateway de pagamento ou emissão manual assistida.
+- Criar alertas internos para contratos SaaS próximos do vencimento ou clientes inadimplentes.
+- Definir processo de backup, exportação e encerramento de conta por tenant.
+
+Este backlog deve permanecer visível até ser transformado em épicos/tarefas de produto.
+
+## 23. Resumo Executivo Final
 
 O Ciperprag Hub é uma aplicação web de gestão operacional e comercial para empresas de serviços, especialmente voltada à rotina da Ciperprag. O sistema centraliza cadastros comerciais, contratos, serviços, equipes, veículos, agendamentos, Ordens de Serviço, certificados, histórico e medição.
 
 Na prática, ele transforma o processo manual em um fluxo rastreável: o usuário cadastra clientes e serviços, cria contratos/propostas, agenda uma visita, define equipe e veículo, gera a OS, imprime a via para campo, encerra a OS com quantidade executada, tag de equipamento e fotos, baixa o saldo do contrato, gera certificado quando aplicável, permite validação antifraude por QR Code e consolida as OS encerradas em uma medição por período.
 
-O projeto usa React no frontend, Express no backend e PostgreSQL como banco de dados. A aplicação está preparada para rodar em Docker na VPS e atualmente não possui login interno, pois o controle de acesso deve ser feito externamente.
+O projeto usa React no frontend, Express no backend e PostgreSQL como banco de dados. A aplicação está preparada para rodar em Docker na VPS e possui login interno por e-mail e senha para proteger as áreas operacionais e comerciais.
 
 O maior valor do sistema é integrar operação e documentação em um único fluxo: o que foi vendido, agendado, executado, certificado e medido passa a ficar conectado no banco, reduzindo retrabalho, perda de informação e risco de certificado falso.

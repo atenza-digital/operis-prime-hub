@@ -54,8 +54,8 @@ try {
     await client.query(
       `INSERT INTO ciperprag_hub.audit_logs
        (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo)
-       VALUES ($1,$2,'usuario',$2,'admin_user_upsert','Administrador criado ou atualizado')`,
-      [tenant.id, user.id],
+       VALUES ($1,$2,'usuario',$3,'admin_user_upsert','Administrador criado ou atualizado')`,
+      [tenant.id, user.id, user.id],
     );
 
     return user;
