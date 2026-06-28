@@ -14,6 +14,7 @@ import Medicao from "@/pages/Medicao";
 import Equipes from "@/pages/Equipes";
 import Visualizador from "@/pages/Visualizador";
 import Certificados from "@/pages/Certificados";
+import ValidarCertificado from "@/pages/ValidarCertificado";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
 import Contratos from "@/pages/comercial/Contratos";
@@ -40,6 +41,8 @@ const App = () => (
           <Route element={<AppLayout><Certificados /></AppLayout>} path="/certificados" />
           <Route element={<AppLayout><Equipes /></AppLayout>} path="/equipes" />
           <Route element={<AppLayout><Visualizador /></AppLayout>} path="/visualizar" />
+          <Route path="/validar-certificado" element={<ValidarCertificado />} />
+          <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
 
           {/* Comercial */}
           <Route element={<ComercialLayout><Clientes /></ComercialLayout>} path="/comercial/clientes" />

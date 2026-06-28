@@ -1,0 +1,320 @@
+export interface ContatoCliente {
+  nome: string;
+  cargo: string;
+  telefone: string;
+  email: string;
+  principal: boolean;
+}
+
+export interface Cliente {
+  id: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  cnpj: string;
+  inscricaoEstadual?: string;
+  endereco: string;
+  bairro: string;
+  municipio: string;
+  uf: string;
+  cep: string;
+  logoUrl?: string;
+  ativo: boolean;
+  contatos: ContatoCliente[];
+}
+
+export interface ServicoCatalogo {
+  id: string;
+  nome: string;
+  tipo: "sanitario" | "manutencao";
+  descricao: string;
+  unidade: string;
+  recorrenciaDias: number;
+  geraCertificado: boolean;
+  validadeCertificadoDias: number;
+  produtosQuimicos: string[];
+  epis: string[];
+  riscos: string[];
+  normasAplicaveis: string[];
+  procedimentos: string[];
+  ativo: boolean;
+}
+
+export interface Contrato {
+  id: string;
+  clienteId?: string;
+  cliente: string;
+  cnpj: string;
+  servico: string;
+  tipo: "sanitario" | "manutencao";
+  contratado: number;
+  executado: number;
+  unidade: string;
+  status: "ativo" | "pendente" | "vencido";
+  ultimaExecucao: string;
+  validadeDias: number;
+  valorUnitario?: number;
+  tags?: string[];
+  produtosQuimicos?: string[];
+  epis?: string[];
+  riscos?: string[];
+  locais?: string[];
+}
+
+export interface AgendamentoApp {
+  id: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  contratoId: string;
+  servico: string;
+  tipo: "sanitario" | "manutencao";
+  dataAgendada: string;
+  localExecucao: string;
+  tags?: string;
+  observacao?: string;
+  tecnicosIds?: string[];
+  tecnicosNomes?: string[];
+  veiculoId?: string;
+  veiculoDescricao?: string;
+  status: "agendado" | "os_gerada" | "encerrado" | "cancelado";
+  osId?: string;
+  createdAt: string;
+}
+
+export interface OSApp {
+  id: string;
+  numero: string;
+  agendamentoId?: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  clienteEndereco?: string;
+  clienteLogoUrl?: string;
+  contratoId: string;
+  servico: string;
+  tipo: "sanitario" | "manutencao";
+  tecnicoNome: string;
+  tecnicoCpf?: string;
+  tecnicoDataAdmissao?: string;
+  equipeTecnicosIds?: string[];
+  equipeTecnicosNomes?: string[];
+  veiculoId?: string;
+  veiculoDescricao?: string;
+  localExecucao: string;
+  tags?: string;
+  tagEquipamentoServico?: string;
+  observacao?: string;
+  dataEmissao: string;
+  dataExecucao?: string;
+  quantidade: number;
+  unidade: string;
+  status: "aberta" | "encerrada";
+  fotos: string[];
+  certificadoHash?: string;
+}
+
+export interface CertificadoApp {
+  id: string;
+  hash: string;
+  numero: string;
+  osId: string;
+  osNumero?: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  clienteEndereco?: string;
+  clienteLogoUrl?: string;
+  contratoId: string;
+  servico: string;
+  tecnicoNome: string;
+  localExecucao: string;
+  dataExecucao: string;
+  emitidoEm: string;
+  validadeDias: number;
+  produtosQuimicos?: string[];
+  produtosDetalhados?: Array<Record<string, string>>;
+}
+
+export interface CertificateVerification {
+  id: string;
+  hash: string;
+  numero: string;
+  osId: string;
+  osNumero?: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  clienteEndereco?: string;
+  clienteLogoUrl?: string;
+  contratoId: string;
+  servico: string;
+  tecnicoNome: string;
+  localExecucao: string;
+  dataExecucao: string;
+  emitidoEm: string;
+  validadeDias: number;
+  validadeAte?: string | null;
+  status: "valid" | "expired";
+  produtosQuimicos?: string[];
+  produtosDetalhados?: Array<Record<string, string>>;
+  tagEquipamentoServico?: string;
+  quantidade?: number;
+  unidade?: string;
+  fotos?: string[];
+}
+
+export interface Tecnico {
+  id: string;
+  nome: string;
+  cpf: string;
+  cargo: string;
+  dataAdmissao: string;
+  telefone: string;
+  ativo: boolean;
+}
+
+export interface Veiculo {
+  id: string;
+  placa: string;
+  modelo: string;
+  ano: number;
+  ativo: boolean;
+}
+
+export interface AlocacaoSemanal {
+  id: string;
+  tecnicoId: string;
+  veiculoId?: string;
+  diaSemana: number;
+  cliente: string;
+  servico: string;
+  turno: "manha" | "tarde" | "integral";
+}
+
+export interface ContratoServico {
+  servicoId: string;
+  quantidade: number;
+  valorUnitario: number;
+  frequencia: string;
+}
+
+export interface ContratoTemplate {
+  id: string;
+  numero: string;
+  clienteId: string;
+  tipo: "contrato" | "proposta";
+  servicos: ContratoServico[];
+  vigenciaMeses: number;
+  formaPagamento: string;
+  prazoPagamentoDias: number;
+  status: "rascunho" | "enviado" | "aprovado" | "vigente" | "encerrado";
+  dataCriacao: string;
+  observacoes: string;
+}
+
+export interface EmpresaConfig {
+  razaoSocial: string;
+  nomeFantasia: string;
+  cnpj: string;
+  endereco: string;
+  telefone: string;
+  email: string;
+  logoUrl?: string;
+  alvara: string;
+  cr02: string;
+  anvisa: string;
+  vigilanciaSanitaria: string;
+  responsavelTecnico: string;
+  responsavelExecucao: string;
+  cargoResponsavel: string;
+}
+
+export interface NumeracaoConfig {
+  propostaFormato: string;
+  propostaUltimo: number;
+  contratoFormato: string;
+  contratoUltimo: number;
+  osFormato: string;
+  osUltimo: number;
+}
+
+export interface RecorrenciaSuggestionApp {
+  id: string;
+  clienteId?: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  contratoId: string;
+  servico: string;
+  tipo: "sanitario" | "manutencao";
+  localExecucao: string;
+  tags?: string;
+  observacao?: string;
+  tecnicosIds?: string[];
+  tecnicosNomes?: string[];
+  veiculoId?: string;
+  veiculoDescricao?: string;
+  suggestedDate: string;
+  sourceAgendamentoId?: string;
+  sourceOsId: string;
+  status: "pendente" | "confirmada" | "dispensada";
+  createdAt: string;
+}
+
+export interface BootstrapData {
+  companyConfig: EmpresaConfig | null;
+  numberingConfig: NumeracaoConfig | null;
+  clients: Cliente[];
+  services: ServicoCatalogo[];
+  contracts: Contrato[];
+  schedules: AgendamentoApp[];
+  orders: OSApp[];
+  certificates: CertificadoApp[];
+  technicians: Tecnico[];
+  vehicles: Veiculo[];
+  allocations: AlocacaoSemanal[];
+  contractTemplates: ContratoTemplate[];
+  recurrenceSuggestions: RecorrenciaSuggestionApp[];
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Erro na API" }));
+    throw new Error(error.error || "Erro na API");
+  }
+  return response.json();
+}
+
+export const addDays = (dateStr: string, days: number) => {
+  const date = new Date(`${dateStr}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split("T")[0];
+};
+
+export const getBootstrap = () => api<BootstrapData>("/bootstrap");
+export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
+export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
+export const saveTechnician = (payload: Partial<Tecnico>) => api("/technicians", { method: "POST", body: JSON.stringify(payload) });
+export const saveVehicle = (payload: Partial<Veiculo>) => api("/vehicles", { method: "POST", body: JSON.stringify(payload) });
+export const saveAllocation = (payload: Partial<AlocacaoSemanal>) => api("/allocations", { method: "POST", body: JSON.stringify(payload) });
+export const saveCompanyConfig = (payload: EmpresaConfig) => api("/company-config", { method: "PATCH", body: JSON.stringify(payload) });
+export const saveNumberingConfig = (payload: NumeracaoConfig) => api("/numbering-config", { method: "PATCH", body: JSON.stringify(payload) });
+export const saveContractTemplate = (payload: Partial<ContratoTemplate>) => api("/contract-templates", { method: "POST", body: JSON.stringify(payload) });
+export const generateContractFromProposal = (id: string) => api(`/contract-templates/${id}/generate-contract`, { method: "POST" });
+export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
+export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
+export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[] }) =>
+  api<{ ok: boolean; certificateHash?: string }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
+export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string }>(`/orders/${id}/certificado`, { method: "POST" });
+export const getCertificateVerification = (hash: string) =>
+  api<{ ok: boolean; certificate: CertificateVerification; verifiedAt: string }>(`/certificates/${encodeURIComponent(hash)}`);
+export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dismiss") =>
+  api(`/recurrence-suggestions/${id}`, { method: "PATCH", body: JSON.stringify({ action }) });

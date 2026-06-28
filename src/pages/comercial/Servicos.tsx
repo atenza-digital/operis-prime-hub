@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { servicosCatalogo as catalogoMock, type ServicoCatalogo } from "@/data/comercialData";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { getBootstrap, saveService, type ServicoCatalogo } from "@/lib/api";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,32 +12,69 @@ import { Briefcase, Plus, Pencil, Search, ShieldCheck, FlaskConical, HardHat, Al
 import { toast } from "sonner";
 
 const emptyServico: Omit<ServicoCatalogo, "id"> = {
-  nome: "", tipo: "sanitario", descricao: "", unidade: "", recorrenciaDias: 30,
-  geraCertificado: true, validadeCertificadoDias: 30,
-  produtosQuimicos: [], epis: [], riscos: [], normasAplicaveis: [], procedimentos: [], ativo: true,
+  nome: "",
+  tipo: "sanitario",
+  descricao: "",
+  unidade: "",
+  recorrenciaDias: 30,
+  geraCertificado: true,
+  validadeCertificadoDias: 30,
+  produtosQuimicos: [],
+  epis: [],
+  riscos: [],
+  normasAplicaveis: [],
+  procedimentos: [],
+  ativo: true,
 };
 
-function TagEditor({ label, icon: Icon, values, onChange }: { label: string; icon: React.ElementType; values: string[]; onChange: (v: string[]) => void }) {
+function TagEditor({
+  label,
+  icon: Icon,
+  values,
+  onChange,
+}: {
+  label: string;
+  icon: React.ElementType;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
   const [input, setInput] = useState("");
-  const add = () => {
-    const trimmed = input.trim();
-    if (trimmed && !values.includes(trimmed)) {
-      onChange([...values, trimmed]);
-      setInput("");
-    }
-  };
+
+  function add() {
+    const value = input.trim();
+    if (!value || values.includes(value)) return;
+    onChange([...values, value]);
+    setInput("");
+  }
+
   return (
     <div className="space-y-2">
       <Label className="flex items-center gap-1.5 text-xs"><Icon className="h-3.5 w-3.5" />{label}</Label>
       <div className="flex gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())} placeholder="Adicionar..." className="text-sm" />
+        <Input
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Adicionar..."
+          className="text-sm"
+        />
         <Button type="button" variant="outline" size="sm" onClick={add}>+</Button>
       </div>
       {values.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {values.map((v, i) => (
-            <Badge key={i} variant="secondary" className="text-xs cursor-pointer hover:bg-destructive/20" onClick={() => onChange(values.filter((_, j) => j !== i))}>
-              {v} ×
+          {values.map((value, index) => (
+            <Badge
+              key={`${value}-${index}`}
+              variant="secondary"
+              className="text-xs cursor-pointer hover:bg-destructive/20"
+              onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}
+            >
+              {value} x
             </Badge>
           ))}
         </div>
@@ -47,29 +84,64 @@ function TagEditor({ label, icon: Icon, values, onChange }: { label: string; ico
 }
 
 export default function Servicos() {
-  const [lista, setLista] = useState<ServicoCatalogo[]>(catalogoMock);
+  const [lista, setLista] = useState<ServicoCatalogo[]>([]);
   const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<ServicoCatalogo, "id">>(emptyServico);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const filtrados = lista.filter((s) => s.nome.toLowerCase().includes(busca.toLowerCase()));
-
-  const openNew = () => { setEditId(null); setForm({ ...emptyServico }); setDialogOpen(true); };
-  const openEdit = (s: ServicoCatalogo) => { setEditId(s.id); const { id, ...rest } = s; setForm(rest); setDialogOpen(true); };
-
-  const handleSave = () => {
-    if (!form.nome || !form.unidade) { toast.error("Nome e unidade são obrigatórios"); return; }
-    if (editId) {
-      setLista((prev) => prev.map((s) => (s.id === editId ? { ...form, id: editId } : s)));
-      toast.success("Serviço atualizado");
-    } else {
-      setLista((prev) => [...prev, { ...form, id: `SRV-${String(prev.length + 1).padStart(3, "0")}` }]);
-      toast.success("Serviço cadastrado");
+  async function reload() {
+    setLoading(true);
+    try {
+      const data = await getBootstrap();
+      setLista(data.services);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao carregar serviços");
+    } finally {
+      setLoading(false);
     }
-    setDialogOpen(false);
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const filtrados = lista.filter((item) => item.nome.toLowerCase().includes(busca.toLowerCase()));
+
+  const openNew = () => {
+    setEditId(null);
+    setForm({ ...emptyServico });
+    setDialogOpen(true);
   };
+
+  const openEdit = (servico: ServicoCatalogo) => {
+    setEditId(servico.id);
+    const { id, ...rest } = servico;
+    setForm(rest);
+    setDialogOpen(true);
+  };
+
+  async function handleSave() {
+    if (!form.nome || !form.unidade) {
+      toast.error("Nome e unidade são obrigatórios");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveService({ ...form, id: editId ?? undefined });
+      toast.success(editId ? "Serviço atualizado" : "Serviço cadastrado");
+      setDialogOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar serviço");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -79,7 +151,7 @@ export default function Servicos() {
             <Briefcase className="h-6 w-6 text-primary" />
             Catálogo de Serviços
           </h1>
-          <p className="text-muted-foreground text-sm">Cadastre e gerencie os serviços prestados e seus detalhes técnicos</p>
+          <p className="text-muted-foreground text-sm">Cadastre e gerencie os serviços usando apenas o banco</p>
         </div>
         <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" />Novo Serviço</Button>
       </div>
@@ -88,77 +160,88 @@ export default function Servicos() {
         <CardHeader className="pb-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar serviço..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+            <Input placeholder="Buscar serviço..." value={busca} onChange={(event) => setBusca(event.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {filtrados.map((s) => (
-            <div key={s.id} className="rounded-lg border overflow-hidden">
-              <div
-                className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
-                onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-muted-foreground">{s.id}</span>
-                    <Badge variant={s.tipo === "sanitario" ? "default" : "secondary"}>
-                      {s.tipo === "sanitario" ? "Sanitário" : "Manutenção"}
-                    </Badge>
-                    {s.geraCertificado && <Badge variant="outline" className="text-[10px]"><ShieldCheck className="h-3 w-3 mr-1" />Certificado</Badge>}
-                    {!s.ativo && <Badge variant="destructive">Inativo</Badge>}
-                  </div>
-                  <p className="font-semibold text-sm mt-1">{s.nome}</p>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                    <span>Unidade: {s.unidade}</span>
-                    {s.recorrenciaDias > 0 && <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3" />A cada {s.recorrenciaDias} dias</span>}
-                  </div>
-                </div>
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {expandedId === s.id && (
-                <div className="border-t bg-muted/20 p-4 space-y-4 text-sm">
-                  <p className="text-muted-foreground">{s.descricao}</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {s.produtosQuimicos.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><FlaskConical className="h-3.5 w-3.5 text-primary" />Produtos Químicos</p>
-                        <div className="flex flex-wrap gap-1">{s.produtosQuimicos.map((p) => <Badge key={p} variant="outline" className="text-xs">{p}</Badge>)}</div>
-                      </div>
-                    )}
-                    {s.epis.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><HardHat className="h-3.5 w-3.5 text-primary" />EPIs</p>
-                        <div className="flex flex-wrap gap-1">{s.epis.map((e) => <Badge key={e} variant="outline" className="text-xs">{e}</Badge>)}</div>
-                      </div>
-                    )}
-                    {s.riscos.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><AlertTriangle className="h-3.5 w-3.5 text-destructive" />Riscos</p>
-                        <div className="flex flex-wrap gap-1">{s.riscos.map((r) => <Badge key={r} variant="destructive" className="text-xs">{r}</Badge>)}</div>
-                      </div>
-                    )}
-                    {s.normasAplicaveis.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><BookOpen className="h-3.5 w-3.5 text-primary" />Normas</p>
-                        <div className="flex flex-wrap gap-1">{s.normasAplicaveis.map((n) => <Badge key={n} variant="secondary" className="text-xs">{n}</Badge>)}</div>
-                      </div>
-                    )}
-                  </div>
-                  {s.procedimentos.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium mb-1.5">Procedimentos</p>
-                      <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-0.5">
-                        {s.procedimentos.map((p, i) => <li key={i}>{p}</li>)}
-                      </ol>
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Carregando serviços...</div>
+          ) : (
+            filtrados.map((servico) => (
+              <div key={servico.id} className="rounded-lg border overflow-hidden">
+                <div
+                  className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => setExpandedId(expandedId === servico.id ? null : servico.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-muted-foreground">{servico.id}</span>
+                      <Badge variant={servico.tipo === "sanitario" ? "default" : "secondary"}>
+                        {servico.tipo === "sanitario" ? "Sanitário" : "Manutenção"}
+                      </Badge>
+                      {servico.geraCertificado && <Badge variant="outline" className="text-[10px]"><ShieldCheck className="h-3 w-3 mr-1" />Certificado</Badge>}
+                      {!servico.ativo && <Badge variant="destructive">Inativo</Badge>}
                     </div>
-                  )}
+                    <p className="font-semibold text-sm mt-1">{servico.nome}</p>
+                    <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                      <span>Unidade: {servico.unidade}</span>
+                      {servico.recorrenciaDias > 0 && <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3" />A cada {servico.recorrenciaDias} dias</span>}
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEdit(servico);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {expandedId === servico.id && (
+                  <div className="border-t bg-muted/20 p-4 space-y-4 text-sm">
+                    <p className="text-muted-foreground">{servico.descricao}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {servico.produtosQuimicos.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><FlaskConical className="h-3.5 w-3.5 text-primary" />Produtos Químicos</p>
+                          <div className="flex flex-wrap gap-1">{servico.produtosQuimicos.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
+                        </div>
+                      )}
+                      {servico.epis.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><HardHat className="h-3.5 w-3.5 text-primary" />EPIs</p>
+                          <div className="flex flex-wrap gap-1">{servico.epis.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
+                        </div>
+                      )}
+                      {servico.riscos.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><AlertTriangle className="h-3.5 w-3.5 text-destructive" />Riscos</p>
+                          <div className="flex flex-wrap gap-1">{servico.riscos.map((item) => <Badge key={item} variant="destructive" className="text-xs">{item}</Badge>)}</div>
+                        </div>
+                      )}
+                      {servico.normasAplicaveis.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium flex items-center gap-1 mb-1.5"><BookOpen className="h-3.5 w-3.5 text-primary" />Normas</p>
+                          <div className="flex flex-wrap gap-1">{servico.normasAplicaveis.map((item) => <Badge key={item} variant="secondary" className="text-xs">{item}</Badge>)}</div>
+                        </div>
+                      )}
+                    </div>
+                    {servico.procedimentos.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium mb-1.5">Procedimentos</p>
+                        <ol className="list-decimal list-inside text-xs text-muted-foreground space-y-0.5">
+                          {servico.procedimentos.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -169,11 +252,11 @@ export default function Servicos() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nome do Serviço *</Label>
-                <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+                <Input value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Tipo *</Label>
-                <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as "sanitario" | "manutencao" })}>
+                <Select value={form.tipo} onValueChange={(value) => setForm({ ...form, tipo: value as "sanitario" | "manutencao" })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sanitario">Sanitário</SelectItem>
@@ -184,35 +267,39 @@ export default function Servicos() {
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
-              <Textarea value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} rows={3} />
+              <Textarea value={form.descricao} onChange={(event) => setForm({ ...form, descricao: event.target.value })} rows={3} />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Unidade *</Label>
-                <Input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} placeholder="visitas, horas, itens..." />
+                <Input value={form.unidade} onChange={(event) => setForm({ ...form, unidade: event.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Recorrência (dias)</Label>
-                <Input type="number" value={form.recorrenciaDias} onChange={(e) => setForm({ ...form, recorrenciaDias: Number(e.target.value) })} />
+                <Input type="number" value={form.recorrenciaDias} onChange={(event) => setForm({ ...form, recorrenciaDias: Number(event.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>Validade Certificado (dias)</Label>
-                <Input type="number" value={form.validadeCertificadoDias} onChange={(e) => setForm({ ...form, validadeCertificadoDias: Number(e.target.value) })} />
+                <Input type="number" value={form.validadeCertificadoDias} onChange={(event) => setForm({ ...form, validadeCertificadoDias: Number(event.target.value) })} />
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={form.geraCertificado} onChange={(e) => setForm({ ...form, geraCertificado: e.target.checked })} className="rounded" />
+              <input type="checkbox" checked={form.geraCertificado} onChange={(event) => setForm({ ...form, geraCertificado: event.target.checked })} className="rounded" />
               Gera certificado de execução
             </label>
-            <TagEditor label="Produtos Químicos" icon={FlaskConical} values={form.produtosQuimicos} onChange={(v) => setForm({ ...form, produtosQuimicos: v })} />
-            <TagEditor label="EPIs Obrigatórios" icon={HardHat} values={form.epis} onChange={(v) => setForm({ ...form, epis: v })} />
-            <TagEditor label="Riscos" icon={AlertTriangle} values={form.riscos} onChange={(v) => setForm({ ...form, riscos: v })} />
-            <TagEditor label="Normas Aplicáveis" icon={BookOpen} values={form.normasAplicaveis} onChange={(v) => setForm({ ...form, normasAplicaveis: v })} />
-            <TagEditor label="Procedimentos" icon={Briefcase} values={form.procedimentos} onChange={(v) => setForm({ ...form, procedimentos: v })} />
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.ativo} onChange={(event) => setForm({ ...form, ativo: event.target.checked })} className="rounded" />
+              Serviço ativo
+            </label>
+            <TagEditor label="Produtos Químicos" icon={FlaskConical} values={form.produtosQuimicos} onChange={(values) => setForm({ ...form, produtosQuimicos: values })} />
+            <TagEditor label="EPIs Obrigatórios" icon={HardHat} values={form.epis} onChange={(values) => setForm({ ...form, epis: values })} />
+            <TagEditor label="Riscos" icon={AlertTriangle} values={form.riscos} onChange={(values) => setForm({ ...form, riscos: values })} />
+            <TagEditor label="Normas Aplicáveis" icon={BookOpen} values={form.normasAplicaveis} onChange={(values) => setForm({ ...form, normasAplicaveis: values })} />
+            <TagEditor label="Procedimentos" icon={Briefcase} values={form.procedimentos} onChange={(values) => setForm({ ...form, procedimentos: values })} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editId ? "Salvar" : "Cadastrar"}</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : editId ? "Salvar" : "Cadastrar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

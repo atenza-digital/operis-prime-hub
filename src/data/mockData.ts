@@ -15,6 +15,7 @@ export interface Contrato {
   produtosQuimicos?: string[];
   epis?: string[];
   riscos?: string[];
+  locais?: string[];  // locais mapeados do contrato
 }
 
 export interface Agendamento {
@@ -60,6 +61,7 @@ export const contratos: Contrato[] = [
     produtosQuimicos: ["Hipoclorito de Sódio 2,5%", "Ácido Peracético 0,2%"],
     epis: ["Máscara PFF2", "Luva Nitrílica", "Óculos de Proteção", "Avental Impermeável"],
     riscos: ["Risco Químico", "Risco Biológico"],
+    locais: ["República Administrativa 01", "República Administrativa 02", "Refeitório Central", "Escritório Principal", "Almoxarifado"],
   },
   {
     id: "CT-002",
@@ -78,6 +80,7 @@ export const contratos: Contrato[] = [
     produtosQuimicos: ["Gel Inseticida Maxforce", "Raticida Brodifacoum 0,005%"],
     epis: ["Máscara PFF2", "Luva Nitrílica", "Bota de Segurança"],
     riscos: ["Risco Químico", "Risco Biológico"],
+    locais: ["Almoxarifado Norte", "Refeitório", "Oficina Mecânica", "Escritório Administrativo"],
   },
   {
     id: "CT-003",

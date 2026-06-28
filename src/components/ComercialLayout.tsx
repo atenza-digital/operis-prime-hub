@@ -1,56 +1,109 @@
 import { Link, useLocation } from "react-router-dom";
-import { Users, Briefcase, FileSignature, Settings, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Briefcase, FileSignature, Settings, Users } from "lucide-react";
 import logoImg from "@/assets/logo_ciperprag.png";
+import { PageHeader } from "@/components/PageHeader";
+import { cn } from "@/lib/utils";
 
 const navItems = [
-  { to: "/comercial/clientes", label: "Clientes", icon: Users },
-  { to: "/comercial/servicos", label: "Serviços", icon: Briefcase },
-  { to: "/comercial/contratos", label: "Contratos / Propostas", icon: FileSignature },
-  { to: "/comercial/configuracoes", label: "Configurações", icon: Settings },
+  { to: "/comercial/clientes", label: "Clientes", icon: Users, description: "Cadastros e contatos" },
+  { to: "/comercial/servicos", label: "Serviços", icon: Briefcase, description: "Portfólio e regras técnicas" },
+  { to: "/comercial/contratos", label: "Contratos", icon: FileSignature, description: "Propostas e vigências" },
+  { to: "/comercial/configuracoes", label: "Configurações", icon: Settings, description: "Empresa, logo e numeração" },
 ];
+
+const meta: Record<string, { title: string; description: string }> = {
+  "/comercial/clientes": { title: "Clientes", description: "Organize cadastros, contatos e dados que alimentam os contratos." },
+  "/comercial/servicos": { title: "Serviços", description: "Padronize o catálogo, as recorrências e os requisitos técnicos." },
+  "/comercial/contratos": { title: "Contratos e Propostas", description: "Gerencie propostas, aprovações, valores e contratos vigentes." },
+  "/comercial/configuracoes": { title: "Configurações", description: "Centralize identidade visual, dados da empresa e padrões operacionais." },
+};
 
 export default function ComercialLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
+  const current = meta[pathname] ?? meta["/comercial/clientes"];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
-        <div className="container flex h-14 items-center gap-6">
-          <div className="flex items-center gap-2">
-            <img src={logoImg} alt="Ciperprag" className="h-8" />
-            <span className="text-xs text-muted-foreground hidden md:inline ml-1 bg-primary/20 text-primary-foreground px-2 py-0.5 rounded-full">Comercial</span>
+    <div className="min-h-screen bg-[linear-gradient(180deg,_rgba(248,248,246,1),_rgba(243,245,242,1))]">
+      <header className="sticky top-0 z-40 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
+        <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <img src={logoImg} alt="Ciperprag" className="h-9 object-contain" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">Hub Comercial</p>
+              <p className="truncate text-xs text-surface-dark-foreground/55">Origem dos dados que sustentam a operação</p>
+            </div>
           </div>
 
-          <nav className="flex items-center gap-1 ml-auto overflow-x-auto">
+          <nav className="ml-auto hidden items-center gap-2 xl:flex">
             {navItems.map(({ to, label, icon: Icon }) => {
               const active = pathname === to;
               return (
                 <Link
                   key={to}
                   to={to}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                  className={cn(
+                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "text-surface-dark-foreground/70 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10"
-                  }`}
+                      : "text-surface-dark-foreground/70 hover:bg-white/8 hover:text-surface-dark-foreground",
+                  )}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{label}</span>
+                  <span>{label}</span>
                 </Link>
               );
             })}
             <Link
               to="/"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-surface-dark-foreground/50 hover:text-surface-dark-foreground hover:bg-surface-dark-foreground/10 ml-2 border-l border-surface-dark-foreground/20 pl-4"
+              className="ml-3 flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-surface-dark-foreground/70 transition-colors hover:bg-white/8 hover:text-surface-dark-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Operacional</span>
+              Operacional
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="container py-6">{children}</main>
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <PageHeader
+          eyebrow="Comercial"
+          title={current.title}
+          description={current.description}
+          crumbs={[
+            { label: "Operacional", to: "/" },
+            { label: "Comercial" },
+            { label: current.title },
+          ]}
+        />
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {navItems.map(({ to, label, icon: Icon, description }) => {
+            const active = pathname === to;
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  "rounded-lg border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-md",
+                  active ? "border-primary/40 shadow-sm ring-1 ring-primary/15" : "border-border/70",
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn("rounded-xl p-2", active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        {children}
+      </main>
     </div>
   );
 }

@@ -1,9 +1,14 @@
-import { useState, useMemo, useRef } from "react";
-import { contratosTemplates as templatesMock, clientes, servicosCatalogo, type ContratoTemplate, type ContratoServico } from "@/data/comercialData";
-import { empresaConfig } from "@/data/empresaData";
-import { numeracaoConfig, gerarNumero } from "@/data/empresaData";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  generateContractFromProposal,
+  getBootstrap,
+  saveContractTemplate,
+  type BootstrapData,
+  type ContratoServico,
+  type ContratoTemplate,
+} from "@/lib/api";
 import logoImg from "@/assets/logo_ciperprag.png";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight, Printer } from "lucide-react";
+import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -32,92 +37,143 @@ const statusLabels: Record<string, string> = {
 };
 
 const emptyServico: ContratoServico = { servicoId: "", quantidade: 1, valorUnitario: 0, frequencia: "Mensal" };
-
 const emptyTemplate: Omit<ContratoTemplate, "id"> = {
-  numero: "", clienteId: "", tipo: "proposta", servicos: [{ ...emptyServico }],
-  vigenciaMeses: 12, formaPagamento: "Medição mensal - NF/Boleto", prazoPagamentoDias: 30,
-  status: "rascunho", dataCriacao: new Date().toISOString().split("T")[0], observacoes: "",
+  numero: "",
+  clienteId: "",
+  tipo: "proposta",
+  servicos: [{ ...emptyServico }],
+  vigenciaMeses: 12,
+  formaPagamento: "Medição mensal - NF/Boleto",
+  prazoPagamentoDias: 30,
+  status: "rascunho",
+  dataCriacao: new Date().toISOString().split("T")[0],
+  observacoes: "",
 };
 
+function gerarNumero(formato: string, sequencia: number) {
+  return formato
+    .replace("{SEQ}", String(sequencia).padStart(3, "0"))
+    .replace("{ANO}", String(new Date().getFullYear()));
+}
+
 export default function Contratos() {
-  const [lista, setLista] = useState<ContratoTemplate[]>(templatesMock);
+  const [data, setData] = useState<BootstrapData | null>(null);
   const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<ContratoTemplate, "id">>(emptyTemplate);
   const [pdfItem, setPdfItem] = useState<ContratoTemplate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const filtrados = lista.filter((t) => {
-    const cliente = clientes.find((c) => c.id === t.clienteId);
-    return t.numero.toLowerCase().includes(busca.toLowerCase()) ||
-      (cliente?.razaoSocial.toLowerCase().includes(busca.toLowerCase()));
-  });
-
-  const openNew = (tipo: "proposta" | "contrato" = "proposta") => {
-    setEditId(null);
-    const nextNum = tipo === "proposta"
-      ? gerarNumero(numeracaoConfig.propostaFormato, numeracaoConfig.propostaUltimo + lista.filter(l => l.tipo === "proposta").length + 1)
-      : gerarNumero(numeracaoConfig.contratoFormato, numeracaoConfig.contratoUltimo + lista.filter(l => l.tipo === "contrato").length + 1);
-    setForm({ ...emptyTemplate, tipo, numero: nextNum, servicos: [{ ...emptyServico }] });
-    setDialogOpen(true);
-  };
-
-  const openEdit = (t: ContratoTemplate) => { setEditId(t.id); const { id, ...rest } = t; setForm(rest); setDialogOpen(true); };
-
-  const handleSave = () => {
-    if (!form.numero || !form.clienteId) { toast.error("Número e cliente são obrigatórios"); return; }
-    if (editId) {
-      setLista((prev) => prev.map((t) => (t.id === editId ? { ...form, id: editId } : t)));
-      toast.success("Registro atualizado");
-    } else {
-      setLista((prev) => [...prev, { ...form, id: `TPL-${String(prev.length + 1).padStart(3, "0")}` }]);
-      toast.success("Registro criado");
+  async function reload() {
+    setLoading(true);
+    try {
+      setData(await getBootstrap());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao carregar contratos");
+    } finally {
+      setLoading(false);
     }
-    setDialogOpen(false);
-  };
+  }
 
-  const gerarContratoFromProposta = (proposta: ContratoTemplate) => {
-    if (proposta.status !== "aprovado") {
-      toast.error("Apenas propostas aprovadas podem gerar contratos");
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const templates = data?.contractTemplates ?? [];
+  const clients = data?.clients ?? [];
+  const services = data?.services ?? [];
+  const companyConfig = data?.companyConfig;
+  const numberingConfig = data?.numberingConfig;
+
+  const filtrados = useMemo(() => {
+    return templates.filter((item) => {
+      const client = clients.find((entry) => entry.id === item.clienteId);
+      return (
+        item.numero.toLowerCase().includes(busca.toLowerCase()) ||
+        (client?.razaoSocial.toLowerCase().includes(busca.toLowerCase()) ?? false)
+      );
+    });
+  }, [templates, clients, busca]);
+
+  function openNew(tipo: "proposta" | "contrato" = "proposta") {
+    setEditId(null);
+    const sequenciaAtual = tipo === "proposta" ? (numberingConfig?.propostaUltimo ?? 0) : (numberingConfig?.contratoUltimo ?? 0);
+    const formato = tipo === "proposta"
+      ? (numberingConfig?.propostaFormato ?? "PROP-{SEQ}/{ANO}")
+      : (numberingConfig?.contratoFormato ?? "CT-{SEQ}/{ANO}");
+    setForm({
+      ...emptyTemplate,
+      tipo,
+      numero: gerarNumero(formato, sequenciaAtual + 1),
+      servicos: [{ ...emptyServico }],
+    });
+    setDialogOpen(true);
+  }
+
+  function openEdit(item: ContratoTemplate) {
+    setEditId(item.id);
+    const { id, ...rest } = item;
+    setForm({ ...rest, servicos: rest.servicos.length > 0 ? rest.servicos : [{ ...emptyServico }] });
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
+    if (!form.numero || !form.clienteId) {
+      toast.error("Número e cliente são obrigatórios");
       return;
     }
-    const nextNum = gerarNumero(numeracaoConfig.contratoFormato, numeracaoConfig.contratoUltimo + lista.filter(l => l.tipo === "contrato").length + 1);
-    const novoContrato: ContratoTemplate = {
-      ...proposta,
-      id: `TPL-${String(lista.length + 1).padStart(3, "0")}`,
-      numero: nextNum,
-      tipo: "contrato",
-      status: "vigente",
-      dataCriacao: new Date().toISOString().split("T")[0],
-      observacoes: `Gerado a partir da proposta ${proposta.numero}. ${proposta.observacoes}`,
-    };
-    setLista((prev) => [...prev, novoContrato]);
-    toast.success(`Contrato ${nextNum} gerado a partir da proposta ${proposta.numero}`);
-  };
 
-  const handleStatusChange = (item: ContratoTemplate, newStatus: ContratoTemplate["status"]) => {
-    setLista((prev) => prev.map((t) => t.id === item.id ? { ...t, status: newStatus } : t));
-    toast.success(`Status alterado para ${statusLabels[newStatus]}`);
-  };
+    setSaving(true);
+    try {
+      await saveContractTemplate({ ...form, id: editId ?? undefined });
+      toast.success(editId ? "Registro atualizado" : "Registro criado");
+      setDialogOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar contrato/proposta");
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const openPdf = (item: ContratoTemplate) => {
+  async function handleGenerateContract(item: ContratoTemplate) {
+    try {
+      await generateContractFromProposal(item.id);
+      toast.success(`Contrato gerado a partir da proposta ${item.numero}`);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao gerar contrato");
+    }
+  }
+
+  function openPdf(item: ContratoTemplate) {
     setPdfItem(item);
     setTimeout(() => window.print(), 300);
-  };
+  }
 
-  const updateServico = (idx: number, field: keyof ContratoServico, value: string | number) => {
+  function updateServico(index: number, field: keyof ContratoServico, value: string | number) {
     setForm((prev) => ({
       ...prev,
-      servicos: prev.servicos.map((s, i) => (i === idx ? { ...s, [field]: value } : s)),
+      servicos: prev.servicos.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
     }));
-  };
+  }
 
-  const addServico = () => setForm((prev) => ({ ...prev, servicos: [...prev.servicos, { ...emptyServico }] }));
-  const removeServico = (idx: number) => setForm((prev) => ({ ...prev, servicos: prev.servicos.filter((_, i) => i !== idx) }));
+  function addServico() {
+    setForm((prev) => ({ ...prev, servicos: [...prev.servicos, { ...emptyServico }] }));
+  }
 
-  const calcTotal = (servicos: ContratoServico[]) =>
-    servicos.reduce((acc, s) => acc + s.quantidade * s.valorUnitario, 0);
+  function removeServico(index: number) {
+    setForm((prev) => ({ ...prev, servicos: prev.servicos.filter((_, itemIndex) => itemIndex !== index) }));
+  }
+
+  function calcTotal(servicos: ContratoServico[]) {
+    return servicos.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0);
+  }
+
+  const pdfClient = pdfItem ? clients.find((item) => item.id === pdfItem.clienteId) : null;
 
   return (
     <div className="space-y-6">
@@ -127,7 +183,7 @@ export default function Contratos() {
             <FileSignature className="h-6 w-6 text-primary" />
             Contratos e Propostas
           </h1>
-          <p className="text-muted-foreground text-sm">Gerencie propostas, aprove e gere contratos</p>
+          <p className="text-muted-foreground text-sm">Gerencie propostas e contratos persistidos no banco</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => openNew("contrato")}><Plus className="h-4 w-4 mr-2" />Novo Contrato</Button>
@@ -139,174 +195,160 @@ export default function Contratos() {
         <CardHeader className="pb-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por número ou cliente..." value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-9" />
+            <Input placeholder="Buscar por número ou cliente..." value={busca} onChange={(event) => setBusca(event.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Número</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Serviços</TableHead>
-                <TableHead>Valor Total</TableHead>
-                <TableHead>Vigência</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[180px]">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtrados.map((t) => {
-                const cliente = clientes.find((c) => c.id === t.clienteId);
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-mono text-xs font-bold">{t.numero}</TableCell>
-                    <TableCell>
-                      <Badge variant={t.tipo === "contrato" ? "default" : "outline"}>
-                        {t.tipo === "contrato" ? "Contrato" : "Proposta"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium text-sm">{cliente?.razaoSocial || "—"}</p>
-                      <p className="text-xs text-muted-foreground">{cliente?.cnpj}</p>
-                    </TableCell>
-                    <TableCell className="text-xs">{t.servicos.length} serviço(s)</TableCell>
-                    <TableCell className="font-mono text-sm font-bold">
-                      R$ {calcTotal(t.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-xs">{t.vigenciaMeses} meses</TableCell>
-                    <TableCell>
-                      <Badge variant={statusColors[t.status]}>{statusLabels[t.status]}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button size="icon" variant="ghost" title="Editar" onClick={() => openEdit(t)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button size="icon" variant="ghost" title="Gerar PDF" onClick={() => openPdf(t)}>
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                        {t.tipo === "proposta" && t.status === "enviado" && (
-                          <Button size="icon" variant="ghost" title="Aprovar" onClick={() => handleStatusChange(t, "aprovado")}>
-                            <Badge variant="default" className="text-[9px] px-1">OK</Badge>
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Carregando contratos e propostas...</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Serviços</TableHead>
+                  <TableHead>Valor Total</TableHead>
+                  <TableHead>Vigência</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-[220px]">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtrados.map((item) => {
+                  const client = clients.find((entry) => entry.id === item.clienteId);
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-mono text-xs font-bold">{item.numero}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.tipo === "contrato" ? "default" : "outline"}>
+                          {item.tipo === "contrato" ? "Contrato" : "Proposta"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <p className="font-medium text-sm">{client?.razaoSocial || "—"}</p>
+                        <p className="text-xs text-muted-foreground">{client?.cnpj}</p>
+                      </TableCell>
+                      <TableCell className="text-xs">{item.servicos.length} serviço(s)</TableCell>
+                      <TableCell className="font-mono text-sm font-bold">
+                        R$ {calcTotal(item.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-xs">{item.vigenciaMeses} meses</TableCell>
+                      <TableCell>
+                        <Badge variant={statusColors[item.status]}>{statusLabels[item.status]}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" title="Editar" onClick={() => openEdit(item)}>
+                            <Pencil className="h-4 w-4" />
                           </Button>
-                        )}
-                        {t.tipo === "proposta" && t.status === "aprovado" && (
-                          <Button size="sm" variant="outline" title="Gerar Contrato" onClick={() => gerarContratoFromProposta(t)} className="text-xs gap-1">
-                            <ArrowRight className="h-3 w-3" />CT
+                          <Button size="icon" variant="ghost" title="Imprimir" onClick={() => openPdf(item)}>
+                            <FileText className="h-4 w-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                          {item.tipo === "proposta" && item.status === "aprovado" && (
+                            <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => handleGenerateContract(item)}>
+                              <ArrowRight className="h-3 w-3" />
+                              Gerar contrato
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Printable PDF Document */}
-      {pdfItem && (() => {
-        const cliente = clientes.find((c) => c.id === pdfItem.clienteId);
-        const total = calcTotal(pdfItem.servicos);
-        const titulo = pdfItem.tipo === "contrato" ? "CONTRATO DE PRESTAÇÃO DE SERVIÇOS" : "PROPOSTA TÉCNICA COMERCIAL";
-        return (
-          <div className="hidden print:block" ref={printRef}>
-            <div className="max-w-[210mm] mx-auto p-8 text-sm font-sans">
-              {/* Header */}
-              <div className="flex items-center justify-between border-b-2 border-primary pb-4 mb-6">
-                <img src={logoImg} alt="Ciperprag" className="h-12" />
-                <div className="text-right text-xs">
-                  <p className="font-bold">{empresaConfig.razaoSocial}</p>
-                  <p>CNPJ: {empresaConfig.cnpj}</p>
-                  <p>{empresaConfig.endereco}</p>
-                  <p>{empresaConfig.telefone} | {empresaConfig.email}</p>
-                </div>
+      {pdfItem && (
+        <div className="hidden print:block" ref={printRef}>
+          <div className="max-w-[210mm] mx-auto p-8 text-sm font-sans">
+            <div className="flex items-center justify-between border-b-2 border-primary pb-4 mb-6">
+              <img src={companyConfig?.logoUrl || logoImg} alt="Ciperprag" className="h-12 object-contain" />
+              <div className="text-right text-xs">
+                <p className="font-bold">{companyConfig?.razaoSocial}</p>
+                <p>CNPJ: {companyConfig?.cnpj}</p>
+                <p>{companyConfig?.endereco}</p>
+                <p>{companyConfig?.telefone} | {companyConfig?.email}</p>
               </div>
+            </div>
 
-              <h1 className="text-center text-lg font-bold mb-1">{titulo}</h1>
-              <p className="text-center text-xs text-muted-foreground mb-6">Nº {pdfItem.numero}</p>
+            <h1 className="text-center text-lg font-bold mb-1">
+              {pdfItem.tipo === "contrato" ? "CONTRATO DE PRESTAÇÃO DE SERVIÇOS" : "PROPOSTA TÉCNICA COMERCIAL"}
+            </h1>
+            <p className="text-center text-xs text-muted-foreground mb-6">Nº {pdfItem.numero}</p>
 
-              {/* Client info */}
-              <div className="rounded border p-4 mb-4 space-y-1 text-xs">
-                <h3 className="font-bold text-sm mb-2">DADOS DO CONTRATANTE</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <p><strong>Razão Social:</strong> {cliente?.razaoSocial}</p>
-                  <p><strong>CNPJ:</strong> {cliente?.cnpj}</p>
-                  <p><strong>Endereço:</strong> {cliente?.endereco}, {cliente?.bairro}</p>
-                  <p><strong>Município/UF:</strong> {cliente?.municipio}/{cliente?.uf}</p>
-                </div>
+            <div className="rounded border p-4 mb-4 space-y-1 text-xs">
+              <h3 className="font-bold text-sm mb-2">DADOS DO CONTRATANTE</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <p><strong>Razão Social:</strong> {pdfClient?.razaoSocial}</p>
+                <p><strong>CNPJ:</strong> {pdfClient?.cnpj}</p>
+                <p><strong>Endereço:</strong> {pdfClient?.endereco}, {pdfClient?.bairro}</p>
+                <p><strong>Município/UF:</strong> {pdfClient?.municipio}/{pdfClient?.uf}</p>
               </div>
+            </div>
 
-              {/* Services table */}
-              <div className="mb-4">
-                <h3 className="font-bold text-sm mb-2">SERVIÇOS</h3>
-                <table className="w-full text-xs border">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="border p-2 text-left">Serviço</th>
-                      <th className="border p-2 text-center">Qtd</th>
-                      <th className="border p-2 text-center">Frequência</th>
-                      <th className="border p-2 text-right">Valor Unit.</th>
-                      <th className="border p-2 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pdfItem.servicos.map((s, i) => {
-                      const srv = servicosCatalogo.find((sv) => sv.id === s.servicoId);
-                      return (
-                        <tr key={i}>
-                          <td className="border p-2">{srv?.nome || "—"}</td>
-                          <td className="border p-2 text-center">{s.quantidade}</td>
-                          <td className="border p-2 text-center">{s.frequencia}</td>
-                          <td className="border p-2 text-right">R$ {s.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                          <td className="border p-2 text-right font-bold">R$ {(s.quantidade * s.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-muted font-bold">
-                      <td className="border p-2" colSpan={4}>VALOR TOTAL</td>
-                      <td className="border p-2 text-right">R$ {total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+            <div className="mb-4">
+              <h3 className="font-bold text-sm mb-2">SERVIÇOS</h3>
+              <table className="w-full text-xs border">
+                <thead>
+                  <tr className="bg-muted">
+                    <th className="border p-2 text-left">Serviço</th>
+                    <th className="border p-2 text-center">Qtd</th>
+                    <th className="border p-2 text-center">Frequência</th>
+                    <th className="border p-2 text-right">Valor Unit.</th>
+                    <th className="border p-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pdfItem.servicos.map((servico, index) => {
+                    const service = services.find((item) => item.id === servico.servicoId);
+                    return (
+                      <tr key={`${servico.servicoId}-${index}`}>
+                        <td className="border p-2">{service?.nome || "—"}</td>
+                        <td className="border p-2 text-center">{servico.quantidade}</td>
+                        <td className="border p-2 text-center">{servico.frequencia}</td>
+                        <td className="border p-2 text-right">R$ {servico.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                        <td className="border p-2 text-right font-bold">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-muted font-bold">
+                    <td className="border p-2" colSpan={4}>VALOR TOTAL</td>
+                    <td className="border p-2 text-right">R$ {calcTotal(pdfItem.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="text-xs space-y-2 mb-6">
+              <h3 className="font-bold text-sm">CONDIÇÕES</h3>
+              <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
+              <p><strong>Forma de Pagamento:</strong> {pdfItem.formaPagamento}</p>
+              <p><strong>Prazo de Pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
+              {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mt-16 text-xs text-center">
+              <div className="border-t pt-2">
+                <p className="font-bold">{companyConfig?.razaoSocial}</p>
+                <p>{companyConfig?.responsavelExecucao}</p>
+                <p>{companyConfig?.cargoResponsavel}</p>
               </div>
-
-              {/* Conditions */}
-              <div className="text-xs space-y-2 mb-6">
-                <h3 className="font-bold text-sm">CONDIÇÕES</h3>
-                <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
-                <p><strong>Forma de Pagamento:</strong> {pdfItem.formaPagamento}</p>
-                <p><strong>Prazo de Pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
-                {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
+              <div className="border-t pt-2">
+                <p className="font-bold">{pdfClient?.razaoSocial}</p>
+                <p>Representante Legal</p>
               </div>
-
-              {/* Signatures */}
-              <div className="grid grid-cols-2 gap-8 mt-16 text-xs text-center">
-                <div className="border-t pt-2">
-                  <p className="font-bold">{empresaConfig.razaoSocial}</p>
-                  <p>{empresaConfig.responsavelExecucao}</p>
-                  <p>{empresaConfig.cargoResponsavel}</p>
-                </div>
-                <div className="border-t pt-2">
-                  <p className="font-bold">{cliente?.razaoSocial}</p>
-                  <p>Representante Legal</p>
-                </div>
-              </div>
-
-              <p className="text-center text-[10px] text-muted-foreground mt-8">
-                {empresaConfig.razaoSocial} — CNPJ: {empresaConfig.cnpj} — Alvará: {empresaConfig.alvara}
-              </p>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
-      {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -316,11 +358,11 @@ export default function Contratos() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Número *</Label>
-                <Input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="CT-000/2026" />
+                <Input value={form.numero} onChange={(event) => setForm({ ...form, numero: event.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as "contrato" | "proposta" })}>
+                <Select value={form.tipo} onValueChange={(value) => setForm({ ...form, tipo: value as "contrato" | "proposta" })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="contrato">Contrato</SelectItem>
@@ -330,10 +372,10 @@ export default function Contratos() {
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as ContratoTemplate["status"] })}>
+                <Select value={form.status} onValueChange={(value) => setForm({ ...form, status: value as ContratoTemplate["status"] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    {Object.entries(statusLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -341,10 +383,10 @@ export default function Contratos() {
 
             <div className="space-y-2">
               <Label>Cliente *</Label>
-              <Select value={form.clienteId} onValueChange={(v) => setForm({ ...form, clienteId: v })}>
+              <Select value={form.clienteId} onValueChange={(value) => setForm({ ...form, clienteId: value })}>
                 <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
                 <SelectContent>
-                  {clientes.map((c) => <SelectItem key={c.id} value={c.id}>{c.razaoSocial} ({c.cnpj})</SelectItem>)}
+                  {clients.map((item) => <SelectItem key={item.id} value={item.id}>{item.razaoSocial} ({item.cnpj})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -352,61 +394,60 @@ export default function Contratos() {
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Vigência (meses)</Label>
-                <Input type="number" value={form.vigenciaMeses} onChange={(e) => setForm({ ...form, vigenciaMeses: Number(e.target.value) })} />
+                <Input type="number" value={form.vigenciaMeses} onChange={(event) => setForm({ ...form, vigenciaMeses: Number(event.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>Prazo Pgto (dias)</Label>
-                <Input type="number" value={form.prazoPagamentoDias} onChange={(e) => setForm({ ...form, prazoPagamentoDias: Number(e.target.value) })} />
+                <Input type="number" value={form.prazoPagamentoDias} onChange={(event) => setForm({ ...form, prazoPagamentoDias: Number(event.target.value) })} />
               </div>
               <div className="space-y-2">
                 <Label>Data Criação</Label>
-                <Input type="date" value={form.dataCriacao} onChange={(e) => setForm({ ...form, dataCriacao: e.target.value })} />
+                <Input type="date" value={form.dataCriacao} onChange={(event) => setForm({ ...form, dataCriacao: event.target.value })} />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>Forma de Pagamento</Label>
-              <Input value={form.formaPagamento} onChange={(e) => setForm({ ...form, formaPagamento: e.target.value })} />
+              <Input value={form.formaPagamento} onChange={(event) => setForm({ ...form, formaPagamento: event.target.value })} />
             </div>
 
-            {/* Serviços */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-base font-semibold">Serviços</Label>
                 <Button type="button" variant="outline" size="sm" onClick={addServico}><Plus className="h-3 w-3 mr-1" />Serviço</Button>
               </div>
-              {form.servicos.map((s, i) => (
-                <div key={i} className="rounded-lg border p-3 space-y-3">
+              {form.servicos.map((servico, index) => (
+                <div key={index} className="rounded-lg border p-3 space-y-3">
                   <div className="grid grid-cols-4 gap-3">
                     <div className="col-span-2 space-y-1">
                       <Label className="text-xs">Serviço</Label>
-                      <Select value={s.servicoId} onValueChange={(v) => updateServico(i, "servicoId", v)}>
+                      <Select value={servico.servicoId} onValueChange={(value) => updateServico(index, "servicoId", value)}>
                         <SelectTrigger className="text-sm"><SelectValue placeholder="Selecione" /></SelectTrigger>
                         <SelectContent>
-                          {servicosCatalogo.map((sv) => <SelectItem key={sv.id} value={sv.id}>{sv.nome}</SelectItem>)}
+                          {services.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Quantidade</Label>
-                      <Input type="number" value={s.quantidade} onChange={(e) => updateServico(i, "quantidade", Number(e.target.value))} />
+                      <Input type="number" value={servico.quantidade} onChange={(event) => updateServico(index, "quantidade", Number(event.target.value))} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Valor Unitário</Label>
-                      <Input type="number" step="0.01" value={s.valorUnitario} onChange={(e) => updateServico(i, "valorUnitario", Number(e.target.value))} />
+                      <Input type="number" step="0.01" value={servico.valorUnitario} onChange={(event) => updateServico(index, "valorUnitario", Number(event.target.value))} />
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="space-y-1 flex-1 mr-3">
                       <Label className="text-xs">Frequência</Label>
-                      <Input value={s.frequencia} onChange={(e) => updateServico(i, "frequencia", e.target.value)} className="text-sm" />
+                      <Input value={servico.frequencia} onChange={(event) => updateServico(index, "frequencia", event.target.value)} className="text-sm" />
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Subtotal</p>
-                      <p className="font-mono font-bold text-sm">R$ {(s.quantidade * s.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      <p className="font-mono font-bold text-sm">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
                     </div>
                     {form.servicos.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="ml-2 text-destructive" onClick={() => removeServico(i)}>
+                      <Button type="button" variant="ghost" size="icon" className="ml-2 text-destructive" onClick={() => removeServico(index)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
@@ -423,12 +464,12 @@ export default function Contratos() {
 
             <div className="space-y-2">
               <Label>Observações</Label>
-              <Textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} rows={3} />
+              <Textarea value={form.observacoes} onChange={(event) => setForm({ ...form, observacoes: event.target.value })} rows={3} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave}>{editId ? "Salvar" : "Criar"}</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : editId ? "Salvar" : "Criar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

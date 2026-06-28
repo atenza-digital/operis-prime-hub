@@ -1,0 +1,914 @@
+import express from "express";
+import cors from "cors";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const app = express();
+const PORT = Number(process.env.PORT || 3001);
+
+app.use(cors());
+app.use(express.json({ limit: "15mb" }));
+
+function addDays(dateStr, days) {
+  const date = new Date(`${dateStr}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split("T")[0];
+}
+
+function buildCertificateStatus(dataExecucao, validadeDias) {
+  if (!validadeDias) return "valid";
+  const expiry = new Date(`${addDays(dataExecucao, validadeDias)}T23:59:59`);
+  return expiry.getTime() < Date.now() ? "expired" : "valid";
+}
+
+async function generateUniqueCertificateHash(db = { query }) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    let suffix = "";
+    for (let index = 0; index < 8; index += 1) {
+      suffix += chars[Math.floor(Math.random() * chars.length)];
+    }
+    const hash = `HSH-${new Date().getFullYear()}-${suffix.slice(0, 4)}-${suffix.slice(4)}`;
+    const { rows } = await db.query("SELECT 1 FROM ciperprag_hub.certificados WHERE hash = $1 LIMIT 1", [hash]);
+    if (!rows.length) return hash;
+  }
+  throw new Error("Nao foi possivel gerar um hash unico para o certificado.");
+}
+
+function makeId(prefix) {
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function rowsToClientMap(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    if (!map.has(row.id)) {
+      map.set(row.id, {
+        id: row.id,
+        razaoSocial: row.razao_social,
+        nomeFantasia: row.nome_fantasia,
+        cnpj: row.cnpj,
+        inscricaoEstadual: row.inscricao_estadual,
+        endereco: row.endereco,
+        bairro: row.bairro,
+        municipio: row.municipio,
+        uf: row.uf,
+        cep: row.cep,
+        logoUrl: row.logo_url,
+        ativo: row.ativo,
+        contatos: [],
+      });
+    }
+    if (row.contato_nome) {
+      map.get(row.id).contatos.push({
+        nome: row.contato_nome,
+        cargo: row.contato_cargo,
+        telefone: row.contato_telefone,
+        email: row.contato_email,
+        principal: row.contato_principal,
+      });
+    }
+  }
+  return [...map.values()];
+}
+
+async function getClients() {
+  const { rows } = await query(`
+    SELECT
+      c.*,
+      ct.nome AS contato_nome,
+      ct.cargo AS contato_cargo,
+      ct.telefone AS contato_telefone,
+      ct.email AS contato_email,
+      ct.principal AS contato_principal
+    FROM ciperprag_hub.clientes c
+    LEFT JOIN ciperprag_hub.contatos_cliente ct
+      ON ct.cliente_id = c.id
+    ORDER BY c.id, ct.principal DESC, ct.id
+  `);
+  return rowsToClientMap(rows);
+}
+
+async function getServices() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.servicos_catalogo ORDER BY id");
+  return rows.map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    tipo: row.tipo,
+    descricao: row.descricao,
+    unidade: row.unidade,
+    recorrenciaDias: row.recorrencia_dias,
+    geraCertificado: row.gera_certificado,
+    validadeCertificadoDias: row.validade_certificado_dias,
+    produtosQuimicos: row.produtos_quimicos ?? [],
+    epis: row.epis ?? [],
+    riscos: row.riscos ?? [],
+    normasAplicaveis: row.normas_aplicaveis ?? [],
+    procedimentos: row.procedimentos ?? [],
+    ativo: row.ativo,
+  }));
+}
+
+async function getContracts() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.contratos ORDER BY id");
+  return rows.map((row) => ({
+    id: row.id,
+    clienteId: row.cliente_id,
+    cliente: row.cliente,
+    cnpj: row.cnpj,
+    servico: row.servico,
+    tipo: row.tipo,
+    contratado: Number(row.contratado),
+    executado: Number(row.executado),
+    unidade: row.unidade,
+    status: row.status,
+    ultimaExecucao: row.ultima_execucao?.toISOString?.().split("T")[0] ?? row.ultima_execucao,
+    validadeDias: row.validade_dias,
+    valorUnitario: Number(row.valor_unitario ?? 0),
+    tags: row.tags ?? [],
+    produtosQuimicos: row.produtos_quimicos ?? [],
+    epis: row.epis ?? [],
+    riscos: row.riscos ?? [],
+    locais: row.locais ?? [],
+  }));
+}
+
+async function getSchedules() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.agendamentos ORDER BY created_at, id");
+  return rows.map((row) => ({
+    id: row.id,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente,
+    clienteCnpj: row.cliente_cnpj,
+    contratoId: row.contrato_id,
+    servico: row.servico,
+    tipo: row.tipo,
+    dataAgendada: row.data_agendada?.toISOString?.().split("T")[0] ?? row.data_agendada,
+    localExecucao: row.local_execucao,
+    tags: row.tags,
+    observacao: row.observacao,
+    tecnicosIds: row.tecnicos_ids ?? [],
+    tecnicosNomes: row.tecnicos_nomes ?? [],
+    veiculoId: row.veiculo_id,
+    veiculoDescricao: row.veiculo_descricao,
+    status: row.status,
+    osId: row.os_id,
+    createdAt: row.created_at?.toISOString?.() ?? row.created_at,
+  }));
+}
+
+async function getOrders() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.ordens_servico ORDER BY data_emissao, id");
+  return rows.map((row) => ({
+    id: row.id,
+    numero: row.numero,
+    agendamentoId: row.agendamento_id,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente,
+    clienteCnpj: row.cnpj,
+    clienteEndereco: row.cliente_endereco,
+    clienteLogoUrl: row.cliente_logo_url,
+    contratoId: row.contrato_id,
+    servico: row.servico,
+    tipo: row.tipo,
+    tecnicoNome: row.tecnico,
+    tecnicoCpf: row.tecnico_cpf,
+    tecnicoDataAdmissao: row.tecnico_data_admissao?.toISOString?.().split("T")[0] ?? row.tecnico_data_admissao,
+    equipeTecnicosIds: row.equipe_tecnicos_ids ?? [],
+    equipeTecnicosNomes: row.equipe_tecnicos_nomes ?? [],
+    veiculoId: row.veiculo_id,
+    veiculoDescricao: row.veiculo_descricao,
+    localExecucao: row.local_execucao,
+    tags: row.tags,
+    tagEquipamentoServico: row.tag_equipamento_servico,
+    observacao: row.observacao,
+    dataEmissao: row.data_emissao?.toISOString?.().split("T")[0] ?? row.data_emissao,
+    dataExecucao: row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao,
+    quantidade: Number(row.quantidade ?? 0),
+    unidade: row.unidade,
+    status: row.status,
+    fotos: row.fotos ?? [],
+    certificadoHash: row.certificado_hash,
+  }));
+}
+
+async function getCertificates() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.certificados ORDER BY emitido_em DESC, id DESC");
+  return rows.map((row) => ({
+    id: row.id,
+    hash: row.hash,
+    numero: row.numero,
+    osId: row.os_id,
+    osNumero: row.os_numero,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    clienteCnpj: row.cliente_cnpj,
+    clienteEndereco: row.cliente_endereco,
+    clienteLogoUrl: row.cliente_logo_url,
+    contratoId: row.contrato_id,
+    servico: row.servico,
+    tecnicoNome: row.tecnico_nome,
+    localExecucao: row.local_execucao,
+    dataExecucao: row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao,
+    emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
+    validadeDias: row.validade_dias,
+    produtosQuimicos: row.produtos_quimicos ?? [],
+    produtosDetalhados: row.produtos_detalhados ?? [],
+  }));
+}
+
+async function getCertificateByHash(hash) {
+  const normalizedHash = String(hash || "").trim().toUpperCase();
+  if (!normalizedHash) return null;
+  const { rows } = await query(
+    `SELECT
+      c.*,
+      o.tag_equipamento_servico,
+      o.quantidade,
+      o.unidade,
+      o.fotos
+     FROM ciperprag_hub.certificados c
+     LEFT JOIN ciperprag_hub.ordens_servico o
+       ON o.id = c.os_id
+     WHERE UPPER(c.hash) = $1
+     LIMIT 1`,
+    [normalizedHash],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const validadeAte = Number(row.validade_dias || 0) > 0 ? addDays(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias)) : null;
+  return {
+    id: row.id,
+    hash: row.hash,
+    numero: row.numero,
+    osId: row.os_id,
+    osNumero: row.os_numero,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    clienteCnpj: row.cliente_cnpj,
+    clienteEndereco: row.cliente_endereco,
+    clienteLogoUrl: row.cliente_logo_url,
+    contratoId: row.contrato_id,
+    servico: row.servico,
+    tecnicoNome: row.tecnico_nome,
+    localExecucao: row.local_execucao,
+    dataExecucao: row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao,
+    emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
+    validadeDias: Number(row.validade_dias || 0),
+    validadeAte,
+    status: buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
+    produtosQuimicos: row.produtos_quimicos ?? [],
+    produtosDetalhados: row.produtos_detalhados ?? [],
+    tagEquipamentoServico: row.tag_equipamento_servico,
+    quantidade: Number(row.quantidade || 0),
+    unidade: row.unidade,
+    fotos: row.fotos ?? [],
+  };
+}
+
+async function getCompanyConfig() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    razaoSocial: row.razao_social,
+    nomeFantasia: row.nome_fantasia,
+    cnpj: row.cnpj,
+    endereco: row.endereco,
+    telefone: row.telefone,
+    email: row.email,
+    logoUrl: row.logo_url,
+    alvara: row.alvara,
+    cr02: row.cr02,
+    anvisa: row.anvisa,
+    vigilanciaSanitaria: row.vigilancia_sanitaria,
+    responsavelTecnico: row.responsavel_tecnico,
+    responsavelExecucao: row.responsavel_execucao,
+    cargoResponsavel: row.cargo_responsavel,
+  };
+}
+
+async function getNumberingConfig() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1");
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    propostaFormato: row.proposta_formato,
+    propostaUltimo: row.proposta_ultimo,
+    contratoFormato: row.contrato_formato,
+    contratoUltimo: row.contrato_ultimo,
+    osFormato: row.os_formato,
+    osUltimo: row.os_ultimo,
+  };
+}
+
+async function getTechnicians() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.tecnicos ORDER BY id");
+  return rows.map((row) => ({
+    id: row.id,
+    nome: row.nome,
+    cpf: row.cpf,
+    cargo: row.cargo,
+    dataAdmissao: row.data_admissao?.toISOString?.().split("T")[0] ?? row.data_admissao,
+    telefone: row.telefone,
+    ativo: row.ativo,
+  }));
+}
+
+async function getVehicles() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.veiculos ORDER BY id");
+  return rows.map((row) => ({
+    id: row.id,
+    placa: row.placa,
+    modelo: row.modelo,
+    ano: row.ano,
+    ativo: row.ativo,
+  }));
+}
+
+async function getAllocations() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.alocacoes_semanais ORDER BY id");
+  return rows.map((row) => ({
+    id: row.id,
+    tecnicoId: row.tecnico_id,
+    veiculoId: row.veiculo_id,
+    diaSemana: row.dia_semana,
+    cliente: row.cliente,
+    servico: row.servico,
+    turno: row.turno,
+  }));
+}
+
+async function getContractTemplates() {
+  const { rows } = await query(`
+    SELECT
+      t.*,
+      s.servico_id,
+      s.quantidade,
+      s.valor_unitario,
+      s.frequencia
+    FROM ciperprag_hub.contratos_templates t
+    LEFT JOIN ciperprag_hub.contratos_templates_servicos s
+      ON s.template_id = t.id
+    ORDER BY t.id, s.id
+  `);
+  const map = new Map();
+  for (const row of rows) {
+    if (!map.has(row.id)) {
+      map.set(row.id, {
+        id: row.id,
+        numero: row.numero,
+        clienteId: row.cliente_id,
+        tipo: row.tipo,
+        servicos: [],
+        vigenciaMeses: row.vigencia_meses,
+        formaPagamento: row.forma_pagamento,
+        prazoPagamentoDias: row.prazo_pagamento_dias,
+        status: row.status,
+        dataCriacao: row.data_criacao?.toISOString?.().split("T")[0] ?? row.data_criacao,
+        observacoes: row.observacoes,
+      });
+    }
+    if (row.servico_id) {
+      map.get(row.id).servicos.push({
+        servicoId: row.servico_id,
+        quantidade: Number(row.quantidade),
+        valorUnitario: Number(row.valor_unitario),
+        frequencia: row.frequencia,
+      });
+    }
+  }
+  return [...map.values()];
+}
+
+async function getRecurrenceSuggestions() {
+  const { rows } = await query("SELECT * FROM ciperprag_hub.recorrencia_sugestoes ORDER BY created_at DESC");
+  return rows.map((row) => ({
+    id: row.id,
+    clienteId: row.cliente_id,
+    clienteNome: row.cliente_nome,
+    clienteCnpj: row.cliente_cnpj,
+    contratoId: row.contrato_id,
+    servico: row.servico,
+    tipo: row.tipo,
+    localExecucao: row.local_execucao,
+    tags: row.tags,
+    observacao: row.observacao,
+    tecnicosIds: row.tecnicos_ids ?? [],
+    tecnicosNomes: row.tecnicos_nomes ?? [],
+    veiculoId: row.veiculo_id,
+    veiculoDescricao: row.veiculo_descricao,
+    suggestedDate: row.suggested_date?.toISOString?.().split("T")[0] ?? row.suggested_date,
+    sourceAgendamentoId: row.source_agendamento_id,
+    sourceOsId: row.source_os_id,
+    status: row.status,
+    createdAt: row.created_at?.toISOString?.() ?? row.created_at,
+  }));
+}
+
+async function getBootstrap() {
+  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions] =
+    await Promise.all([
+      getCompanyConfig(),
+      getNumberingConfig(),
+      getClients(),
+      getServices(),
+      getContracts(),
+      getSchedules(),
+      getOrders(),
+      getCertificates(),
+      getTechnicians(),
+      getVehicles(),
+      getAllocations(),
+      getContractTemplates(),
+      getRecurrenceSuggestions(),
+    ]);
+
+  return {
+    companyConfig,
+    numberingConfig,
+    clients,
+    services,
+    contracts,
+    schedules,
+    orders,
+    certificates,
+    technicians,
+    vehicles,
+    allocations,
+    contractTemplates,
+    recurrenceSuggestions,
+  };
+}
+
+async function nextSequential(field) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE ciperprag_hub.numeracao_config
+       SET ${field} = ${field} + 1, atualizado_em = NOW()
+       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)
+       RETURNING ${field} AS value`,
+    );
+    return rows[0].value;
+  });
+}
+
+async function upsertSchedule(body) {
+  const id = body.id || makeId("AG");
+  await query(
+    `INSERT INTO ciperprag_hub.agendamentos
+    (id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,COALESCE($17, NOW()))
+    ON CONFLICT (id) DO UPDATE SET
+      contrato_id=EXCLUDED.contrato_id,
+      cliente_id=EXCLUDED.cliente_id,
+      cliente=EXCLUDED.cliente,
+      cliente_cnpj=EXCLUDED.cliente_cnpj,
+      servico=EXCLUDED.servico,
+      tipo=EXCLUDED.tipo,
+      data_agendada=EXCLUDED.data_agendada,
+      local_execucao=EXCLUDED.local_execucao,
+      tags=EXCLUDED.tags,
+      observacao=EXCLUDED.observacao,
+      tecnicos_ids=EXCLUDED.tecnicos_ids,
+      tecnicos_nomes=EXCLUDED.tecnicos_nomes,
+      veiculo_id=EXCLUDED.veiculo_id,
+      veiculo_descricao=EXCLUDED.veiculo_descricao,
+      status=EXCLUDED.status`,
+    [
+      id,
+      body.contratoId,
+      body.clienteId || null,
+      body.clienteNome,
+      body.clienteCnpj,
+      body.servico,
+      body.tipo,
+      body.dataAgendada,
+      body.localExecucao,
+      body.tags || null,
+      body.observacao || null,
+      body.tecnicosIds || [],
+      body.tecnicosNomes || [],
+      body.veiculoId || null,
+      body.veiculoDescricao || null,
+      body.status || "agendado",
+      body.createdAt || null,
+    ],
+  );
+  return id;
+}
+
+app.get("/api/health", async (_req, res) => {
+  await query("SELECT 1");
+  res.json({ ok: true });
+});
+
+app.get("/api/bootstrap", async (_req, res) => {
+  res.json(await getBootstrap());
+});
+
+app.get("/api/certificates/:hash", async (req, res) => {
+  const certificate = await getCertificateByHash(req.params.hash);
+  if (!certificate) return res.status(404).json({ error: "Certificado nao encontrado" });
+  res.json({ ok: true, certificate, verifiedAt: new Date().toISOString() });
+});
+
+app.post("/api/clients", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `CLI-${String(Date.now()).slice(-6)}`;
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO ciperprag_hub.clientes (id, razao_social, nome_fantasia, cnpj, inscricao_estadual, endereco, bairro, municipio, uf, cep, logo_url, ativo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (id) DO UPDATE SET
+         razao_social = EXCLUDED.razao_social,
+         nome_fantasia = EXCLUDED.nome_fantasia,
+         cnpj = EXCLUDED.cnpj,
+         inscricao_estadual = EXCLUDED.inscricao_estadual,
+         endereco = EXCLUDED.endereco,
+         bairro = EXCLUDED.bairro,
+         municipio = EXCLUDED.municipio,
+         uf = EXCLUDED.uf,
+         cep = EXCLUDED.cep,
+         logo_url = EXCLUDED.logo_url,
+         ativo = EXCLUDED.ativo,
+         atualizado_em = NOW()`,
+      [id, body.razaoSocial, body.nomeFantasia, body.cnpj, body.inscricaoEstadual, body.endereco, body.bairro, body.municipio, body.uf, body.cep, body.logoUrl || null, body.ativo],
+    );
+    await client.query("DELETE FROM ciperprag_hub.contatos_cliente WHERE cliente_id = $1", [id]);
+    for (const contato of body.contatos || []) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.contatos_cliente (cliente_id, nome, cargo, telefone, email, principal)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, contato.nome, contato.cargo, contato.telefone, contato.email, contato.principal],
+      );
+    }
+  });
+  res.json({ ok: true, id });
+});
+
+app.post("/api/services", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `SRV-${String(Date.now()).slice(-6)}`;
+  await query(
+    `INSERT INTO ciperprag_hub.servicos_catalogo (
+      id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
+      produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, ativo
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    ON CONFLICT (id) DO UPDATE SET
+      nome = EXCLUDED.nome,
+      tipo = EXCLUDED.tipo,
+      descricao = EXCLUDED.descricao,
+      unidade = EXCLUDED.unidade,
+      recorrencia_dias = EXCLUDED.recorrencia_dias,
+      gera_certificado = EXCLUDED.gera_certificado,
+      validade_certificado_dias = EXCLUDED.validade_certificado_dias,
+      produtos_quimicos = EXCLUDED.produtos_quimicos,
+      epis = EXCLUDED.epis,
+      riscos = EXCLUDED.riscos,
+      normas_aplicaveis = EXCLUDED.normas_aplicaveis,
+      procedimentos = EXCLUDED.procedimentos,
+      ativo = EXCLUDED.ativo,
+      atualizado_em = NOW()`,
+    [
+      id,
+      body.nome,
+      body.tipo,
+      body.descricao,
+      body.unidade,
+      body.recorrenciaDias,
+      body.geraCertificado,
+      body.validadeCertificadoDias,
+      body.produtosQuimicos || [],
+      body.epis || [],
+      body.riscos || [],
+      body.normasAplicaveis || [],
+      body.procedimentos || [],
+      body.ativo,
+    ],
+  );
+  res.json({ ok: true, id });
+});
+
+app.post("/api/technicians", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;
+  await query(
+    `INSERT INTO ciperprag_hub.tecnicos (id, nome, cpf, cargo, data_admissao, telefone, ativo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (id) DO UPDATE SET nome=EXCLUDED.nome, cpf=EXCLUDED.cpf, cargo=EXCLUDED.cargo, data_admissao=EXCLUDED.data_admissao, telefone=EXCLUDED.telefone, ativo=EXCLUDED.ativo, atualizado_em = NOW()`,
+    [id, body.nome, body.cpf, body.cargo, body.dataAdmissao || null, body.telefone, body.ativo],
+  );
+  res.json({ ok: true, id });
+});
+
+app.post("/api/vehicles", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `VEI-${String(Date.now()).slice(-6)}`;
+  await query(
+    `INSERT INTO ciperprag_hub.veiculos (id, placa, modelo, ano, ativo)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (id) DO UPDATE SET placa=EXCLUDED.placa, modelo=EXCLUDED.modelo, ano=EXCLUDED.ano, ativo=EXCLUDED.ativo, atualizado_em = NOW()`,
+    [id, body.placa, body.modelo, body.ano, body.ativo],
+  );
+  res.json({ ok: true, id });
+});
+
+app.post("/api/allocations", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `AL-${String(Date.now()).slice(-6)}`;
+  await query(
+    `INSERT INTO ciperprag_hub.alocacoes_semanais (id, tecnico_id, veiculo_id, dia_semana, cliente, servico, turno)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (id) DO UPDATE SET tecnico_id=EXCLUDED.tecnico_id, veiculo_id=EXCLUDED.veiculo_id, dia_semana=EXCLUDED.dia_semana, cliente=EXCLUDED.cliente, servico=EXCLUDED.servico, turno=EXCLUDED.turno`,
+    [id, body.tecnicoId, body.veiculoId || null, body.diaSemana, body.cliente, body.servico, body.turno],
+  );
+  res.json({ ok: true, id });
+});
+
+app.patch("/api/company-config", async (req, res) => {
+  const body = req.body;
+  await query(
+    `UPDATE ciperprag_hub.empresa_config SET
+      razao_social=$1, nome_fantasia=$2, cnpj=$3, endereco=$4, telefone=$5, email=$6, logo_url=$7,
+      alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1)`,
+    [body.razaoSocial, body.nomeFantasia, body.cnpj, body.endereco, body.telefone, body.email, body.logoUrl, body.alvara, body.cr02, body.anvisa, body.vigilanciaSanitaria, body.responsavelTecnico, body.responsavelExecucao, body.cargoResponsavel],
+  );
+  res.json({ ok: true });
+});
+
+app.patch("/api/numbering-config", async (req, res) => {
+  const body = req.body;
+  await query(
+    `UPDATE ciperprag_hub.numeracao_config SET
+      proposta_formato=$1, proposta_ultimo=$2, contrato_formato=$3, contrato_ultimo=$4, os_formato=$5, os_ultimo=$6, atualizado_em = NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)`,
+    [body.propostaFormato, body.propostaUltimo, body.contratoFormato, body.contratoUltimo, body.osFormato, body.osUltimo],
+  );
+  res.json({ ok: true });
+});
+
+app.post("/api/contract-templates", async (req, res) => {
+  const body = req.body;
+  const id = body.id || `TPL-${String(Date.now()).slice(-6)}`;
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO ciperprag_hub.contratos_templates (id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO UPDATE SET numero=EXCLUDED.numero, cliente_id=EXCLUDED.cliente_id, tipo=EXCLUDED.tipo, vigencia_meses=EXCLUDED.vigencia_meses, forma_pagamento=EXCLUDED.forma_pagamento, prazo_pagamento_dias=EXCLUDED.prazo_pagamento_dias, status=EXCLUDED.status, data_criacao=EXCLUDED.data_criacao, observacoes=EXCLUDED.observacoes`,
+      [id, body.numero, body.clienteId, body.tipo, body.vigenciaMeses, body.formaPagamento, body.prazoPagamentoDias, body.status, body.dataCriacao, body.observacoes],
+    );
+    await client.query("DELETE FROM ciperprag_hub.contratos_templates_servicos WHERE template_id = $1", [id]);
+    for (const servico of body.servicos || []) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [id, servico.servicoId, servico.quantidade, servico.valorUnitario, servico.frequencia],
+      );
+    }
+  });
+  res.json({ ok: true, id });
+});
+
+app.post("/api/contract-templates/:id/generate-contract", async (req, res) => {
+  const id = req.params.id;
+  const next = await nextSequential("contrato_ultimo");
+  const year = new Date().getFullYear();
+  const number = `CT-${next}/${year}`;
+  const { rows } = await query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1", [id]);
+  const item = rows[0];
+  if (!item) return res.status(404).json({ error: "Modelo não encontrado" });
+  const newId = `TPL-${String(Date.now()).slice(-6)}`;
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO ciperprag_hub.contratos_templates (id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
+       VALUES ($1,$2,$3,'contrato',$4,$5,$6,'vigente',$7,$8)`,
+      [newId, number, item.cliente_id, item.vigencia_meses, item.forma_pagamento, item.prazo_pagamento_dias, new Date().toISOString().split("T")[0], `Gerado a partir da proposta ${item.numero}. ${item.observacoes || ""}`],
+    );
+    const { rows: services } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates_servicos WHERE template_id = $1", [id]);
+    for (const service of services) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [newId, service.servico_id, service.quantidade, service.valor_unitario, service.frequencia],
+      );
+    }
+  });
+  res.json({ ok: true });
+});
+
+app.post("/api/agendamentos", async (req, res) => {
+  const id = await upsertSchedule(req.body);
+  res.json({ ok: true, id });
+});
+
+app.patch("/api/agendamentos/:id", async (req, res) => {
+  const current = (await getSchedules()).find((item) => item.id === req.params.id);
+  if (!current) return res.status(404).json({ error: "Agendamento não encontrado" });
+  const id = await upsertSchedule({ ...current, ...req.body, id: req.params.id });
+  res.json({ ok: true, id });
+});
+
+app.post("/api/agendamentos/:id/gerar-os", async (req, res) => {
+  const agendamentoId = req.params.id;
+  const leaderName = req.body.tecnicoNome;
+  const result = await withTransaction(async (client) => {
+    const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1", [agendamentoId]);
+    const ag = agRows[0];
+    if (!ag) throw new Error("Agendamento não encontrado");
+    const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1", [ag.contrato_id]);
+    const contract = contractRows[0];
+    const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [ag.cliente_id]);
+    const customer = clientRows[0];
+    const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1", [leaderName || ag.tecnicos_nomes?.[0]]);
+    const tech = techRows[0];
+    const { rows: numRows } = await client.query(
+      `UPDATE ciperprag_hub.numeracao_config SET os_ultimo = os_ultimo + 1, atualizado_em = NOW()
+       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)
+       RETURNING os_ultimo`,
+    );
+    const number = `OS-${numRows[0].os_ultimo}`;
+    const orderId = makeId("OSDB");
+    await client.query(
+      `INSERT INTO ciperprag_hub.ordens_servico
+      (id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,CURRENT_DATE,1,$22,'aberta',$23)`,
+      [orderId, number, agendamentoId, ag.cliente_id, ag.cliente, ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+    );
+    await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'os_gerada', os_id = $2 WHERE id = $1", [agendamentoId, orderId]);
+    return orderId;
+  });
+  res.json({ ok: true, id: result });
+});
+
+app.patch("/api/orders/:id", async (req, res) => {
+  const current = (await getOrders()).find((item) => item.id === req.params.id);
+  if (!current) return res.status(404).json({ error: "OS não encontrada" });
+  const body = { ...current, ...req.body };
+  await query(
+    `UPDATE ciperprag_hub.ordens_servico SET
+      tecnico=$2, local_execucao=$3, observacao=$4, updated_at=NOW()
+     WHERE id = $1`,
+    [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null],
+  ).catch(async () => {
+    await query(`UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4 WHERE id = $1`, [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null]);
+  });
+  res.json({ ok: true });
+});
+
+app.post("/api/orders/:id/encerrar", async (req, res) => {
+  const orderId = req.params.id;
+  const { dataExecucao, quantidade, tagEquipamentoServico, fotos } = req.body;
+
+  const response = await withTransaction(async (client) => {
+    const { rows: orderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
+    const order = orderRows[0];
+    if (!order) throw new Error("OS não encontrada");
+
+    const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1", [order.contrato_id]);
+    const contract = contractRows[0];
+    const { rows: serviceRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
+    const service = serviceRows[0];
+    const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
+    const customer = clientRows[0];
+    const qty = Number(quantidade || 1);
+
+    await client.query(
+      `UPDATE ciperprag_hub.ordens_servico
+       SET status = 'encerrada', data_execucao = $2, quantidade = $3, tag_equipamento_servico = $4, fotos = $5
+       WHERE id = $1`,
+      [orderId, dataExecucao, qty, tagEquipamentoServico || null, fotos || []],
+    );
+
+    await client.query(
+      `UPDATE ciperprag_hub.contratos
+       SET executado = COALESCE(executado, 0) + $2,
+           ultima_execucao = $3,
+           status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END,
+           atualizado_em = NOW()
+       WHERE id = $1`,
+      [order.contrato_id, qty, dataExecucao],
+    ).catch(async () => {
+      await client.query(
+        `UPDATE ciperprag_hub.contratos
+         SET executado = COALESCE(executado, 0) + $2,
+             ultima_execucao = $3,
+             status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END
+         WHERE id = $1`,
+        [order.contrato_id, qty, dataExecucao],
+      );
+    });
+
+    if (order.agendamento_id) {
+      await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'encerrado' WHERE id = $1", [order.agendamento_id]);
+    }
+
+    let certificateHash = null;
+    if (service?.gera_certificado || order.tipo === "sanitario") {
+      const certId = makeId("CERT");
+      const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
+      const countResult = await client.query("SELECT COUNT(*)::int AS total FROM ciperprag_hub.certificados");
+      const certNumber = `${7297 + countResult.rows[0].total}/${new Date().getFullYear()}`;
+      await client.query(
+        `INSERT INTO ciperprag_hub.certificados
+         (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17)
+         ON CONFLICT (hash) DO NOTHING`,
+        [certId, hash, certNumber, order.id, order.numero, order.cliente_id, order.cliente, order.cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco, customer?.logo_url || order.cliente_logo_url || null, order.contrato_id, order.servico, order.tecnico, order.local_execucao, dataExecucao, service?.validade_certificado_dias || 0, service?.produtos_quimicos || []],
+      );
+      await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [orderId, hash]);
+      certificateHash = hash;
+    }
+
+    const recorrenciaDias = Number(service?.recorrencia_dias || contract?.validade_dias || 0);
+    if (recorrenciaDias > 0) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.recorrencia_sugestoes
+         (id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pendente')`,
+        [makeId("RC"), order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
+      );
+    }
+
+    return { certificateHash };
+  });
+
+  res.json({ ok: true, ...response });
+});
+
+app.post("/api/orders/:id/certificado", async (req, res) => {
+  const orderId = req.params.id;
+  const { rows: orderRows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
+  const order = orderRows[0];
+  if (!order) return res.status(404).json({ error: "OS não encontrada" });
+  const { rows: serviceRows } = await query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
+  const service = serviceRows[0];
+  const { rows: clientRows } = await query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
+  const customer = clientRows[0];
+  const certId = makeId("CERT");
+  const hash = await generateUniqueCertificateHash();
+  const { rows: countRows } = await query("SELECT COUNT(*)::int AS total FROM ciperprag_hub.certificados");
+  const certNumber = `${7297 + countRows[0].total}/${new Date().getFullYear()}`;
+  await query(
+    `INSERT INTO ciperprag_hub.certificados
+    (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17)`,
+    [certId, hash, certNumber, order.id, order.numero, order.cliente_id, order.cliente, order.cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco, customer?.logo_url || order.cliente_logo_url || null, order.contrato_id, order.servico, order.tecnico, order.local_execucao, order.data_execucao || order.data_emissao, service?.validade_certificado_dias || 0, service?.produtos_quimicos || []],
+  );
+  await query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [orderId, hash]);
+  res.json({ ok: true, hash });
+});
+
+app.patch("/api/recurrence-suggestions/:id", async (req, res) => {
+  const id = req.params.id;
+  const action = req.body.action;
+  const { rows } = await query("SELECT * FROM ciperprag_hub.recorrencia_sugestoes WHERE id = $1", [id]);
+  const suggestion = rows[0];
+  if (!suggestion) return res.status(404).json({ error: "Sugestão não encontrada" });
+
+  if (action === "confirm") {
+    await withTransaction(async (client) => {
+      const newId = makeId("AG");
+      await client.query(
+        `INSERT INTO ciperprag_hub.agendamentos
+         (id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'agendado',NOW())`,
+        [newId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
+      );
+      await client.query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'confirmada' WHERE id = $1", [id]);
+    });
+  } else {
+    await query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'dispensada' WHERE id = $1", [id]);
+  }
+  res.json({ ok: true });
+});
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({ error: error.message || "Erro interno no servidor" });
+});
+
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.resolve(__dirname, "../dist");
+  app.use(express.static(distPath));
+  app.get(/.*/, (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
+async function start() {
+  await ensureDatabaseShape();
+  await query("SELECT 1");
+  app.listen(PORT, () => {
+    console.log(`API Ciperprag ouvindo em http://localhost:${PORT}`);
+  });
+}
+
+start().catch((error) => {
+  console.error("Falha ao iniciar API:", error.message);
+  process.exit(1);
+});
