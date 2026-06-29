@@ -549,6 +549,14 @@ export const getAuditLogs = (params: {
   const queryString = search.toString();
   return api<{ ok: boolean; logs: AuditLogApp[] }>(`/audit-logs${queryString ? `?${queryString}` : ""}`);
 };
+export const registerAuditEvidence = (payload: {
+  action: "copy" | "export";
+  auditLogId?: number;
+  origin?: string;
+  format?: string;
+  totalEventos?: number;
+  filters?: Record<string, unknown>;
+}) => api<{ ok: boolean }>("/audit-logs/evidence", { method: "POST", body: JSON.stringify(payload) });
 export const saveUser = (payload: { id?: string; nome: string; email: string; status: UserApp["status"]; perfilCodigos: string[] }) =>
   api<{ ok: boolean; user: UserApp; temporaryPassword?: string }>("/users", { method: "POST", body: JSON.stringify(payload) });
 export const resetUserPassword = (id: string) =>

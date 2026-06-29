@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAuditLogs, type AuditLogApp } from "@/lib/api";
+import { getAuditLogs, registerAuditEvidence, type AuditLogApp } from "@/lib/api";
 import { formatDateBr, formatTimeBr } from "@/lib/formatters";
 
 const entityLabels: Record<string, string> = {
@@ -193,13 +193,36 @@ export default function AuditoriaEventos() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    registerAuditEvidence({ action: "export", origin: "audit_events", format: "csv", totalEventos: logs.length, filters }).catch(() => {});
   }
 
-  async function copyDiffRow(row: { key: string; before: string; after: string }) {
+  async function copyDiffRow(row: { key: string; before: string; after: string }, auditLogId?: number) {
     const text = `Campo: ${row.key}\nAntes: ${row.before}\nDepois: ${row.after}`;
     try {
       await navigator.clipboard.writeText(text);
+      registerAuditEvidence({ action: "copy", auditLogId, origin: "audit_diff_row", format: "text" }).catch(() => {});
       toast.success("Linha do diff copiada.");
+    } catch {
+      toast.error("Nao foi possivel copiar automaticamente.");
+    }
+  }
+
+  async function copyFullDiff(log: AuditLogApp, rows: Array<{ key: string; before: string; after: string }>) {
+    const header = [
+      `Evento: #${log.id}`,
+      `Acao: ${actionLabels[log.acao] || log.acao}`,
+      `Entidade: ${entityLabels[log.entidadeTipo] || log.entidadeTipo} ${log.entidadeId || ""}`.trim(),
+      `Usuario: ${log.usuario?.nome || "Sistema"} ${log.usuario?.email || ""}`.trim(),
+      `Data: ${formatDateBr(log.criadoEm)} ${formatTimeBr(log.criadoEm)}`,
+      `Resumo: ${log.resumo || "-"}`,
+    ];
+    const body = rows.length
+      ? rows.map((row) => `\nCampo: ${row.key}\nAntes: ${row.before}\nDepois: ${row.after}`).join("\n")
+      : "\nSem diferenças estruturadas registradas.";
+    try {
+      await navigator.clipboard.writeText(`${header.join("\n")}\n${body}`);
+      registerAuditEvidence({ action: "copy", auditLogId: log.id, origin: "audit_full_diff", format: "text" }).catch(() => {});
+      toast.success("Diff completo copiado.");
     } catch {
       toast.error("Nao foi possivel copiar automaticamente.");
     }
@@ -422,6 +445,12 @@ export default function AuditoriaEventos() {
               <DialogHeader>
                 <DialogTitle>Detalhes do evento #{selectedLog.id}</DialogTitle>
               </DialogHeader>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={() => copyFullDiff(selectedLog, selectedChangedRows)}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar diff completo
+                </Button>
+              </div>
               <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-4">
                 <div>
                   <p className="text-xs font-semibold uppercase text-muted-foreground">Quando</p>
@@ -473,7 +502,7 @@ export default function AuditoriaEventos() {
                             <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm text-muted-foreground">{row.before}</TableCell>
                             <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm">{row.after}</TableCell>
                             <TableCell className="text-right align-top">
-                              <Button type="button" variant="ghost" size="sm" onClick={() => copyDiffRow(row)}>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => copyDiffRow(row, selectedLog.id)}>
                                 <Copy className="mr-1 h-3.5 w-3.5" />
                                 Copiar
                               </Button>

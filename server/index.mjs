@@ -1392,6 +1392,23 @@ app.get("/api/audit-logs", requirePermission("auditoria.view"), async (req, res)
   res.json({ ok: true, logs });
 });
 
+app.post("/api/audit-logs/evidence", requirePermission("auditoria.view"), async (req, res) => {
+  const action = req.body.action === "copy" ? "audit_evidence_copied" : "audit_evidence_exported";
+  await logAuditEvent(null, req, {
+    entityType: "auditoria",
+    entityId: req.body.auditLogId ? String(req.body.auditLogId) : null,
+    action,
+    summary: action === "audit_evidence_copied" ? "Evidencia de auditoria copiada" : "Evidencia de auditoria exportada",
+    after: {
+      origem: req.body.origin || null,
+      formato: req.body.format || null,
+      totalEventos: req.body.totalEventos || null,
+      filtros: req.body.filters || null,
+    },
+  });
+  res.json({ ok: true });
+});
+
 app.get("/api/attachments/:id/download", async (req, res) => {
   if (req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
   const { rows } = await query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE id = $1 LIMIT 1", [req.params.id]);

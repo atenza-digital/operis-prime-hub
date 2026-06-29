@@ -462,7 +462,7 @@ Backlog remanescente da Etapa 20A:
 
 - Expandir objetos/listas aninhados no diff com navegacao por campo.
 - Permitir configurar por tenant quais campos devem ser considerados criticos.
-- Permitir copiar o diff completo do evento para evidencias/suporte.
+- Avaliar politica de compliance para eventos de copia/exportacao e tempo de retencao.
 
 ## Atualizacao - Etapa 21A executada
 
@@ -478,5 +478,22 @@ Entregas realizadas:
 Backlog remanescente da Etapa 21A:
 
 - Permitir configurar campos criticos por tenant.
-- Copiar o diff completo do evento em uma unica acao.
-- Registrar quando uma evidencia de auditoria for copiada/exportada, caso isso seja exigido por compliance.
+- Avaliar se copia/exportacao de evidencia deve exigir justificativa do usuario.
+
+## Atualizacao - Etapa 22A executada
+
+Status: concluida no escopo minimo de pacote seguro para reduzir backlog de auditoria.
+
+Entregas realizadas:
+
+- Criado endpoint protegido `/api/audit-logs/evidence` para registrar copia/exportacao de evidencias de auditoria.
+- Exportacao CSV da auditoria passou a registrar evento `audit_evidence_exported`.
+- Copia de linha do diff passou a registrar evento `audit_evidence_copied`.
+- Modal passou a ter botao `Copiar diff completo`.
+- Copia completa inclui evento, acao, entidade, usuario, data, resumo e todos os campos alterados.
+- Copia completa tambem registra evento `audit_evidence_copied`.
+
+Backlog remanescente da Etapa 22A:
+
+- Adicionar justificativa obrigatoria para exportacoes/copias quando compliance exigir.
+- Criar painel de eventos suspeitos usando os eventos de copia/exportacao como sinais.
