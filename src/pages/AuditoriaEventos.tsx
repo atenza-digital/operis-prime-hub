@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Activity, AlertTriangle, BookmarkPlus, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, Trash2, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -80,10 +80,22 @@ const defaultFilters = {
   limit: "250",
 };
 
+type AuditFilters = typeof defaultFilters;
+
 const FILTER_STORAGE_KEY = "ciperprag_hub_audit_filters";
+const FILTER_PRESETS_STORAGE_KEY = "ciperprag_hub_audit_filter_presets";
 const criticalFieldKeywords = ["status", "permiss", "valor", "validade", "quantidade", "hash", "senha", "certificado", "medicao", "contrato", "ativo"];
 const evidenceActions = ["audit_evidence_copied", "audit_evidence_exported"];
 const sensitiveActions = ["password_reset", "password_changed", "user_created", "user_updated", "company_config_updated", "numbering_config_updated"];
+
+const investigationShortcuts: Array<{ label: string; description: string; filters: Partial<AuditFilters> }> = [
+  { label: "OS", description: "Eventos de ordens de serviço", filters: { entityType: "os" } },
+  { label: "Certificados", description: "Emissões e validações", filters: { entityType: "certificado" } },
+  { label: "Medições", description: "Geração e cancelamento", filters: { entityType: "medicao" } },
+  { label: "Clientes", description: "Cadastros e alterações", filters: { entityType: "cliente" } },
+  { label: "Evidências", description: "Cópias e exportações", filters: { entityType: "auditoria" } },
+  { label: "Usuários", description: "Senha, acesso e perfis", filters: { entityType: "usuario" } },
+];
 
 type SuspiciousFinding = {
   id: string;
@@ -94,6 +106,12 @@ type SuspiciousFinding = {
   action?: string;
   entityType?: string;
   ip?: string;
+};
+
+type AuditFilterPreset = {
+  id: string;
+  name: string;
+  filters: AuditFilters;
 };
 
 function compactJson(value?: Record<string, unknown> | null) {
@@ -141,6 +159,19 @@ function loadSavedFilters() {
   } catch {
     return defaultFilters;
   }
+}
+
+function loadSavedPresets(): AuditFilterPreset[] {
+  try {
+    const saved = localStorage.getItem(FILTER_PRESETS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistPresets(presets: AuditFilterPreset[]) {
+  localStorage.setItem(FILTER_PRESETS_STORAGE_KEY, JSON.stringify(presets));
 }
 
 function csvCell(value: unknown) {
@@ -256,6 +287,8 @@ export default function AuditoriaEventos() {
   const [logs, setLogs] = useState<AuditLogApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(loadSavedFilters);
+  const [presetName, setPresetName] = useState("");
+  const [presets, setPresets] = useState<AuditFilterPreset[]>(loadSavedPresets);
   const [selectedLog, setSelectedLog] = useState<AuditLogApp | null>(null);
 
   async function reload(nextFilters = filters) {
@@ -278,10 +311,46 @@ export default function AuditoriaEventos() {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
+  function applyFilters(nextFilters: AuditFilters) {
+    setFilters(nextFilters);
+    reload(nextFilters);
+  }
+
   function clearFilters() {
     setFilters(defaultFilters);
     localStorage.removeItem(FILTER_STORAGE_KEY);
     reload(defaultFilters);
+  }
+
+  function applyShortcut(partialFilters: Partial<AuditFilters>) {
+    applyFilters({ ...defaultFilters, ...partialFilters, limit: filters.limit });
+  }
+
+  function savePreset() {
+    const name = presetName.trim();
+    if (!name) {
+      toast.info("Informe um nome para salvar o filtro.");
+      return;
+    }
+    const nextPresets = [
+      { id: `${Date.now()}`, name, filters },
+      ...presets.filter((preset) => preset.name.toLowerCase() !== name.toLowerCase()),
+    ].slice(0, 8);
+    setPresets(nextPresets);
+    persistPresets(nextPresets);
+    setPresetName("");
+    toast.success("Filtro salvo para reutilização.");
+  }
+
+  function applyPreset(preset: AuditFilterPreset) {
+    applyFilters({ ...defaultFilters, ...preset.filters });
+  }
+
+  function deletePreset(id: string) {
+    const nextPresets = presets.filter((preset) => preset.id !== id);
+    setPresets(nextPresets);
+    persistPresets(nextPresets);
+    toast.success("Preset removido.");
   }
 
   function applyFindingFilter(finding: SuspiciousFinding) {
@@ -291,8 +360,7 @@ export default function AuditoriaEventos() {
       entityType: finding.entityType || filters.entityType,
       ip: finding.ip || filters.ip,
     };
-    setFilters(nextFilters);
-    reload(nextFilters);
+    applyFilters(nextFilters);
   }
 
   function exportCsv() {
@@ -482,6 +550,65 @@ export default function AuditoriaEventos() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-2xl border bg-slate-50/70 p-4">
+              <div className="mb-3">
+                <p className="font-semibold">Atalhos de investigação</p>
+                <p className="text-sm text-muted-foreground">Comece por um tipo de registro e refine por ID, usuário, IP ou período.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {investigationShortcuts.map((shortcut) => (
+                  <Button
+                    key={shortcut.label}
+                    type="button"
+                    variant="outline"
+                    className="h-auto justify-start bg-white px-3 py-3 text-left"
+                    onClick={() => applyShortcut(shortcut.filters)}
+                    disabled={loading}
+                  >
+                    <span>
+                      <span className="block font-semibold">{shortcut.label}</span>
+                      <span className="block text-xs font-normal text-muted-foreground">{shortcut.description}</span>
+                    </span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="mb-3">
+                <p className="font-semibold">Presets de filtro</p>
+                <p className="text-sm text-muted-foreground">Salve combinações usadas com frequência nesta estação de trabalho.</p>
+              </div>
+              <div className="flex gap-2">
+                <Input value={presetName} onChange={(event) => setPresetName(event.target.value)} placeholder="Nome do preset" />
+                <Button type="button" variant="outline" onClick={savePreset}>
+                  <BookmarkPlus className="mr-2 h-4 w-4" />
+                  Salvar
+                </Button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {presets.length ? (
+                  presets.map((preset) => (
+                    <div key={preset.id} className="flex items-center justify-between gap-2 rounded-xl border bg-muted/30 px-3 py-2">
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => applyPreset(preset)}>
+                        <span className="block truncate text-sm font-semibold">{preset.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {entityLabels[preset.filters.entityType] || "Todas"} · {actionLabels[preset.filters.action] || "Todas as ações"} · limite {preset.filters.limit}
+                        </span>
+                      </button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => deletePreset(preset.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">Nenhum preset salvo ainda.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-3 xl:grid-cols-[1.5fr_0.8fr_0.9fr_0.8fr]">
             <Input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} placeholder="Buscar por resumo, usuário, ação ou entidade..." />
             <Input value={filters.user} onChange={(event) => updateFilter("user", event.target.value)} placeholder="Usuário ou e-mail" />

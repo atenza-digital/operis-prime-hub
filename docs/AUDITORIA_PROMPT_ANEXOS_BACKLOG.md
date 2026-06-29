@@ -516,3 +516,20 @@ Backlog remanescente da Etapa 23A:
 - Tornar limiares e regras do painel configuraveis por tenant.
 - Persistir achados relevantes server-side quando for necessario gerar historico de investigacao.
 - Criar alertas/notificacoes para eventos realmente criticos apos validacao das regras em homologacao.
+
+## Atualizacao - Etapa 24A executada
+
+Status: concluida no escopo minimo de filtros rapidos e presets locais de auditoria.
+
+Entregas realizadas:
+
+- Tela `Eventos de Auditoria` ganhou atalhos de investigacao para OS, certificados, medicoes, clientes, evidencias e usuarios.
+- Atalhos reutilizam os filtros ja existentes e nao exigem alteracao no banco.
+- Adicionado recurso de presets locais de filtro para salvar combinacoes usadas com frequencia na estacao de trabalho.
+- Presets podem ser aplicados ou removidos diretamente na tela.
+- A tela continua usando a permissao `auditoria.view` e nao cria novas acoes sensiveis.
+
+Backlog remanescente da Etapa 24A:
+
+- Avaliar presets compartilhados por tenant/perfil quando houver necessidade operacional.
+- Criar filtros server-side mais especificos para cliente, contrato, servico, numero de OS, certificado e medicao quando o volume de logs crescer.
