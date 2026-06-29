@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,28 +8,38 @@ import AppLayout from "@/components/AppLayout";
 import ComercialLayout from "@/components/ComercialLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AuthProvider } from "@/contexts/AuthContext";
-import Dashboard from "@/pages/Dashboard";
-import Agendamento from "@/pages/Agendamento";
-import OSGerar from "@/pages/OSGerar";
-import OrdensServico from "@/pages/OrdensServico";
-import Historico from "@/pages/Historico";
-import Medicao from "@/pages/Medicao";
-import AuditoriaAnexos from "@/pages/AuditoriaAnexos";
-import Equipes from "@/pages/Equipes";
-import Visualizador from "@/pages/Visualizador";
-import Certificados from "@/pages/Certificados";
-import ValidarCertificado from "@/pages/ValidarCertificado";
-import Usuarios from "@/pages/Usuarios";
-import AuditoriaEventos from "@/pages/AuditoriaEventos";
-import AlterarSenha from "@/pages/AlterarSenha";
-import Clientes from "@/pages/comercial/Clientes";
-import Servicos from "@/pages/comercial/Servicos";
-import Contratos from "@/pages/comercial/Contratos";
-import Configuracoes from "@/pages/comercial/Configuracoes";
-import Login from "@/pages/Login";
-import NotFound from "@/pages/NotFound";
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Agendamento = lazy(() => import("@/pages/Agendamento"));
+const OSGerar = lazy(() => import("@/pages/OSGerar"));
+const OrdensServico = lazy(() => import("@/pages/OrdensServico"));
+const Historico = lazy(() => import("@/pages/Historico"));
+const Medicao = lazy(() => import("@/pages/Medicao"));
+const AuditoriaAnexos = lazy(() => import("@/pages/AuditoriaAnexos"));
+const Equipes = lazy(() => import("@/pages/Equipes"));
+const Visualizador = lazy(() => import("@/pages/Visualizador"));
+const Certificados = lazy(() => import("@/pages/Certificados"));
+const ValidarCertificado = lazy(() => import("@/pages/ValidarCertificado"));
+const Usuarios = lazy(() => import("@/pages/Usuarios"));
+const AuditoriaEventos = lazy(() => import("@/pages/AuditoriaEventos"));
+const AlterarSenha = lazy(() => import("@/pages/AlterarSenha"));
+const Clientes = lazy(() => import("@/pages/comercial/Clientes"));
+const Servicos = lazy(() => import("@/pages/comercial/Servicos"));
+const Contratos = lazy(() => import("@/pages/comercial/Contratos"));
+const Configuracoes = lazy(() => import("@/pages/comercial/Configuracoes"));
+const Login = lazy(() => import("@/pages/Login"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
+
+const RouteFallback = () => (
+  <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center">
+    <div className="rounded-2xl border bg-white px-6 py-5 shadow-sm">
+      <p className="text-sm font-semibold text-emerald-700">Carregando módulo</p>
+      <p className="mt-1 text-sm text-muted-foreground">Preparando a tela solicitada...</p>
+    </div>
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -37,35 +48,37 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/alterar-senha" element={<AlterarSenha />} />
-            <Route path="/validar-certificado" element={<ValidarCertificado />} />
-            <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/alterar-senha" element={<AlterarSenha />} />
+              <Route path="/validar-certificado" element={<ValidarCertificado />} />
+              <Route path="/validar-certificado/:hash" element={<ValidarCertificado />} />
 
-            {/* Operacional */}
-            <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path="/" />
-            <Route element={<ProtectedRoute permission="agenda.manage"><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path="/agendar" />
-            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path="/os-gerar" />
-            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/ordens" />
-            <Route element={<ProtectedRoute permission="os.close"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
-            <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
-            <Route element={<ProtectedRoute permission="medicoes.manage"><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
-            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><AuditoriaAnexos /></AppLayout></ProtectedRoute>} path="/auditoria-anexos" />
-            <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
-            <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
-            <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
-            <Route element={<ProtectedRoute permission="usuarios.manage"><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} path="/usuarios" />
-            <Route element={<ProtectedRoute permission="auditoria.view"><AppLayout><AuditoriaEventos /></AppLayout></ProtectedRoute>} path="/auditoria-eventos" />
+              {/* Operacional */}
+              <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path="/" />
+              <Route element={<ProtectedRoute permission="agenda.manage"><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path="/agendar" />
+              <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path="/os-gerar" />
+              <Route element={<ProtectedRoute permission="os.manage"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/ordens" />
+              <Route element={<ProtectedRoute permission="os.close"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
+              <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
+              <Route element={<ProtectedRoute permission="medicoes.manage"><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
+              <Route element={<ProtectedRoute permission="os.manage"><AppLayout><AuditoriaAnexos /></AppLayout></ProtectedRoute>} path="/auditoria-anexos" />
+              <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
+              <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
+              <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
+              <Route element={<ProtectedRoute permission="usuarios.manage"><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} path="/usuarios" />
+              <Route element={<ProtectedRoute permission="auditoria.view"><AppLayout><AuditoriaEventos /></AppLayout></ProtectedRoute>} path="/auditoria-eventos" />
 
-            {/* Comercial */}
-            <Route element={<ProtectedRoute permission="clientes.manage"><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />
-            <Route element={<ProtectedRoute permission="servicos.manage"><ComercialLayout><Servicos /></ComercialLayout></ProtectedRoute>} path="/comercial/servicos" />
-            <Route element={<ProtectedRoute permission="contratos.manage"><ComercialLayout><Contratos /></ComercialLayout></ProtectedRoute>} path="/comercial/contratos" />
-            <Route element={<ProtectedRoute permission="configuracoes.manage"><ComercialLayout><Configuracoes /></ComercialLayout></ProtectedRoute>} path="/comercial/configuracoes" />
+              {/* Comercial */}
+              <Route element={<ProtectedRoute permission="clientes.manage"><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />
+              <Route element={<ProtectedRoute permission="servicos.manage"><ComercialLayout><Servicos /></ComercialLayout></ProtectedRoute>} path="/comercial/servicos" />
+              <Route element={<ProtectedRoute permission="contratos.manage"><ComercialLayout><Contratos /></ComercialLayout></ProtectedRoute>} path="/comercial/contratos" />
+              <Route element={<ProtectedRoute permission="configuracoes.manage"><ComercialLayout><Configuracoes /></ComercialLayout></ProtectedRoute>} path="/comercial/configuracoes" />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

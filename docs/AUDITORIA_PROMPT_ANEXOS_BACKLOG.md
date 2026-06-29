@@ -533,3 +533,20 @@ Backlog remanescente da Etapa 24A:
 
 - Avaliar presets compartilhados por tenant/perfil quando houver necessidade operacional.
 - Criar filtros server-side mais especificos para cliente, contrato, servico, numero de OS, certificado e medicao quando o volume de logs crescer.
+
+## Atualizacao - Etapa 25A executada
+
+Status: concluida no escopo minimo de code splitting por rota.
+
+Entregas realizadas:
+
+- Paginas principais passaram a ser carregadas sob demanda com `React.lazy`.
+- Rotas foram envolvidas com `Suspense` e fallback visual simples de carregamento de modulo.
+- Layouts, autenticacao e protecao de rotas permaneceram no fluxo principal para reduzir risco de regressao.
+- Build passou a gerar chunks separados por modulo/tela.
+- Aviso de chunk principal acima de 500 kB deixou de ocorrer no build local.
+
+Backlog remanescente da Etapa 25A:
+
+- Avaliar manual chunks para bibliotecas pesadas caso novas telas voltem a aumentar o bundle inicial.
+- Criar teste automatizado de smoke navigation para rotas protegidas e publicas.
