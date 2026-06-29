@@ -424,6 +424,24 @@ Backlog remanescente da Etapa 18A:
 
 - Implementar diff visual por campo com valores antigos e novos lado a lado em formato amigavel.
 - Criar filtros especificos por cliente, contrato, servico, numero de OS, certificado e medicao usando relacionamentos.
-- Adicionar exportacao CSV/PDF dos eventos filtrados.
-- Salvar presets de filtros frequentes para administradores.
+- Adicionar exportacao PDF dos eventos filtrados.
+- Evoluir de ultimo filtro salvo para presets nomeados por administrador.
 - Criar painel de eventos suspeitos e alertas operacionais.
+
+## Atualizacao - Etapa 19A executada
+
+Status: concluida no escopo minimo de melhorias pequenas agrupadas da auditoria.
+
+Entregas realizadas:
+
+- Tela `Eventos de Auditoria` passou a exportar os resultados filtrados em CSV.
+- CSV usa separador `;` e BOM UTF-8 para abrir corretamente em planilhas com acentos.
+- Exportacao inclui ID, data, hora, usuario, e-mail, acao, entidade, entidade ID, resumo, IP e user-agent.
+- A tela passou a salvar automaticamente o ultimo conjunto de filtros no navegador.
+- Botao `Limpar` agora tambem remove os filtros salvos e restaura a consulta padrao.
+
+Backlog remanescente da Etapa 19A:
+
+- Implementar exportacao PDF dos eventos filtrados.
+- Criar presets nomeados de filtros para administradores.
+- Adicionar exportacao CSV server-side quando o volume de logs crescer alem do limite carregado na tela.

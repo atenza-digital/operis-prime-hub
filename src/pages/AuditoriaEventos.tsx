@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Clock, DatabaseZap, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Activity, Clock, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +77,8 @@ const defaultFilters = {
   limit: "250",
 };
 
+const FILTER_STORAGE_KEY = "ciperprag_hub_audit_filters";
+
 function compactJson(value?: Record<string, unknown> | null) {
   if (!value) return "";
   const text = JSON.stringify(value);
@@ -94,15 +96,30 @@ function changedKeys(before?: Record<string, unknown> | null, after?: Record<str
     .sort();
 }
 
+function loadSavedFilters() {
+  try {
+    const saved = localStorage.getItem(FILTER_STORAGE_KEY);
+    return saved ? { ...defaultFilters, ...JSON.parse(saved) } : defaultFilters;
+  } catch {
+    return defaultFilters;
+  }
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? "").replaceAll('"', '""');
+  return `"${text}"`;
+}
+
 export default function AuditoriaEventos() {
   const [logs, setLogs] = useState<AuditLogApp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFilters] = useState(loadSavedFilters);
   const [selectedLog, setSelectedLog] = useState<AuditLogApp | null>(null);
 
   async function reload(nextFilters = filters) {
     setLoading(true);
     try {
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(nextFilters));
       const response = await getAuditLogs({
         ...nextFilters,
         limit: Number(nextFilters.limit || 250),
@@ -121,11 +138,43 @@ export default function AuditoriaEventos() {
 
   function clearFilters() {
     setFilters(defaultFilters);
+    localStorage.removeItem(FILTER_STORAGE_KEY);
     reload(defaultFilters);
   }
 
+  function exportCsv() {
+    if (!logs.length) {
+      toast.info("Nenhum evento para exportar.");
+      return;
+    }
+    const headers = ["ID", "Data", "Hora", "Usuario", "Email", "Acao", "Entidade", "Entidade ID", "Resumo", "IP", "User-agent"];
+    const rows = logs.map((item) => [
+      item.id,
+      formatDateBr(item.criadoEm),
+      formatTimeBr(item.criadoEm),
+      item.usuario?.nome || "Sistema",
+      item.usuario?.email || "",
+      actionLabels[item.acao] || item.acao,
+      entityLabels[item.entidadeTipo] || item.entidadeTipo,
+      item.entidadeId || "",
+      item.resumo || "",
+      item.ip || "",
+      item.userAgent || "",
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `auditoria-eventos-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   useEffect(() => {
-    reload(defaultFilters);
+    reload(loadSavedFilters());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -213,7 +262,7 @@ export default function AuditoriaEventos() {
             <Input value={filters.ip} onChange={(event) => updateFilter("ip", event.target.value)} placeholder="IP" />
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[0.9fr_0.9fr_0.8fr_0.8fr_0.6fr_auto_auto]">
+          <div className="grid gap-3 xl:grid-cols-[0.9fr_0.9fr_0.8fr_0.8fr_0.6fr_auto_auto_auto]">
             <Select value={filters.entityType} onValueChange={(value) => updateFilter("entityType", value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Entidade" />
@@ -259,6 +308,10 @@ export default function AuditoriaEventos() {
             <Button type="button" variant="outline" onClick={clearFilters} disabled={loading}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Limpar
+            </Button>
+            <Button type="button" variant="outline" onClick={exportCsv} disabled={loading || logs.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              CSV
             </Button>
           </div>
 
