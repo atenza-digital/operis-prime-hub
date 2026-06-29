@@ -566,6 +566,27 @@ Entregas realizadas:
 
 Backlog remanescente da Etapa 26A:
 
-- Expandir smoke tests para rotas principais operacionais e comerciais.
+- Expandir smoke tests para mais rotas secundarias, formularios e estados de erro.
 - Criar testes de fluxo completo para agendamento, OS, encerramento, certificado e medicao.
 - Avaliar Playwright/E2E contra ambiente de homologacao em rotina separada.
+
+## Atualizacao - Etapa 27A executada
+
+Status: concluida no escopo agrupado de auditoria visual e ampliacao da rede de testes.
+
+Entregas realizadas:
+
+- Diff da tela `Eventos de Auditoria` passou a comparar campos aninhados em snapshots JSON.
+- Campos aninhados sao exibidos com caminho estruturado, como `cliente.endereco.cidade` e `itens[0].quantidade`.
+- Comparacao usa limite de profundidade para evitar travamentos com snapshots grandes.
+- Valores de listas e objetos passaram a ser resumidos de forma mais legivel.
+- A copia de linha e copia completa do diff continuam funcionando com os novos caminhos aninhados.
+- Smoke tests foram ampliados de 3 para 8 testes.
+- Rotas autenticadas adicionais cobertas: `/agendar`, `/ordens`, `/auditoria-eventos`, `/comercial/clientes` e `/comercial/servicos`.
+- Assercoes passaram a usar `heading`, evitando falsos negativos por textos duplicados no menu e breadcrumbs.
+
+Backlog remanescente da Etapa 27A:
+
+- Criar visualizador expansivel para objetos/listas muito grandes dentro do modal de auditoria.
+- Expandir testes para formularios, estados de erro e permissoes negadas.
+- Criar testes de fluxo completo para agendamento, OS, encerramento, certificado e medicao.

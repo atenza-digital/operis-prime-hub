@@ -114,6 +114,13 @@ type AuditFilterPreset = {
   filters: AuditFilters;
 };
 
+type AuditDiffRow = {
+  key: string;
+  before: string;
+  after: string;
+  critical: boolean;
+};
+
 function compactJson(value?: Record<string, unknown> | null) {
   if (!value) return "";
   const text = JSON.stringify(value);
@@ -124,32 +131,60 @@ function prettyJson(value?: Record<string, unknown> | null) {
   return value ? JSON.stringify(value, null, 2) : "Sem dados registrados.";
 }
 
-function changedKeys(before?: Record<string, unknown> | null, after?: Record<string, unknown> | null) {
-  if (!before || !after) return [];
-  return Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
-    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
-    .sort();
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function auditPath(parent: string, key: string | number) {
+  if (typeof key === "number") return `${parent}[${key}]`;
+  return parent ? `${parent}.${key}` : key;
+}
+
+function collectAuditPaths(value: unknown, parent = "", depth = 0): string[] {
+  if (depth > 4 || value === null || value === undefined || typeof value !== "object") return parent ? [parent] : [];
+  if (Array.isArray(value)) {
+    if (!value.length) return parent ? [parent] : [];
+    return value.flatMap((item, index) => collectAuditPaths(item, auditPath(parent, index), depth + 1));
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.length) return parent ? [parent] : [];
+  return entries.flatMap(([key, item]) => collectAuditPaths(item, auditPath(parent, key), depth + 1));
+}
+
+function valueAtPath(value: unknown, path: string) {
+  if (!path) return value;
+  const parts = path.replace(/\[(\d+)\]/g, ".$1").split(".");
+  return parts.reduce<unknown>((current, part) => {
+    if (current === null || current === undefined) return undefined;
+    if (Array.isArray(current)) return current[Number(part)];
+    if (isPlainObject(current)) return current[part];
+    return undefined;
+  }, value);
 }
 
 function formatAuditValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "Sim" : "Não";
-  if (Array.isArray(value)) return value.length ? `${value.length} item(ns)` : "Lista vazia";
+  if (Array.isArray(value)) return value.length ? `Lista com ${value.length} item(ns)` : "Lista vazia";
   if (typeof value === "object") {
     const text = JSON.stringify(value);
-    return text.length > 120 ? `${text.slice(0, 120)}...` : text;
+    return text.length > 160 ? `${text.slice(0, 160)}...` : text;
   }
   const text = String(value);
   return text.length > 160 ? `${text.slice(0, 160)}...` : text;
 }
 
 function changedRows(before?: Record<string, unknown> | null, after?: Record<string, unknown> | null) {
-  return changedKeys(before, after).map((key) => ({
-    key,
-    before: formatAuditValue(before?.[key]),
-    after: formatAuditValue(after?.[key]),
-    critical: criticalFieldKeywords.some((keyword) => key.toLowerCase().includes(keyword)),
-  }));
+  if (!before && !after) return [];
+  const paths = Array.from(new Set([...collectAuditPaths(before), ...collectAuditPaths(after)])).sort();
+  return paths
+    .filter((key) => JSON.stringify(valueAtPath(before, key)) !== JSON.stringify(valueAtPath(after, key)))
+    .map((key) => ({
+      key,
+      before: formatAuditValue(valueAtPath(before, key)),
+      after: formatAuditValue(valueAtPath(after, key)),
+      critical: criticalFieldKeywords.some((keyword) => key.toLowerCase().includes(keyword)),
+    }));
 }
 
 function loadSavedFilters() {
@@ -395,7 +430,7 @@ export default function AuditoriaEventos() {
     registerAuditEvidence({ action: "export", origin: "audit_events", format: "csv", totalEventos: logs.length, filters }).catch(() => {});
   }
 
-  async function copyDiffRow(row: { key: string; before: string; after: string }, auditLogId?: number) {
+  async function copyDiffRow(row: Pick<AuditDiffRow, "key" | "before" | "after">, auditLogId?: number) {
     const text = `Campo: ${row.key}\nAntes: ${row.before}\nDepois: ${row.after}`;
     try {
       await navigator.clipboard.writeText(text);
@@ -406,7 +441,7 @@ export default function AuditoriaEventos() {
     }
   }
 
-  async function copyFullDiff(log: AuditLogApp, rows: Array<{ key: string; before: string; after: string }>) {
+  async function copyFullDiff(log: AuditLogApp, rows: Array<Pick<AuditDiffRow, "key" | "before" | "after">>) {
     const header = [
       `Evento: #${log.id}`,
       `Acao: ${actionLabels[log.acao] || log.acao}`,

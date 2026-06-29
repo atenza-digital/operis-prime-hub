@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 
@@ -79,6 +79,7 @@ describe("app smoke routes", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     localStorage.clear();
     window.history.pushState({}, "", "/");
@@ -104,4 +105,16 @@ describe("app smoke routes", () => {
     expect(await screen.findByText(/painel de operação/i, {}, { timeout: 5000 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/contratos ativos/i)).toBeInTheDocument());
   });
+
+  it.each([
+    ["/agendar", /agendamentos/i],
+    ["/ordens", /ordens de serviço/i],
+    ["/auditoria-eventos", /eventos de auditoria/i],
+    ["/comercial/clientes", /^clientes$/i],
+    ["/comercial/servicos", /^serviços$/i],
+  ])("renderiza rota autenticada %s", async (path, title) => {
+    renderAt(path, "token-teste");
+
+    expect(await screen.findByRole("heading", { name: title }, { timeout: 5000 })).toBeInTheDocument();
+  }, 12000);
 });
