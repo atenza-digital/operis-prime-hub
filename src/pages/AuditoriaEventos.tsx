@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Activity, AlertTriangle, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ const entityLabels: Record<string, string> = {
   medicao: "Medição",
   agendamento: "Agendamento",
   recorrencia: "Recorrência",
+  auditoria: "Auditoria",
   cliente: "Cliente",
   servico: "Serviço",
   tecnico: "Técnico",
@@ -63,6 +64,8 @@ const actionLabels: Record<string, string> = {
   contract_template_created: "Proposta/contrato criado",
   contract_template_updated: "Proposta/contrato atualizado",
   contract_generated_from_proposal: "Contrato gerado",
+  audit_evidence_copied: "Evidência copiada",
+  audit_evidence_exported: "Evidência exportada",
 };
 
 const defaultFilters = {
@@ -79,6 +82,19 @@ const defaultFilters = {
 
 const FILTER_STORAGE_KEY = "ciperprag_hub_audit_filters";
 const criticalFieldKeywords = ["status", "permiss", "valor", "validade", "quantidade", "hash", "senha", "certificado", "medicao", "contrato", "ativo"];
+const evidenceActions = ["audit_evidence_copied", "audit_evidence_exported"];
+const sensitiveActions = ["password_reset", "password_changed", "user_created", "user_updated", "company_config_updated", "numbering_config_updated"];
+
+type SuspiciousFinding = {
+  id: string;
+  title: string;
+  description: string;
+  severity: "Alta" | "Média" | "Baixa";
+  count: number;
+  action?: string;
+  entityType?: string;
+  ip?: string;
+};
 
 function compactJson(value?: Record<string, unknown> | null) {
   if (!value) return "";
@@ -132,6 +148,110 @@ function csvCell(value: unknown) {
   return `"${text}"`;
 }
 
+function severityClasses(severity: SuspiciousFinding["severity"]) {
+  if (severity === "Alta") return "border-red-200 bg-red-50 text-red-950";
+  if (severity === "Média") return "border-amber-200 bg-amber-50 text-amber-950";
+  return "border-slate-200 bg-slate-50 text-slate-900";
+}
+
+function buildSuspiciousFindings(logs: AuditLogApp[]): SuspiciousFinding[] {
+  const findings: SuspiciousFinding[] = [];
+  const evidenceLogs = logs.filter((item) => evidenceActions.includes(item.acao));
+  const copiedEvidence = logs.filter((item) => item.acao === "audit_evidence_copied");
+  const exportedEvidence = logs.filter((item) => item.acao === "audit_evidence_exported");
+  const sensitiveLogs = logs.filter((item) => sensitiveActions.includes(item.acao));
+  const criticalChangeLogs = logs.filter((item) => changedRows(item.dadosAntes, item.dadosDepois).some((row) => row.critical));
+  const offHoursSensitiveLogs = sensitiveLogs.filter((item) => {
+    const hour = new Date(item.criadoEm).getHours();
+    return hour < 7 || hour >= 20;
+  });
+  const ipCounts = logs.reduce<Record<string, number>>((acc, item) => {
+    const ip = item.ip?.trim();
+    if (ip) acc[ip] = (acc[ip] || 0) + 1;
+    return acc;
+  }, {});
+  const topIp = Object.entries(ipCounts).sort((a, b) => b[1] - a[1])[0];
+
+  if (evidenceLogs.length >= 3) {
+    findings.push({
+      id: "evidence-volume",
+      title: "Volume de evidências copiadas/exportadas",
+      description: `${evidenceLogs.length} ação(ões) de cópia/exportação aparecem no recorte atual. Revise se todas fazem parte de uma solicitação legítima.`,
+      severity: evidenceLogs.length >= 8 ? "Alta" : "Média",
+      count: evidenceLogs.length,
+      entityType: "auditoria",
+    });
+  }
+
+  if (copiedEvidence.length >= 2) {
+    findings.push({
+      id: "evidence-copy",
+      title: "Cópias de evidência recorrentes",
+      description: `${copiedEvidence.length} cópia(s) de diff/evidência foram registradas. Bom candidato para pedir justificativa formal no futuro.`,
+      severity: copiedEvidence.length >= 6 ? "Alta" : "Média",
+      count: copiedEvidence.length,
+      action: "audit_evidence_copied",
+    });
+  }
+
+  if (exportedEvidence.length >= 2) {
+    findings.push({
+      id: "evidence-export",
+      title: "Exportações de auditoria recorrentes",
+      description: `${exportedEvidence.length} exportação(ões) CSV foram feitas no recorte atual. Confirme se o arquivo foi solicitado e armazenado corretamente.`,
+      severity: exportedEvidence.length >= 5 ? "Alta" : "Média",
+      count: exportedEvidence.length,
+      action: "audit_evidence_exported",
+    });
+  }
+
+  if (sensitiveLogs.length > 0) {
+    findings.push({
+      id: "sensitive-actions",
+      title: "Ações administrativas sensíveis",
+      description: `${sensitiveLogs.length} evento(s) envolvendo senha, usuário ou configurações da empresa. Revise responsável, horário e origem.`,
+      severity: sensitiveLogs.length >= 4 ? "Alta" : "Média",
+      count: sensitiveLogs.length,
+    });
+  }
+
+  if (criticalChangeLogs.length > 0) {
+    findings.push({
+      id: "critical-fields",
+      title: "Campos críticos alterados",
+      description: `${criticalChangeLogs.length} evento(s) alteraram campos como status, permissão, valor, hash, contrato ou certificado.`,
+      severity: criticalChangeLogs.length >= 6 ? "Alta" : "Média",
+      count: criticalChangeLogs.length,
+    });
+  }
+
+  if (offHoursSensitiveLogs.length > 0) {
+    findings.push({
+      id: "off-hours",
+      title: "Ações sensíveis fora do horário comercial",
+      description: `${offHoursSensitiveLogs.length} evento(s) sensível(is) ocorreram antes das 07:00 ou depois das 20:00.`,
+      severity: "Alta",
+      count: offHoursSensitiveLogs.length,
+    });
+  }
+
+  if (topIp && topIp[1] >= 20) {
+    findings.push({
+      id: "ip-volume",
+      title: "Alto volume vindo do mesmo IP",
+      description: `${topIp[1]} evento(s) vieram do IP ${topIp[0]} no recorte carregado. Pode ser uso normal, automação ou concentração incomum.`,
+      severity: topIp[1] >= 50 ? "Alta" : "Baixa",
+      count: topIp[1],
+      ip: topIp[0],
+    });
+  }
+
+  return findings.sort((a, b) => {
+    const order = { Alta: 0, Média: 1, Baixa: 2 };
+    return order[a.severity] - order[b.severity] || b.count - a.count;
+  });
+}
+
 export default function AuditoriaEventos() {
   const [logs, setLogs] = useState<AuditLogApp[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,6 +282,17 @@ export default function AuditoriaEventos() {
     setFilters(defaultFilters);
     localStorage.removeItem(FILTER_STORAGE_KEY);
     reload(defaultFilters);
+  }
+
+  function applyFindingFilter(finding: SuspiciousFinding) {
+    const nextFilters = {
+      ...filters,
+      action: finding.action || filters.action,
+      entityType: finding.entityType || filters.entityType,
+      ip: finding.ip || filters.ip,
+    };
+    setFilters(nextFilters);
+    reload(nextFilters);
   }
 
   function exportCsv() {
@@ -254,6 +385,7 @@ export default function AuditoriaEventos() {
   }, [logs]);
 
   const selectedChangedRows = useMemo(() => changedRows(selectedLog?.dadosAntes, selectedLog?.dadosDepois), [selectedLog]);
+  const suspiciousFindings = useMemo(() => buildSuspiciousFindings(logs), [logs]);
 
   return (
     <div className="space-y-6">
@@ -301,6 +433,46 @@ export default function AuditoriaEventos() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className={suspiciousFindings.length ? "border-amber-200 bg-amber-50/40" : "border-emerald-200 bg-emerald-50/30"}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className={suspiciousFindings.length ? "h-5 w-5 text-amber-700" : "h-5 w-5 text-emerald-700"} />
+            Painel de eventos suspeitos
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {suspiciousFindings.length ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {suspiciousFindings.map((finding) => (
+                <div key={finding.id} className={`rounded-2xl border p-4 shadow-sm ${severityClasses(finding.severity)}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="bg-white/70">
+                          {finding.severity}
+                        </Badge>
+                        <span className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">{finding.count} evento(s)</span>
+                      </div>
+                      <p className="mt-2 font-semibold">{finding.title}</p>
+                    </div>
+                    {finding.action || finding.entityType || finding.ip ? (
+                      <Button type="button" variant="outline" size="sm" className="bg-white/80" onClick={() => applyFindingFilter(finding)} disabled={loading}>
+                        Revisar
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm opacity-85">{finding.description}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 bg-white/75 p-4 text-sm text-emerald-950">
+              Nenhum padrão suspeito foi identificado nos eventos carregados. Continue usando filtros por período, usuário, IP e ação para revisões pontuais.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

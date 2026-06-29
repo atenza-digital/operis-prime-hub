@@ -496,4 +496,23 @@ Entregas realizadas:
 Backlog remanescente da Etapa 22A:
 
 - Adicionar justificativa obrigatoria para exportacoes/copias quando compliance exigir.
-- Criar painel de eventos suspeitos usando os eventos de copia/exportacao como sinais.
+- Evoluir painel de eventos suspeitos para regras configuraveis por tenant, historico server-side e alertas.
+
+## Atualizacao - Etapa 23A executada
+
+Status: concluida no escopo minimo de painel inicial de eventos suspeitos.
+
+Entregas realizadas:
+
+- Tela `Eventos de Auditoria` passou a exibir um painel de eventos suspeitos acima da trilha detalhada.
+- Painel analisa o recorte carregado de forma read-only, sem alterar dados e sem criar bloqueios automaticos.
+- Regras iniciais identificam volume de copia/exportacao de evidencias, copias recorrentes, exportacoes recorrentes, acoes administrativas sensiveis, campos criticos alterados, acoes sensiveis fora do horario comercial e alto volume vindo do mesmo IP.
+- Achados recebem severidade visual `Alta`, `Media` ou `Baixa`.
+- Achados com filtro direto permitem acionar `Revisar`, reaproveitando os filtros existentes de acao, entidade e IP.
+- Acoes de evidencia ganharam rotulo amigavel na tabela de auditoria.
+
+Backlog remanescente da Etapa 23A:
+
+- Tornar limiares e regras do painel configuraveis por tenant.
+- Persistir achados relevantes server-side quando for necessario gerar historico de investigacao.
+- Criar alertas/notificacoes para eventos realmente criticos apos validacao das regras em homologacao.
