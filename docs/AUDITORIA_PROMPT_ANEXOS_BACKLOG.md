@@ -549,4 +549,23 @@ Entregas realizadas:
 Backlog remanescente da Etapa 25A:
 
 - Avaliar manual chunks para bibliotecas pesadas caso novas telas voltem a aumentar o bundle inicial.
-- Criar teste automatizado de smoke navigation para rotas protegidas e publicas.
+- Expandir testes automatizados para fluxos criticos completos de agendamento, OS, certificado e medicao.
+
+## Atualizacao - Etapa 26A executada
+
+Status: concluida no escopo minimo de smoke tests automatizados de rotas.
+
+Entregas realizadas:
+
+- Substituido teste generico de exemplo por smoke tests reais do `App`.
+- Criado teste para rota publica de login.
+- Criado teste para redirecionamento de rota protegida sem sessao.
+- Criado teste para dashboard autenticado com bootstrap mockado.
+- Testes usam mock local de `fetch`, evitando dependencia de VPS, banco ou dados de homologacao.
+- Suite `npm test` passou com 3 testes.
+
+Backlog remanescente da Etapa 26A:
+
+- Expandir smoke tests para rotas principais operacionais e comerciais.
+- Criar testes de fluxo completo para agendamento, OS, encerramento, certificado e medicao.
+- Avaliar Playwright/E2E contra ambiente de homologacao em rotina separada.
