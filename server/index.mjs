@@ -616,6 +616,35 @@ async function getSchedules() {
   }));
 }
 
+function mapAttachment(row, options = {}) {
+  const includeContent = options.includeContent || (options.includeImageContent && row.mime_type?.startsWith("image/"));
+  return {
+    id: row.id,
+    entidadeTipo: row.entidade_tipo,
+    entidadeId: row.entidade_id,
+    categoria: row.categoria,
+    nomeArquivo: row.nome_arquivo,
+    mimeType: row.mime_type,
+    tamanhoBytes: row.tamanho_bytes,
+    conteudoBase64: includeContent ? row.conteudo_base64 : undefined,
+    downloadUrl: `/api/attachments/${encodeURIComponent(row.id)}/download`,
+    url: row.url,
+    metadados: row.metadados ?? {},
+    hashSha256: row.hash_sha256,
+    imutavel: row.imutavel,
+    criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
+  };
+}
+
+async function getAttachments() {
+  const { rows } = await query(
+    `SELECT id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, imutavel, criado_em
+     FROM ciperprag_hub.evidencias_anexos
+     ORDER BY criado_em DESC, id DESC`,
+  );
+  return rows.map((row) => mapAttachment(row));
+}
+
 async function getAttachmentsByEntity(entityType) {
   const { rows } = await query(
     `SELECT *
@@ -626,22 +655,7 @@ async function getAttachmentsByEntity(entityType) {
   );
   const map = new Map();
   for (const row of rows) {
-    const item = {
-      id: row.id,
-      entidadeTipo: row.entidade_tipo,
-      entidadeId: row.entidade_id,
-      categoria: row.categoria,
-      nomeArquivo: row.nome_arquivo,
-      mimeType: row.mime_type,
-      tamanhoBytes: row.tamanho_bytes,
-      conteudoBase64: row.mime_type?.startsWith("image/") ? row.conteudo_base64 : undefined,
-      downloadUrl: `/api/attachments/${encodeURIComponent(row.id)}/download`,
-      url: row.url,
-      metadados: row.metadados ?? {},
-      hashSha256: row.hash_sha256,
-      imutavel: row.imutavel,
-      criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
-    };
+    const item = mapAttachment(row, { includeImageContent: true });
     if (!map.has(row.entidade_id)) map.set(row.entidade_id, []);
     map.get(row.entidade_id).push(item);
   }
@@ -1106,7 +1120,7 @@ async function getUsersForTenant(tenantId) {
 }
 
 async function getBootstrap() {
-  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements] =
+  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
     await Promise.all([
       getCompanyConfig(),
       getNumberingConfig(),
@@ -1122,6 +1136,7 @@ async function getBootstrap() {
       getContractTemplates(),
       getRecurrenceSuggestions(),
       getMeasurements(),
+      getAttachments(),
     ]);
 
   return {
@@ -1139,6 +1154,7 @@ async function getBootstrap() {
     contractTemplates,
     recurrenceSuggestions,
     measurements,
+    attachments,
   };
 }
 

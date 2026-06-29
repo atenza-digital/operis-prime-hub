@@ -13,6 +13,7 @@ import OSGerar from "@/pages/OSGerar";
 import OrdensServico from "@/pages/OrdensServico";
 import Historico from "@/pages/Historico";
 import Medicao from "@/pages/Medicao";
+import AuditoriaAnexos from "@/pages/AuditoriaAnexos";
 import Equipes from "@/pages/Equipes";
 import Visualizador from "@/pages/Visualizador";
 import Certificados from "@/pages/Certificados";
@@ -49,6 +50,7 @@ const App = () => (
             <Route element={<ProtectedRoute permission="os.close"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path="/os-finalizar" />
             <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Historico /></AppLayout></ProtectedRoute>} path="/historico" />
             <Route element={<ProtectedRoute permission="medicoes.manage"><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path="/medicao" />
+            <Route element={<ProtectedRoute permission="os.manage"><AppLayout><AuditoriaAnexos /></AppLayout></ProtectedRoute>} path="/auditoria-anexos" />
             <Route element={<ProtectedRoute permission="certificados.manage"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path="/certificados" />
             <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
             <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />

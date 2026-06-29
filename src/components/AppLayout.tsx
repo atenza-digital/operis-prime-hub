@@ -6,6 +6,7 @@ import {
   CalendarPlus,
   ChevronRight,
   ClipboardList,
+  FileSearch,
   LayoutDashboard,
   Menu,
   Receipt,
@@ -30,6 +31,7 @@ const navGroups = [
       { to: "/ordens", label: "Ordens de Serviço", shortLabel: "OS", icon: ClipboardList, permission: "os.manage" },
       { to: "/certificados", label: "Certificados e Histórico", shortLabel: "Certificados", icon: Award, permission: "certificados.manage" },
       { to: "/medicao", label: "Medição", shortLabel: "Medição", icon: Receipt, permission: "medicoes.manage" },
+      { to: "/auditoria-anexos", label: "Auditoria de Anexos", shortLabel: "Auditoria", icon: FileSearch, permission: "os.manage" },
     ],
   },
   {
@@ -58,6 +60,7 @@ const routeMeta: Record<string, { section: string; title: string; description: s
   "/os-finalizar": { section: "Operacional", title: "Ordens de Serviço", description: "Finalize serviços e registre evidências de campo." },
   "/certificados": { section: "Operacional", title: "Certificados e Histórico", description: "Consulte certificados emitidos e o histórico completo dos serviços." },
   "/medicao": { section: "Operacional", title: "Medição", description: "Consolide OS encerradas em períodos faturáveis e gere a medição." },
+  "/auditoria-anexos": { section: "Operacional", title: "Auditoria de Anexos", description: "Rastreie evidências, documentos históricos, hashes e downloads seguros." },
   "/equipes": { section: "Equipes", title: "Quadro Semanal", description: "Visualize a alocação operacional de técnicos e veículos." },
   "/usuarios": { section: "Administração", title: "Usuários e Perfis", description: "Gerencie contas, perfis e resets de senha da plataforma." },
 };

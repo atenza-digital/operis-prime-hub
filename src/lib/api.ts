@@ -390,6 +390,7 @@ export interface BootstrapData {
   contractTemplates: ContratoTemplate[];
   recurrenceSuggestions: RecorrenciaSuggestionApp[];
   measurements: MedicaoApp[];
+  attachments: EvidenciaAnexoApp[];
 }
 
 const AUTH_TOKEN_KEY = "ciperprag_hub_auth_token";

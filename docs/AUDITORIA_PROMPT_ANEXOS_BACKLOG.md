@@ -339,3 +339,25 @@ Backlog remanescente da Etapa 14A:
 - Implementar preview integrado em modal para PDF/HTML sem abrir nova aba.
 - Criar endpoint administrativo auditado para revogar/substituir anexos quando permitido.
 - Reduzir tambem o payload de imagens usando thumbnails ou URLs assinadas.
+
+## Atualizacao - Etapa 15A executada
+
+Status: concluida no escopo minimo de auditoria visual central de anexos.
+
+Entregas realizadas:
+
+- Bootstrap passou a expor um inventario global de anexos com metadados, sem carregar conteudo base64 de documentos.
+- Criada tela operacional `Auditoria de Anexos` com indicadores de total de anexos, arquivos imutaveis, documentos historicos e fotos.
+- Tela de auditoria passou a filtrar por busca livre, entidade vinculada, categoria e imutabilidade.
+- Listagem mostra nome do arquivo, origem, categoria, tamanho, tipo MIME, data/hora em formato brasileiro e hash SHA-256 parcial.
+- Acoes de abrir e baixar usam a rota segura `/api/attachments/:id/download`, respeitando autenticacao e permissao por entidade.
+- Menu lateral operacional passou a incluir acesso direto a auditoria para usuarios com permissao de OS.
+
+Backlog remanescente da Etapa 15A:
+
+- Criar tela de detalhes do anexo com metadados completos, usuario de criacao e linha do tempo.
+- Adicionar comparacao visual de hash/documento para conferencia antifraude mais forte.
+- Implementar preview integrado em modal para PDF/HTML e imagens, sem abrir nova aba.
+- Registrar eventos de visualizacao/download em tabela de auditoria.
+- Adicionar filtros por cliente, contrato, numero de OS, numero de certificado e numero de medicao.
+- Evoluir para storage externo com thumbnails e URLs temporarias assinadas.
