@@ -40,6 +40,63 @@ function renderPopDetails(service?: ServicoCatalogo) {
   return `<div style="margin-top:8px;">${details.join("")}</div>`;
 }
 
+function snapshotPhase(os: OSApp) {
+  const snapshot = (os.snapshotDados ?? {}) as Record<string, unknown>;
+  return (snapshot.encerramento ?? snapshot.emissao ?? null) as Record<string, unknown> | null;
+}
+
+function snapshotSection<T extends Record<string, unknown>>(os: OSApp, section: string): T | null {
+  const phase = snapshotPhase(os);
+  const value = phase?.[section];
+  return value && typeof value === "object" ? (value as T) : null;
+}
+
+function snapshotString(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function snapshotNumber(value: unknown) {
+  return typeof value === "number" ? value : undefined;
+}
+
+function snapshotStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCatalogo | undefined {
+  const service = snapshotSection<Record<string, unknown>>(os, "servico");
+  if (!service) return fallback;
+  const pop = service.pop && typeof service.pop === "object" ? (service.pop as Record<string, unknown>) : {};
+  return {
+    ...(fallback ?? {}),
+    id: snapshotString(service.id) ?? fallback?.id ?? "",
+    nome: snapshotString(service.nome) ?? fallback?.nome ?? os.servico,
+    tipo: (snapshotString(service.tipo) as ServicoCatalogo["tipo"]) ?? fallback?.tipo ?? os.tipo,
+    descricao: snapshotString(service.descricao) ?? fallback?.descricao ?? "",
+    unidade: snapshotString(service.unidade) ?? fallback?.unidade ?? os.unidade,
+    recorrenciaDias: snapshotNumber(service.recorrenciaDias) ?? fallback?.recorrenciaDias ?? 0,
+    geraCertificado: typeof service.geraCertificado === "boolean" ? service.geraCertificado : fallback?.geraCertificado ?? true,
+    validadeCertificadoDias: snapshotNumber(service.validadeCertificadoDias) ?? fallback?.validadeCertificadoDias ?? 0,
+    produtosQuimicos: snapshotStringArray(service.produtosQuimicos).length ? snapshotStringArray(service.produtosQuimicos) : fallback?.produtosQuimicos ?? [],
+    epis: snapshotStringArray(service.epis).length ? snapshotStringArray(service.epis) : fallback?.epis ?? [],
+    riscos: snapshotStringArray(service.riscos).length ? snapshotStringArray(service.riscos) : fallback?.riscos ?? [],
+    normasAplicaveis: snapshotStringArray(service.normasAplicaveis).length ? snapshotStringArray(service.normasAplicaveis) : fallback?.normasAplicaveis ?? [],
+    procedimentos: snapshotStringArray(service.procedimentos).length ? snapshotStringArray(service.procedimentos) : fallback?.procedimentos ?? [],
+    checklistItens: snapshotStringArray(service.checklistItens).length ? snapshotStringArray(service.checklistItens) : fallback?.checklistItens ?? [],
+    exigeFoto: typeof service.exigeFoto === "boolean" ? service.exigeFoto : fallback?.exigeFoto ?? false,
+    exigeAssinatura: typeof service.exigeAssinatura === "boolean" ? service.exigeAssinatura : fallback?.exigeAssinatura ?? true,
+    permiteNaoExecucao: typeof service.permiteNaoExecucao === "boolean" ? service.permiteNaoExecucao : fallback?.permiteNaoExecucao ?? true,
+    popCodigo: snapshotString(pop.codigo) ?? fallback?.popCodigo,
+    popTitulo: snapshotString(pop.titulo) ?? fallback?.popTitulo,
+    popVersao: snapshotString(pop.versao) ?? fallback?.popVersao,
+    popObjetivo: snapshotString(pop.objetivo) ?? fallback?.popObjetivo,
+    popAplicacao: snapshotString(pop.aplicacao) ?? fallback?.popAplicacao,
+    popResponsabilidades: snapshotStringArray(pop.responsabilidades).length ? snapshotStringArray(pop.responsabilidades) : fallback?.popResponsabilidades ?? [],
+    popMateriais: snapshotStringArray(pop.materiais).length ? snapshotStringArray(pop.materiais) : fallback?.popMateriais ?? [],
+    ativo: fallback?.ativo ?? true,
+  };
+}
+
 function inferActivityLine(os: OSApp, contract?: Contrato, service?: ServicoCatalogo) {
   const labels = [os.servico, ...(contract?.tags ?? [])].filter(Boolean);
   if (!labels.length) return "( X ) EXECUCAO DE SERVICO CONFORME CONTRATO";
@@ -129,7 +186,7 @@ export function buildOsPrintHtml(
   const bootstrap = options.bootstrap;
   const company = bootstrap?.companyConfig ?? null;
   const contract = bootstrap?.contracts.find((item) => item.id === os.contratoId);
-  const service = bootstrap?.services.find((item) => item.nome === os.servico);
+  const service = serviceFromSnapshot(os, bootstrap?.services.find((item) => item.nome === os.servico));
   const leadTech = bootstrap?.technicians.find((item) => item.nome === os.tecnicoNome);
   const procedimentos = inferProcedures(service);
   const checklist = inferChecklist(service, os);

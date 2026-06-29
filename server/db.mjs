@@ -299,13 +299,50 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS data_emissao DATE DEFAULT CURRENT_DATE,
     ADD COLUMN IF NOT EXISTS checklist_respostas JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS nao_executada BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT
+    ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT,
+    ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS snapshot_emitido_em TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS snapshot_encerrado_em TIMESTAMPTZ
   `);
 
   await query(`
     UPDATE ciperprag_hub.ordens_servico
     SET numero = COALESCE(numero, id),
         data_emissao = COALESCE(data_emissao, data_execucao, CURRENT_DATE)
+  `);
+
+  await query(`
+    UPDATE ciperprag_hub.ordens_servico
+    SET snapshot_dados = jsonb_build_object(
+          'legado', true,
+          'emissao', jsonb_build_object(
+            'os', jsonb_build_object(
+              'id', id,
+              'numero', numero,
+              'dataEmissao', data_emissao,
+              'status', status
+            ),
+            'cliente', jsonb_build_object(
+              'id', cliente_id,
+              'nome', cliente,
+              'cnpj', cnpj,
+              'endereco', cliente_endereco,
+              'logoUrl', cliente_logo_url
+            ),
+            'servico', jsonb_build_object(
+              'nome', servico,
+              'tipo', tipo
+            ),
+            'operacao', jsonb_build_object(
+              'tecnicoNome', tecnico,
+              'localExecucao', local_execucao,
+              'tags', tags,
+              'observacao', observacao
+            )
+          )
+        ),
+        snapshot_emitido_em = COALESCE(snapshot_emitido_em, NOW())
+    WHERE snapshot_dados = '{}'::jsonb
   `);
 
   await query(`

@@ -278,3 +278,23 @@ Backlog remanescente da Etapa 11A:
 - Criar anexos formais para POP aprovado e versoes assinadas.
 - Armazenar PDFs historicos de certificado e medicao como anexos imutaveis.
 - Adicionar antivirus/validador de tipo de arquivo antes de aceitar documentos em producao.
+
+## Atualizacao - Etapa 12A executada
+
+Status: concluida no escopo minimo de snapshots operacionais da OS.
+
+Entregas realizadas:
+
+- Ordens de servico passaram a ter `snapshot_dados`, `snapshot_emitido_em` e `snapshot_encerrado_em`.
+- OS antigas receberam snapshot legado de emissao para evitar registros vazios.
+- Geracao de OS a partir de agendamento passou a gravar snapshot de emissao com cliente, contrato, servico, POP ativo, tecnico, operacao e empresa.
+- Encerramento de OS passou a gravar snapshot de encerramento com checklist respondido e evidencias estruturadas.
+- Impressao da OS passou a preferir dados do snapshot de servico/POP quando disponivel, mantendo fallback para cadastros atuais em OS antigas.
+
+Backlog remanescente da Etapa 12A:
+
+- Criar painel visual para comparar snapshot da OS com o cadastro atual e destacar divergencias.
+- Persistir tambem o HTML/PDF final da OS como anexo imutavel.
+- Incluir assinatura digital/coleta de assinatura no snapshot de encerramento.
+- Criar rotina para enriquecer snapshots legados com dados completos de POP, empresa e contrato quando possivel.
+- Aplicar conceito semelhante de snapshot final em todos os documentos financeiros e comerciais.

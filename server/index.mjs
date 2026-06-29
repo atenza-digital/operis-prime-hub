@@ -95,6 +95,152 @@ function parseDataUrl(dataUrl) {
   };
 }
 
+function formatDbDate(value) {
+  return value?.toISOString?.().split("T")[0] ?? value ?? null;
+}
+
+function buildServiceSnapshot(service) {
+  if (!service) return null;
+  return {
+    id: service.id,
+    nome: service.nome,
+    tipo: service.tipo,
+    descricao: service.descricao,
+    unidade: service.unidade,
+    recorrenciaDias: Number(service.recorrencia_dias || 0),
+    geraCertificado: Boolean(service.gera_certificado),
+    validadeCertificadoDias: Number(service.validade_certificado_dias || 0),
+    produtosQuimicos: service.produtos_quimicos || [],
+    epis: service.epis || [],
+    riscos: service.riscos || [],
+    normasAplicaveis: service.normas_aplicaveis || [],
+    procedimentos: service.pop_procedimentos || service.procedimentos || [],
+    checklistItens: service.pop_checklist_itens || service.checklist_itens || [],
+    exigeFoto: Boolean(service.exige_foto),
+    exigeAssinatura: Boolean(service.exige_assinatura),
+    permiteNaoExecucao: Boolean(service.permite_nao_execucao),
+    pop: service.pop_id ? {
+      id: service.pop_id,
+      codigo: service.pop_codigo,
+      titulo: service.pop_titulo,
+      versao: service.pop_versao,
+      status: service.pop_status,
+      objetivo: service.pop_objetivo,
+      aplicacao: service.pop_aplicacao,
+      responsabilidades: service.pop_responsabilidades || [],
+      materiais: service.pop_materiais || [],
+      aprovadoPor: service.pop_aprovado_por,
+      aprovadoEm: formatDbDate(service.pop_aprovado_em),
+    } : {
+      codigo: service.pop_codigo || null,
+      titulo: service.pop_titulo || null,
+      versao: service.pop_versao || null,
+    },
+  };
+}
+
+function buildOrderOperationalSnapshot({ order, customer, contract, service, company, technician, evidences = [], checklistRespostas = [], phase, existing = {} }) {
+  const phaseSnapshot = {
+    geradoEm: new Date().toISOString(),
+    fase: phase,
+    os: {
+      id: order.id,
+      numero: order.numero,
+      agendamentoId: order.agendamento_id,
+      contratoId: order.contrato_id,
+      dataEmissao: formatDbDate(order.data_emissao),
+      dataExecucao: formatDbDate(order.data_execucao),
+      status: order.status,
+      quantidade: Number(order.quantidade || 0),
+      unidade: order.unidade,
+      naoExecutada: Boolean(order.nao_executada),
+      motivoNaoExecucao: order.motivo_nao_execucao || null,
+    },
+    cliente: {
+      id: order.cliente_id || customer?.id || null,
+      nome: order.cliente || customer?.razao_social || null,
+      cnpj: order.cnpj || customer?.cnpj || null,
+      endereco: order.cliente_endereco || (customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null),
+      logoUrl: order.cliente_logo_url || customer?.logo_url || null,
+    },
+    servico: buildServiceSnapshot(service),
+    contrato: contract ? {
+      id: contract.id,
+      status: contract.status,
+      contratado: Number(contract.contratado || 0),
+      executado: Number(contract.executado || 0),
+      unidade: contract.unidade,
+      valorUnitario: Number(contract.valor_unitario || 0),
+      validadeDias: Number(contract.validade_dias || 0),
+      tags: contract.tags || [],
+      locais: contract.locais || [],
+    } : null,
+    tecnico: {
+      nome: order.tecnico || technician?.nome || null,
+      cpf: order.tecnico_cpf || technician?.cpf || null,
+      cargo: technician?.cargo || null,
+      dataAdmissao: formatDbDate(order.tecnico_data_admissao || technician?.data_admissao),
+      equipeIds: order.equipe_tecnicos_ids || [],
+      equipeNomes: order.equipe_tecnicos_nomes || [],
+      veiculoId: order.veiculo_id || null,
+      veiculoDescricao: order.veiculo_descricao || null,
+    },
+    operacao: {
+      localExecucao: order.local_execucao || null,
+      tags: order.tags || null,
+      tagEquipamentoServico: order.tag_equipamento_servico || null,
+      observacao: order.observacao || null,
+      checklistRespostas,
+      evidencias: evidences.map((item) => ({
+        id: item.id,
+        categoria: item.categoria,
+        nomeArquivo: item.nome_arquivo || item.nomeArquivo,
+        mimeType: item.mime_type || item.mimeType,
+        tamanhoBytes: item.tamanho_bytes || item.tamanhoBytes || null,
+        metadados: item.metadados || {},
+      })),
+    },
+    empresa: company ? {
+      razaoSocial: company.razao_social,
+      nomeFantasia: company.nome_fantasia,
+      cnpj: company.cnpj,
+      endereco: company.endereco,
+      telefone: company.telefone,
+      email: company.email,
+      responsavelTecnico: company.responsavel_tecnico,
+      responsavelExecucao: company.responsavel_execucao,
+      cargoResponsavel: company.cargo_responsavel,
+    } : null,
+  };
+  return { ...(existing || {}), [phase]: phaseSnapshot };
+}
+
+async function getServiceForSnapshot(client, serviceName) {
+  const { rows } = await client.query(
+    `SELECT
+      s.*,
+      p.id AS pop_id,
+      p.codigo AS pop_codigo,
+      p.titulo AS pop_titulo,
+      p.versao AS pop_versao,
+      p.status AS pop_status,
+      p.objetivo AS pop_objetivo,
+      p.aplicacao AS pop_aplicacao,
+      p.responsabilidades AS pop_responsabilidades,
+      p.materiais AS pop_materiais,
+      p.procedimentos AS pop_procedimentos,
+      p.checklist_itens AS pop_checklist_itens,
+      p.aprovado_por AS pop_aprovado_por,
+      p.aprovado_em AS pop_aprovado_em
+    FROM ciperprag_hub.servicos_catalogo s
+    LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id
+    WHERE s.nome = $1
+    LIMIT 1`,
+    [serviceName],
+  );
+  return rows[0];
+}
+
 function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias }) {
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
@@ -430,6 +576,7 @@ async function getOrders() {
     checklistRespostas: row.checklist_respostas ?? [],
     naoExecutada: row.nao_executada ?? false,
     motivoNaoExecucao: row.motivo_nao_execucao,
+    snapshotDados: row.snapshot_dados ?? {},
   }));
 }
 
@@ -1588,6 +1735,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const customer = clientRows[0];
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1", [leaderName || ag.tecnicos_nomes?.[0]]);
     const tech = techRows[0];
+    const service = await getServiceForSnapshot(client, ag.servico);
+    const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+    const company = companyRows[0];
     const { rows: numRows } = await client.query(
       `UPDATE ciperprag_hub.numeracao_config SET os_ultimo = os_ultimo + 1, atualizado_em = NOW()
        WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1)
@@ -1600,6 +1750,20 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       (id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,CURRENT_DATE,1,$22,'aberta',$23)`,
       [orderId, number, agendamentoId, ag.cliente_id, ag.cliente, ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+    );
+    const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
+    const snapshot = buildOrderOperationalSnapshot({
+      order: insertedOrderRows[0],
+      customer,
+      contract,
+      service,
+      company,
+      technician: tech,
+      phase: "emissao",
+    });
+    await client.query(
+      "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_emitido_em = NOW() WHERE id = $1",
+      [orderId, JSON.stringify(snapshot)],
     );
     await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'os_gerada', os_id = $2 WHERE id = $1", [agendamentoId, orderId]);
     return orderId;
@@ -1633,8 +1797,13 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1", [order.contrato_id]);
     const contract = contractRows[0];
-    const { rows: serviceRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
-    const service = serviceRows[0];
+    const service = await getServiceForSnapshot(client, order.servico);
+    const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+    const company = companyRows[0];
+    const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
+    const customer = customerRows[0];
+    const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1", [order.tecnico]);
+    const technician = techRows[0];
     const qty = Number(quantidade || 1);
     const isNotExecuted = Boolean(naoExecutada);
 
@@ -1684,6 +1853,24 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         ],
       );
     }
+    const { rows: updatedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
+    const { rows: evidenceRows } = await client.query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 ORDER BY criado_em, id", [orderId]);
+    const snapshot = buildOrderOperationalSnapshot({
+      order: updatedOrderRows[0],
+      customer,
+      contract,
+      service,
+      company,
+      technician,
+      evidences: evidenceRows,
+      checklistRespostas: checklistRespostas || [],
+      phase: "encerramento",
+      existing: order.snapshot_dados || {},
+    });
+    await client.query(
+      "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_encerrado_em = NOW() WHERE id = $1",
+      [orderId, JSON.stringify(snapshot)],
+    );
 
     if (!isNotExecuted) {
       await client.query(

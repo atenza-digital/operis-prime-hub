@@ -173,6 +173,7 @@ export interface OSApp {
   checklistRespostas?: Array<{ item: string; concluido: boolean; observacao?: string }>;
   naoExecutada?: boolean;
   motivoNaoExecucao?: string;
+  snapshotDados?: Record<string, unknown>;
 }
 
 export interface CertificadoApp {
