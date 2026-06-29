@@ -69,9 +69,17 @@ export interface ServicoCatalogo {
   exigeFoto: boolean;
   exigeAssinatura: boolean;
   permiteNaoExecucao: boolean;
+  popId?: string;
   popCodigo?: string;
   popTitulo?: string;
   popVersao?: string;
+  popStatus?: "rascunho" | "ativo" | "inativo";
+  popObjetivo?: string;
+  popAplicacao?: string;
+  popResponsabilidades?: string[];
+  popMateriais?: string[];
+  popAprovadoPor?: string;
+  popAprovadoEm?: string;
   ativo: boolean;
 }
 

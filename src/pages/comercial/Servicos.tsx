@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle, BookOpen, Briefcase, ClipboardCheck, FlaskConical, HardHat, Pencil, Plus, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import { getBootstrap, saveService, type ServicoCatalogo } from "@/lib/api";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Briefcase, Plus, Pencil, Search, ShieldCheck, FlaskConical, HardHat, AlertTriangle, RotateCcw, BookOpen, ClipboardCheck } from "lucide-react";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 
 const emptyServico: Omit<ServicoCatalogo, "id"> = {
   nome: "",
@@ -30,7 +30,13 @@ const emptyServico: Omit<ServicoCatalogo, "id"> = {
   permiteNaoExecucao: true,
   popCodigo: "",
   popTitulo: "",
-  popVersao: "",
+  popVersao: "001",
+  popObjetivo: "",
+  popAplicacao: "",
+  popResponsabilidades: [],
+  popMateriais: [],
+  popAprovadoPor: "",
+  popAprovadoEm: "",
   ativo: true,
 };
 
@@ -72,7 +78,7 @@ function TagEditor({
         />
         <Button type="button" variant="outline" size="sm" onClick={add}>+</Button>
       </div>
-      {values.length > 0 && (
+      {values.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {values.map((value, index) => (
             <Badge
@@ -85,7 +91,7 @@ function TagEditor({
             </Badge>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -127,7 +133,13 @@ export default function Servicos() {
   function openEdit(servico: ServicoCatalogo) {
     const { id, ...rest } = servico;
     setEditId(id);
-    setForm({ ...emptyServico, ...rest });
+    setForm({
+      ...emptyServico,
+      ...rest,
+      popVersao: rest.popVersao || "001",
+      popResponsabilidades: rest.popResponsabilidades || [],
+      popMateriais: rest.popMateriais || [],
+    });
     setDialogOpen(true);
   }
 
@@ -152,13 +164,13 @@ export default function Servicos() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             <Briefcase className="h-6 w-6 text-primary" />
             Catálogo de Serviços
           </h1>
-          <p className="text-sm text-muted-foreground">Regras técnicas usadas em agendamentos, OS, certificados, POPs e medições.</p>
+          <p className="text-sm text-muted-foreground">Regras técnicas, POPs versionados e checklists usados em OS, certificados e medições.</p>
         </div>
         <Button onClick={openNew}><Plus className="mr-2 h-4 w-4" />Novo Serviço</Button>
       </div>
@@ -173,92 +185,104 @@ export default function Servicos() {
         <CardContent className="space-y-3">
           {loading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Carregando serviços...</div>
-          ) : (
-            filtrados.map((servico) => (
-              <div key={servico.id} className="overflow-hidden rounded-lg border">
-                <div className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-muted/30" onClick={() => setExpandedId(expandedId === servico.id ? null : servico.id)}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-muted-foreground">{servico.id}</span>
-                      <Badge variant={servico.tipo === "sanitario" ? "default" : "secondary"}>{servico.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</Badge>
-                      {servico.geraCertificado && <Badge variant="outline" className="text-[10px]"><ShieldCheck className="mr-1 h-3 w-3" />Certificado</Badge>}
-                      {servico.checklistItens.length > 0 && <Badge variant="outline" className="text-[10px]"><ClipboardCheck className="mr-1 h-3 w-3" />Checklist</Badge>}
-                      {servico.popCodigo && <Badge variant="secondary" className="text-[10px]">{servico.popCodigo}</Badge>}
-                      {!servico.ativo && <Badge variant="destructive">Inativo</Badge>}
-                    </div>
-                    <p className="mt-1 text-sm font-semibold">{servico.nome}</p>
-                    <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>Unidade: {servico.unidade}</span>
-                      {servico.recorrenciaDias > 0 && <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3" />A cada {servico.recorrenciaDias} dias</span>}
-                    </div>
+          ) : filtrados.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Nenhum serviço encontrado.</div>
+          ) : filtrados.map((servico) => (
+            <div key={servico.id} className="overflow-hidden rounded-lg border">
+              <div className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-muted/30" onClick={() => setExpandedId(expandedId === servico.id ? null : servico.id)}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground">{servico.id}</span>
+                    <Badge variant={servico.tipo === "sanitario" ? "default" : "secondary"}>{servico.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</Badge>
+                    {servico.geraCertificado ? <Badge variant="outline" className="text-[10px]"><ShieldCheck className="mr-1 h-3 w-3" />Certificado</Badge> : null}
+                    {servico.checklistItens.length > 0 ? <Badge variant="outline" className="text-[10px]"><ClipboardCheck className="mr-1 h-3 w-3" />Checklist</Badge> : null}
+                    {servico.popCodigo ? <Badge variant="secondary" className="text-[10px]">{servico.popCodigo} v{servico.popVersao || "001"}</Badge> : null}
+                    {!servico.ativo ? <Badge variant="destructive">Inativo</Badge> : null}
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openEdit(servico);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
+                  <p className="mt-1 text-sm font-semibold">{servico.nome}</p>
+                  <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Unidade: {servico.unidade}</span>
+                    {servico.recorrenciaDias > 0 ? <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3" />A cada {servico.recorrenciaDias} dias</span> : null}
+                  </div>
                 </div>
-
-                {expandedId === servico.id && (
-                  <div className="space-y-4 border-t bg-muted/20 p-4 text-sm">
-                    <p className="text-muted-foreground">{servico.descricao}</p>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {servico.produtosQuimicos.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><FlaskConical className="h-3.5 w-3.5 text-primary" />Produtos químicos</p>
-                          <div className="flex flex-wrap gap-1">{servico.produtosQuimicos.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
-                        </div>
-                      )}
-                      {servico.epis.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><HardHat className="h-3.5 w-3.5 text-primary" />EPIs</p>
-                          <div className="flex flex-wrap gap-1">{servico.epis.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
-                        </div>
-                      )}
-                      {servico.riscos.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><AlertTriangle className="h-3.5 w-3.5 text-destructive" />Riscos</p>
-                          <div className="flex flex-wrap gap-1">{servico.riscos.map((item) => <Badge key={item} variant="destructive" className="text-xs">{item}</Badge>)}</div>
-                        </div>
-                      )}
-                      {servico.normasAplicaveis.length > 0 && (
-                        <div>
-                          <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><BookOpen className="h-3.5 w-3.5 text-primary" />Normas</p>
-                          <div className="flex flex-wrap gap-1">{servico.normasAplicaveis.map((item) => <Badge key={item} variant="secondary" className="text-xs">{item}</Badge>)}</div>
-                        </div>
-                      )}
-                    </div>
-                    {servico.procedimentos.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium">Procedimentos</p>
-                        <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted-foreground">
-                          {servico.procedimentos.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                        </ol>
-                      </div>
-                    )}
-                    {servico.checklistItens.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium">Checklist de encerramento</p>
-                        <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted-foreground">
-                          {servico.checklistItens.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-                        </ol>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openEdit(servico);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
               </div>
-            ))
-          )}
+
+              {expandedId === servico.id ? (
+                <div className="space-y-4 border-t bg-muted/20 p-4 text-sm">
+                  <p className="text-muted-foreground">{servico.descricao}</p>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {servico.produtosQuimicos.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><FlaskConical className="h-3.5 w-3.5 text-primary" />Produtos químicos</p>
+                        <div className="flex flex-wrap gap-1">{servico.produtosQuimicos.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
+                      </div>
+                    ) : null}
+                    {servico.epis.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><HardHat className="h-3.5 w-3.5 text-primary" />EPIs</p>
+                        <div className="flex flex-wrap gap-1">{servico.epis.map((item) => <Badge key={item} variant="outline" className="text-xs">{item}</Badge>)}</div>
+                      </div>
+                    ) : null}
+                    {servico.riscos.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><AlertTriangle className="h-3.5 w-3.5 text-destructive" />Riscos</p>
+                        <div className="flex flex-wrap gap-1">{servico.riscos.map((item) => <Badge key={item} variant="destructive" className="text-xs">{item}</Badge>)}</div>
+                      </div>
+                    ) : null}
+                    {servico.normasAplicaveis.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-medium"><BookOpen className="h-3.5 w-3.5 text-primary" />Normas</p>
+                        <div className="flex flex-wrap gap-1">{servico.normasAplicaveis.map((item) => <Badge key={item} variant="secondary" className="text-xs">{item}</Badge>)}</div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {(servico.popCodigo || servico.popObjetivo || servico.popAplicacao) ? (
+                    <div className="rounded-lg border bg-background/80 p-3">
+                      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold"><BookOpen className="h-3.5 w-3.5 text-primary" /> POP ativo {servico.popCodigo ? `- ${servico.popCodigo}` : ""} {servico.popVersao ? `v${servico.popVersao}` : ""}</p>
+                      {servico.popTitulo ? <p className="text-xs font-medium">{servico.popTitulo}</p> : null}
+                      {servico.popObjetivo ? <p className="mt-1 text-xs text-muted-foreground"><strong>Objetivo:</strong> {servico.popObjetivo}</p> : null}
+                      {servico.popAplicacao ? <p className="mt-1 text-xs text-muted-foreground"><strong>Aplicação:</strong> {servico.popAplicacao}</p> : null}
+                      {servico.popMateriais?.length ? <p className="mt-1 text-xs text-muted-foreground"><strong>Materiais:</strong> {servico.popMateriais.join(", ")}</p> : null}
+                      {servico.popResponsabilidades?.length ? <p className="mt-1 text-xs text-muted-foreground"><strong>Responsabilidades:</strong> {servico.popResponsabilidades.join(", ")}</p> : null}
+                    </div>
+                  ) : null}
+
+                  {servico.procedimentos.length > 0 ? (
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium">Procedimentos da OS</p>
+                      <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted-foreground">
+                        {servico.procedimentos.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                      </ol>
+                    </div>
+                  ) : null}
+                  {servico.checklistItens.length > 0 ? (
+                    <div>
+                      <p className="mb-1.5 text-xs font-medium">Checklist de encerramento</p>
+                      <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted-foreground">
+                        {servico.checklistItens.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                      </ol>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader><DialogTitle>{editId ? "Editar Serviço" : "Novo Serviço"}</DialogTitle></DialogHeader>
           <div className="space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
@@ -319,19 +343,45 @@ export default function Servicos() {
               </label>
             </div>
 
-            <div className="grid gap-4 rounded-lg border p-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Código do POP</Label>
-                <Input value={form.popCodigo || ""} onChange={(event) => setForm({ ...form, popCodigo: event.target.value })} placeholder="Ex.: POP-BEB-001" />
+            <div className="space-y-4 rounded-lg border p-3">
+              <div>
+                <p className="flex items-center gap-1.5 text-sm font-semibold"><BookOpen className="h-4 w-4 text-primary" /> POP versionado</p>
+                <p className="text-xs text-muted-foreground">A versão ativa alimenta a impressão da OS e o checklist de encerramento.</p>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Título do POP</Label>
-                <Input value={form.popTitulo || ""} onChange={(event) => setForm({ ...form, popTitulo: event.target.value })} placeholder="Ex.: Higienização e desinfecção de bebedouro" />
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>Código do POP</Label>
+                  <Input value={form.popCodigo || ""} onChange={(event) => setForm({ ...form, popCodigo: event.target.value })} placeholder="Ex.: POP-BEB-001" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Título do POP</Label>
+                  <Input value={form.popTitulo || ""} onChange={(event) => setForm({ ...form, popTitulo: event.target.value })} placeholder="Ex.: Higienização de bebedouro" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Versão</Label>
+                  <Input value={form.popVersao || ""} onChange={(event) => setForm({ ...form, popVersao: event.target.value })} placeholder="001" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Aprovado por</Label>
+                  <Input value={form.popAprovadoPor || ""} onChange={(event) => setForm({ ...form, popAprovadoPor: event.target.value })} placeholder="Responsável técnico" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data de aprovação</Label>
+                  <Input type="date" value={form.popAprovadoEm || ""} onChange={(event) => setForm({ ...form, popAprovadoEm: event.target.value })} />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Versão do POP</Label>
-                <Input value={form.popVersao || ""} onChange={(event) => setForm({ ...form, popVersao: event.target.value })} placeholder="001" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Objetivo do POP</Label>
+                  <Textarea value={form.popObjetivo || ""} onChange={(event) => setForm({ ...form, popObjetivo: event.target.value })} rows={3} placeholder="Descreva o objetivo do procedimento..." />
+                </div>
+                <div className="space-y-2">
+                  <Label>Aplicação</Label>
+                  <Textarea value={form.popAplicacao || ""} onChange={(event) => setForm({ ...form, popAplicacao: event.target.value })} rows={3} placeholder="Onde/quando este POP deve ser aplicado..." />
+                </div>
               </div>
+              <TagEditor label="Responsabilidades do POP" icon={ShieldCheck} values={form.popResponsabilidades || []} onChange={(values) => setForm({ ...form, popResponsabilidades: values })} />
+              <TagEditor label="Materiais e registros do POP" icon={ClipboardCheck} values={form.popMateriais || []} onChange={(values) => setForm({ ...form, popMateriais: values })} />
             </div>
 
             <TagEditor label="Produtos químicos" icon={FlaskConical} values={form.produtosQuimicos} onChange={(values) => setForm({ ...form, produtosQuimicos: values })} />

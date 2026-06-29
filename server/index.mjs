@@ -251,7 +251,26 @@ async function getClients() {
 }
 
 async function getServices() {
-  const { rows } = await query("SELECT * FROM ciperprag_hub.servicos_catalogo ORDER BY id");
+  const { rows } = await query(`
+    SELECT
+      s.*,
+      p.id AS active_pop_id,
+      p.codigo AS active_pop_codigo,
+      p.titulo AS active_pop_titulo,
+      p.versao AS active_pop_versao,
+      p.status AS active_pop_status,
+      p.objetivo AS active_pop_objetivo,
+      p.aplicacao AS active_pop_aplicacao,
+      p.responsabilidades AS active_pop_responsabilidades,
+      p.materiais AS active_pop_materiais,
+      p.procedimentos AS active_pop_procedimentos,
+      p.checklist_itens AS active_pop_checklist_itens,
+      p.aprovado_por AS active_pop_aprovado_por,
+      p.aprovado_em AS active_pop_aprovado_em
+    FROM ciperprag_hub.servicos_catalogo s
+    LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id
+    ORDER BY s.id
+  `);
   return rows.map((row) => ({
     id: row.id,
     nome: row.nome,
@@ -265,14 +284,22 @@ async function getServices() {
     epis: row.epis ?? [],
     riscos: row.riscos ?? [],
     normasAplicaveis: row.normas_aplicaveis ?? [],
-    procedimentos: row.procedimentos ?? [],
-    checklistItens: row.checklist_itens ?? [],
+    procedimentos: row.active_pop_procedimentos ?? row.procedimentos ?? [],
+    checklistItens: row.active_pop_checklist_itens ?? row.checklist_itens ?? [],
     exigeFoto: row.exige_foto,
     exigeAssinatura: row.exige_assinatura,
     permiteNaoExecucao: row.permite_nao_execucao,
-    popCodigo: row.pop_codigo,
-    popTitulo: row.pop_titulo,
-    popVersao: row.pop_versao,
+    popId: row.active_pop_id,
+    popCodigo: row.active_pop_codigo ?? row.pop_codigo,
+    popTitulo: row.active_pop_titulo ?? row.pop_titulo,
+    popVersao: row.active_pop_versao ?? row.pop_versao,
+    popStatus: row.active_pop_status,
+    popObjetivo: row.active_pop_objetivo,
+    popAplicacao: row.active_pop_aplicacao,
+    popResponsabilidades: row.active_pop_responsabilidades ?? [],
+    popMateriais: row.active_pop_materiais ?? [],
+    popAprovadoPor: row.active_pop_aprovado_por,
+    popAprovadoEm: row.active_pop_aprovado_em?.toISOString?.().split("T")[0] ?? row.active_pop_aprovado_em,
     ativo: row.ativo,
   }));
 }
@@ -1103,58 +1130,123 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
 app.post("/api/services", requirePermission("servicos.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `SRV-${String(Date.now()).slice(-6)}`;
-  await query(
-    `INSERT INTO ciperprag_hub.servicos_catalogo (
-      id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
-      produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
-      exige_foto, exige_assinatura, permite_nao_execucao, pop_codigo, pop_titulo, pop_versao, ativo
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-    ON CONFLICT (id) DO UPDATE SET
-      nome = EXCLUDED.nome,
-      tipo = EXCLUDED.tipo,
-      descricao = EXCLUDED.descricao,
-      unidade = EXCLUDED.unidade,
-      recorrencia_dias = EXCLUDED.recorrencia_dias,
-      gera_certificado = EXCLUDED.gera_certificado,
-      validade_certificado_dias = EXCLUDED.validade_certificado_dias,
-      produtos_quimicos = EXCLUDED.produtos_quimicos,
-      epis = EXCLUDED.epis,
-      riscos = EXCLUDED.riscos,
-      normas_aplicaveis = EXCLUDED.normas_aplicaveis,
-      procedimentos = EXCLUDED.procedimentos,
-      checklist_itens = EXCLUDED.checklist_itens,
-      exige_foto = EXCLUDED.exige_foto,
-      exige_assinatura = EXCLUDED.exige_assinatura,
-      permite_nao_execucao = EXCLUDED.permite_nao_execucao,
-      pop_codigo = EXCLUDED.pop_codigo,
-      pop_titulo = EXCLUDED.pop_titulo,
-      pop_versao = EXCLUDED.pop_versao,
-      ativo = EXCLUDED.ativo,
-      atualizado_em = NOW()`,
-    [
-      id,
-      body.nome,
-      body.tipo,
-      body.descricao,
-      body.unidade,
-      body.recorrenciaDias,
-      body.geraCertificado,
-      body.validadeCertificadoDias,
-      body.produtosQuimicos || [],
-      body.epis || [],
-      body.riscos || [],
-      body.normasAplicaveis || [],
-      body.procedimentos || [],
-      body.checklistItens || [],
-      body.exigeFoto ?? false,
-      body.exigeAssinatura ?? true,
-      body.permiteNaoExecucao ?? true,
-      body.popCodigo || null,
-      body.popTitulo || null,
-      body.popVersao || null,
-      body.ativo,
-    ],
-  );
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO ciperprag_hub.servicos_catalogo (
+        id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
+        produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
+        exige_foto, exige_assinatura, permite_nao_execucao, pop_codigo, pop_titulo, pop_versao, ativo
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+      ON CONFLICT (id) DO UPDATE SET
+        nome = EXCLUDED.nome,
+        tipo = EXCLUDED.tipo,
+        descricao = EXCLUDED.descricao,
+        unidade = EXCLUDED.unidade,
+        recorrencia_dias = EXCLUDED.recorrencia_dias,
+        gera_certificado = EXCLUDED.gera_certificado,
+        validade_certificado_dias = EXCLUDED.validade_certificado_dias,
+        produtos_quimicos = EXCLUDED.produtos_quimicos,
+        epis = EXCLUDED.epis,
+        riscos = EXCLUDED.riscos,
+        normas_aplicaveis = EXCLUDED.normas_aplicaveis,
+        procedimentos = EXCLUDED.procedimentos,
+        checklist_itens = EXCLUDED.checklist_itens,
+        exige_foto = EXCLUDED.exige_foto,
+        exige_assinatura = EXCLUDED.exige_assinatura,
+        permite_nao_execucao = EXCLUDED.permite_nao_execucao,
+        pop_codigo = EXCLUDED.pop_codigo,
+        pop_titulo = EXCLUDED.pop_titulo,
+        pop_versao = EXCLUDED.pop_versao,
+        ativo = EXCLUDED.ativo,
+        atualizado_em = NOW()`,
+      [
+        id,
+        req.auth.user.tenant.id,
+        body.nome,
+        body.tipo,
+        body.descricao,
+        body.unidade,
+        body.recorrenciaDias,
+        body.geraCertificado,
+        body.validadeCertificadoDias,
+        body.produtosQuimicos || [],
+        body.epis || [],
+        body.riscos || [],
+        body.normasAplicaveis || [],
+        body.procedimentos || [],
+        body.checklistItens || [],
+        body.exigeFoto ?? false,
+        body.exigeAssinatura ?? true,
+        body.permiteNaoExecucao ?? true,
+        body.popCodigo || null,
+        body.popTitulo || null,
+        body.popVersao || null,
+        body.ativo,
+      ],
+    );
+
+    const hasPopData = Boolean(
+      body.popCodigo ||
+      body.popTitulo ||
+      body.popObjetivo ||
+      body.popAplicacao ||
+      (body.popResponsabilidades || []).length ||
+      (body.popMateriais || []).length ||
+      (body.procedimentos || []).length ||
+      (body.checklistItens || []).length,
+    );
+
+    if (!hasPopData) {
+      await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = NULL WHERE id = $1", [id]);
+      return;
+    }
+
+    const popCodigo = body.popCodigo || `POP-${id}`;
+    const popTitulo = body.popTitulo || body.nome;
+    const popVersao = body.popVersao || "001";
+    const { rows: popRows } = await client.query(
+      `INSERT INTO ciperprag_hub.servico_pops (
+        id, tenant_id, servico_id, codigo, titulo, versao, status, objetivo, aplicacao,
+        responsabilidades, materiais, procedimentos, checklist_itens, aprovado_por, aprovado_em
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,'ativo',$7,$8,$9,$10,$11,$12,$13,$14)
+      ON CONFLICT (servico_id, codigo, versao) DO UPDATE SET
+        titulo = EXCLUDED.titulo,
+        status = 'ativo',
+        objetivo = EXCLUDED.objetivo,
+        aplicacao = EXCLUDED.aplicacao,
+        responsabilidades = EXCLUDED.responsabilidades,
+        materiais = EXCLUDED.materiais,
+        procedimentos = EXCLUDED.procedimentos,
+        checklist_itens = EXCLUDED.checklist_itens,
+        aprovado_por = EXCLUDED.aprovado_por,
+        aprovado_em = EXCLUDED.aprovado_em,
+        atualizado_em = NOW()
+      RETURNING id`,
+      [
+        makeId("POP"),
+        req.auth.user.tenant.id,
+        id,
+        popCodigo,
+        popTitulo,
+        popVersao,
+        body.popObjetivo || body.descricao || null,
+        body.popAplicacao || null,
+        body.popResponsabilidades || [],
+        body.popMateriais || [],
+        body.procedimentos || [],
+        body.checklistItens || [],
+        body.popAprovadoPor || null,
+        body.popAprovadoEm || null,
+      ],
+    );
+    const popId = popRows[0].id;
+    await client.query(
+      "UPDATE ciperprag_hub.servico_pops SET status = 'inativo', atualizado_em = NOW() WHERE servico_id = $1 AND id <> $2 AND status = 'ativo'",
+      [id, popId],
+    );
+    await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = $2 WHERE id = $1", [id, popId]);
+  });
   res.json({ ok: true, id });
 });
 

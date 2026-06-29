@@ -28,6 +28,18 @@ function renderBulletList(items: string[]) {
   return items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
 }
 
+function renderPopDetails(service?: ServicoCatalogo) {
+  if (!service) return "";
+  const details = [
+    service.popObjetivo ? `<div><strong>Objetivo:</strong> ${escapeHtml(service.popObjetivo)}</div>` : "",
+    service.popAplicacao ? `<div><strong>Aplicacao:</strong> ${escapeHtml(service.popAplicacao)}</div>` : "",
+    service.popMateriais?.length ? `<div><strong>Materiais/registros:</strong> ${escapeHtml(service.popMateriais.join(", "))}</div>` : "",
+    service.popResponsabilidades?.length ? `<div><strong>Responsabilidades:</strong> ${escapeHtml(service.popResponsabilidades.join(", "))}</div>` : "",
+  ].filter(Boolean);
+  if (!details.length) return "";
+  return `<div style="margin-top:8px;">${details.join("")}</div>`;
+}
+
 function inferActivityLine(os: OSApp, contract?: Contrato, service?: ServicoCatalogo) {
   const labels = [os.servico, ...(contract?.tags ?? [])].filter(Boolean);
   if (!labels.length) return "( X ) EXECUCAO DE SERVICO CONFORME CONTRATO";
@@ -203,6 +215,7 @@ export function buildOsPrintHtml(
     <div class="box tall-box">
       ${escapeHtml(inferActivityLine(os, contract, service))}
       ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versao ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
+      ${renderPopDetails(service)}
     </div>
 
     <div class="section-title">Observacao</div>

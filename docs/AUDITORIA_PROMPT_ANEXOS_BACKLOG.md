@@ -34,7 +34,7 @@ O ponto mais critico antes de novas telas grandes e organizar a base operacional
 | Etapa 7 - Evidencias/fotos/anexos | Parcial | Encerramento aceita fotos de forma limitada. | Criar armazenamento estruturado de anexos, metadados, limites por tipo, preview, download e associacao com OS/certificado/medicao. |
 | Etapa 8 - Certificados antifraude | Parcial | Certificado com QR Code e rota publica de validacao foram implementados. | Persistir snapshot final, status, revogacao, hash imutavel, divergencia entre certificado e relatorio e aderencia total ao modelo original. |
 | Etapa 9 - Medicao | Parcial avancado | Medicao persistida com itens, status, historico, snapshot, reimpressao e cancelamento inicial. | Evoluir baixa contratual detalhada, anexos, NF, PDF historico server-side e auditoria de cancelamento. |
-| Etapa 10 - POPs/checklists | Pendente | Anexos mostram POPs reais, mas o sistema ainda nao gerencia POP/checklist por servico. | Criar cadastro de POPs, versoes, checklist vinculado ao servico e uso na OS/encerramento. |
+| Etapa 10 - POPs/checklists | Parcial avancado | POPs versionados por servico, checklist ativo e uso no encerramento/OS implementados no escopo inicial. | Evoluir anexos de POP, fluxo de aprovacao formal, historico visual de versoes e assinatura do responsavel tecnico. |
 | Etapa 11 - Estoque simples | Pendente | Nao identificado fluxo de estoque operacional. | Manter em backlog apos OS, certificados e medicao. |
 | Etapa 12 - Ajuda, UX e dashboards | Parcial | UI foi melhorada e o menu foi reorganizado. | Adicionar ajuda contextual, indicadores por perfil, telas vazias melhores e fluxo guiado. |
 | Etapa 13 - Hardening/testes/performance | Parcial | Build, lint e testes foram executados nas etapas anteriores, com warnings conhecidos. | Automatizar testes criticos, revisar warnings, auditoria de seguranca, backups e deploy versionado. |
@@ -233,3 +233,26 @@ Backlog remanescente da Etapa 9A:
 - Incluir anexos de medicao, numero de NF, data de faturamento e status financeiro.
 - Amarrar baixa contratual por item de contrato com saldo medido/pendente mais explicito.
 - Evoluir painel Atenza/dono do SaaS para controlar tenants, planos, pagamentos, bloqueios, cobranca e inadimplencia.
+
+## Atualizacao - Etapa 10A executada
+
+Status: concluida no escopo minimo de POPs e checklists versionados por servico.
+
+Entregas realizadas:
+
+- Criada tabela `servico_pops` para controlar POP por servico, codigo, versao, status e metadados tecnicos.
+- Servicos passaram a apontar para um POP ativo por meio de `pop_ativo_id`.
+- POPs iniciais foram criados a partir dos campos ja existentes de servicos, procedimentos e checklist.
+- Tela de Servicos foi reescrita em UTF-8 e passou a editar POP versionado com objetivo, aplicacao, responsabilidades, materiais, aprovador e data de aprovacao.
+- Backend passou a salvar servico e POP em transacao, ativando a versao atual e inativando versoes anteriores do mesmo servico.
+- Impressao da OS passou a incluir detalhes do POP ativo quando cadastrados.
+- Encerramento da OS continua consumindo o checklist ativo do servico, agora vindo preferencialmente da versao ativa do POP.
+
+Backlog remanescente da Etapa 10A:
+
+- Criar tela dedicada de historico de versoes de POP por servico.
+- Adicionar anexos formais do POP em PDF/DOCX e controle de arquivo aprovado.
+- Criar fluxo de aprovacao com responsavel tecnico, data, assinatura e bloqueio de edicao retroativa.
+- Persistir na OS um snapshot do POP/checklist usado no momento da emissao/encerramento.
+- Melhorar checklist com tipos de resposta, obrigatoriedade por item, observacao obrigatoria quando nao conforme e evidencias por item.
+- Criar relatorio de conformidade mostrando OS encerradas com checklist incompleto ou POP vencido/inativo.
