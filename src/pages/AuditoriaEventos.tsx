@@ -19,6 +19,13 @@ const entityLabels: Record<string, string> = {
   medicao: "Medição",
   agendamento: "Agendamento",
   recorrencia: "Recorrência",
+  cliente: "Cliente",
+  servico: "Serviço",
+  tecnico: "Técnico",
+  veiculo: "Veículo",
+  alocacao: "Alocação",
+  configuracao: "Configuração",
+  contrato_template: "Proposta/Contrato",
 };
 
 const actionLabels: Record<string, string> = {
@@ -40,6 +47,21 @@ const actionLabels: Record<string, string> = {
   measurement_cancelled: "Medição cancelada",
   recurrence_confirmed: "Recorrência confirmada",
   recurrence_dismissed: "Recorrência dispensada",
+  client_created: "Cliente criado",
+  client_updated: "Cliente atualizado",
+  service_created: "Serviço criado",
+  service_updated: "Serviço atualizado",
+  technician_created: "Técnico criado",
+  technician_updated: "Técnico atualizado",
+  vehicle_created: "Veículo criado",
+  vehicle_updated: "Veículo atualizado",
+  allocation_created: "Alocação criada",
+  allocation_updated: "Alocação atualizada",
+  company_config_updated: "Config. empresa alterada",
+  numbering_config_updated: "Numeração alterada",
+  contract_template_created: "Proposta/contrato criado",
+  contract_template_updated: "Proposta/contrato atualizado",
+  contract_generated_from_proposal: "Contrato gerado",
 };
 
 function compactJson(value?: Record<string, unknown> | null) {

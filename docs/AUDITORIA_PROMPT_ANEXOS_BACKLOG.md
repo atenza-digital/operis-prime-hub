@@ -385,3 +385,24 @@ Backlog remanescente da Etapa 16A:
 - Criar tela de detalhe do evento com diff visual entre `dados_antes` e `dados_depois`.
 - Definir politica de retencao de logs por tenant e rotina de arquivamento.
 - Adicionar alertas para eventos suspeitos: muitas tentativas de login, download em massa, alteracoes fora do horario.
+
+## Atualizacao - Etapa 17A executada
+
+Status: concluida no escopo minimo de auditoria de cadastros comerciais, equipe e configuracoes.
+
+Entregas realizadas:
+
+- Clientes passaram a registrar criacao/edicao com snapshot anterior, resumo e contagem de contatos, locais e equipamentos.
+- Servicos e POP ativo passaram a registrar criacao/edicao, incluindo geracao de certificado, recorrencia, versao/codigo do POP e checklist.
+- Tecnicos, veiculos e alocacoes semanais passaram a registrar criacao/edicao.
+- Configuracoes da empresa e numeracao passaram a registrar alteracoes com antes/depois.
+- Propostas/contratos passaram a registrar criacao/edicao e geracao de contrato a partir de proposta.
+- Tela `Eventos de Auditoria` recebeu rotulos amigaveis para os novos tipos de entidade e acao.
+
+Backlog remanescente da Etapa 17A:
+
+- Criar diff visual detalhado para comparar antes/depois de cadastros complexos.
+- Normalizar snapshots de auditoria para remover campos irrelevantes e reduzir tamanho dos logs.
+- Auditar exclusoes/inativacoes quando forem criados endpoints dedicados.
+- Adicionar filtros por periodo, cliente, contrato, servico e usuario diretamente na tela.
+- Implementar exportacao da trilha de auditoria para CSV/PDF.

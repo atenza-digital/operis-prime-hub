@@ -1537,6 +1537,8 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
   const body = req.body;
   const id = body.id || `CLI-${String(Date.now()).slice(-6)}`;
   await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [id]);
+    const before = beforeRows[0] || null;
     await client.query(
       `INSERT INTO ciperprag_hub.clientes (id, razao_social, nome_fantasia, cnpj, inscricao_estadual, endereco, bairro, municipio, uf, cep, logo_url, ativo)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -1589,6 +1591,23 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
         [equipamentoId, req.auth.user.tenant.id, id, localId, equipamento.tag, equipamento.descricao || null, equipamento.tipo || null, equipamento.setor || null, equipamento.observacoes || null, equipamento.ativo ?? true],
       );
     }
+    await logAuditEvent(client, req, {
+      entityType: "cliente",
+      entityId: id,
+      action: before ? "client_updated" : "client_created",
+      summary: `${before ? "Cliente atualizado" : "Cliente criado"}: ${body.razaoSocial || body.nomeFantasia || id}`,
+      before,
+      after: {
+        id,
+        razaoSocial: body.razaoSocial,
+        nomeFantasia: body.nomeFantasia,
+        cnpj: body.cnpj,
+        ativo: body.ativo,
+        contatos: (body.contatos || []).length,
+        locaisExecucao: (body.locaisExecucao || []).length,
+        equipamentos: (body.equipamentos || []).length,
+      },
+    });
   });
   res.json({ ok: true, id });
 });
@@ -1597,6 +1616,8 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   const body = req.body;
   const id = body.id || `SRV-${String(Date.now()).slice(-6)}`;
   await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE id = $1", [id]);
+    const before = beforeRows[0] || null;
     await client.query(
       `INSERT INTO ciperprag_hub.servicos_catalogo (
         id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
@@ -1664,6 +1685,22 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
 
     if (!hasPopData) {
       await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = NULL WHERE id = $1", [id]);
+      await logAuditEvent(client, req, {
+        entityType: "servico",
+        entityId: id,
+        action: before ? "service_updated" : "service_created",
+        summary: `${before ? "Servico atualizado" : "Servico criado"}: ${body.nome || id}`,
+        before,
+        after: {
+          id,
+          nome: body.nome,
+          tipo: body.tipo,
+          geraCertificado: body.geraCertificado,
+          recorrenciaDias: body.recorrenciaDias,
+          popAtivoId: null,
+          checklistItens: (body.checklistItens || []).length,
+        },
+      });
       return;
     }
 
@@ -1712,6 +1749,24 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
       [id, popId],
     );
     await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = $2 WHERE id = $1", [id, popId]);
+    await logAuditEvent(client, req, {
+      entityType: "servico",
+      entityId: id,
+      action: before ? "service_updated" : "service_created",
+      summary: `${before ? "Servico atualizado" : "Servico criado"}: ${body.nome || id}`,
+      before,
+      after: {
+        id,
+        nome: body.nome,
+        tipo: body.tipo,
+        geraCertificado: body.geraCertificado,
+        recorrenciaDias: body.recorrenciaDias,
+        popAtivoId: popId,
+        popCodigo,
+        popVersao,
+        checklistItens: (body.checklistItens || []).length,
+      },
+    });
   });
   res.json({ ok: true, id });
 });
@@ -1719,41 +1774,73 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
 app.post("/api/technicians", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;
+  const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.tecnicos WHERE id = $1", [id]);
+  const before = beforeRows[0] || null;
   await query(
     `INSERT INTO ciperprag_hub.tecnicos (id, nome, cpf, cargo, data_admissao, telefone, ativo)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (id) DO UPDATE SET nome=EXCLUDED.nome, cpf=EXCLUDED.cpf, cargo=EXCLUDED.cargo, data_admissao=EXCLUDED.data_admissao, telefone=EXCLUDED.telefone, ativo=EXCLUDED.ativo, atualizado_em = NOW()`,
     [id, body.nome, body.cpf, body.cargo, body.dataAdmissao || null, body.telefone, body.ativo],
   );
+  await logAuditEvent(null, req, {
+    entityType: "tecnico",
+    entityId: id,
+    action: before ? "technician_updated" : "technician_created",
+    summary: `${before ? "Tecnico atualizado" : "Tecnico criado"}: ${body.nome || id}`,
+    before,
+    after: { id, nome: body.nome, cpf: body.cpf, cargo: body.cargo, ativo: body.ativo },
+  });
   res.json({ ok: true, id });
 });
 
 app.post("/api/vehicles", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `VEI-${String(Date.now()).slice(-6)}`;
+  const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.veiculos WHERE id = $1", [id]);
+  const before = beforeRows[0] || null;
   await query(
     `INSERT INTO ciperprag_hub.veiculos (id, placa, modelo, ano, ativo)
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (id) DO UPDATE SET placa=EXCLUDED.placa, modelo=EXCLUDED.modelo, ano=EXCLUDED.ano, ativo=EXCLUDED.ativo, atualizado_em = NOW()`,
     [id, body.placa, body.modelo, body.ano, body.ativo],
   );
+  await logAuditEvent(null, req, {
+    entityType: "veiculo",
+    entityId: id,
+    action: before ? "vehicle_updated" : "vehicle_created",
+    summary: `${before ? "Veiculo atualizado" : "Veiculo criado"}: ${body.placa || id}`,
+    before,
+    after: { id, placa: body.placa, modelo: body.modelo, ano: body.ano, ativo: body.ativo },
+  });
   res.json({ ok: true, id });
 });
 
 app.post("/api/allocations", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `AL-${String(Date.now()).slice(-6)}`;
+  const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.alocacoes_semanais WHERE id = $1", [id]);
+  const before = beforeRows[0] || null;
   await query(
     `INSERT INTO ciperprag_hub.alocacoes_semanais (id, tecnico_id, veiculo_id, dia_semana, cliente, servico, turno)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (id) DO UPDATE SET tecnico_id=EXCLUDED.tecnico_id, veiculo_id=EXCLUDED.veiculo_id, dia_semana=EXCLUDED.dia_semana, cliente=EXCLUDED.cliente, servico=EXCLUDED.servico, turno=EXCLUDED.turno`,
     [id, body.tecnicoId, body.veiculoId || null, body.diaSemana, body.cliente, body.servico, body.turno],
   );
+  await logAuditEvent(null, req, {
+    entityType: "alocacao",
+    entityId: id,
+    action: before ? "allocation_updated" : "allocation_created",
+    summary: `${before ? "Alocacao atualizada" : "Alocacao criada"}: ${body.cliente || id}`,
+    before,
+    after: { id, tecnicoId: body.tecnicoId, veiculoId: body.veiculoId || null, diaSemana: body.diaSemana, cliente: body.cliente, servico: body.servico, turno: body.turno },
+  });
   res.json({ ok: true, id });
 });
 
 app.patch("/api/company-config", requirePermission("configuracoes.manage"), async (req, res) => {
   const body = req.body;
+  const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.empresa_config ORDER BY id LIMIT 1");
+  const before = beforeRows[0] || null;
   await query(
     `UPDATE ciperprag_hub.empresa_config SET
       razao_social=$1, nome_fantasia=$2, cnpj=$3, endereco=$4, telefone=$5, email=$6, logo_url=$7,
@@ -1784,11 +1871,28 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.medicaoLocalEntregaPadrao || null,
     ],
   );
+  await logAuditEvent(null, req, {
+    entityType: "configuracao",
+    entityId: "empresa_config",
+    action: "company_config_updated",
+    summary: "Configuracoes da empresa atualizadas",
+    before,
+    after: {
+      razaoSocial: body.razaoSocial,
+      nomeFantasia: body.nomeFantasia,
+      cnpj: body.cnpj,
+      responsavelTecnico: body.responsavelTecnico,
+      certificadoValidadePadraoDias: body.certificadoValidadePadraoDias ?? 30,
+      medicaoFormaPagamentoPadrao: body.medicaoFormaPagamentoPadrao || null,
+    },
+  });
   res.json({ ok: true });
 });
 
 app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), async (req, res) => {
   const body = req.body;
+  const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.numeracao_config ORDER BY id LIMIT 1");
+  const before = beforeRows[0] || null;
   await query(
     `UPDATE ciperprag_hub.numeracao_config SET
       proposta_formato=$1, proposta_ultimo=$2, contrato_formato=$3, contrato_ultimo=$4, os_formato=$5, os_ultimo=$6,
@@ -1807,6 +1911,14 @@ app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), as
       body.medicaoUltimo,
     ],
   );
+  await logAuditEvent(null, req, {
+    entityType: "configuracao",
+    entityId: "numeracao_config",
+    action: "numbering_config_updated",
+    summary: "Configuracoes de numeracao atualizadas",
+    before,
+    after: body,
+  });
   res.json({ ok: true });
 });
 
@@ -1814,6 +1926,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   const body = req.body;
   const id = body.id || `TPL-${String(Date.now()).slice(-6)}`;
   await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1", [id]);
+    const before = beforeRows[0] || null;
     await client.query(
       `INSERT INTO ciperprag_hub.contratos_templates (id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
@@ -1828,6 +1942,22 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         [id, servico.servicoId, servico.quantidade, servico.valorUnitario, servico.frequencia],
       );
     }
+    await logAuditEvent(client, req, {
+      entityType: "contrato_template",
+      entityId: id,
+      action: before ? "contract_template_updated" : "contract_template_created",
+      summary: `${before ? "Modelo comercial atualizado" : "Modelo comercial criado"}: ${body.numero || id}`,
+      before,
+      after: {
+        id,
+        numero: body.numero,
+        tipo: body.tipo,
+        clienteId: body.clienteId,
+        status: body.status,
+        servicos: (body.servicos || []).length,
+        vigenciaMeses: body.vigenciaMeses,
+      },
+    });
   });
   res.json({ ok: true, id });
 });
@@ -1855,6 +1985,14 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
         [newId, service.servico_id, service.quantidade, service.valor_unitario, service.frequencia],
       );
     }
+    await logAuditEvent(client, req, {
+      entityType: "contrato_template",
+      entityId: newId,
+      action: "contract_generated_from_proposal",
+      summary: `Contrato ${number} gerado a partir da proposta ${item.numero || id}`,
+      before: { id, numero: item.numero, tipo: item.tipo, status: item.status },
+      after: { id: newId, numero: number, tipo: "contrato", status: "vigente", propostaOrigemId: id },
+    });
   });
   res.json({ ok: true });
 });
