@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Clock, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Activity, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +78,7 @@ const defaultFilters = {
 };
 
 const FILTER_STORAGE_KEY = "ciperprag_hub_audit_filters";
+const criticalFieldKeywords = ["status", "permiss", "valor", "validade", "quantidade", "hash", "senha", "certificado", "medicao", "contrato", "ativo"];
 
 function compactJson(value?: Record<string, unknown> | null) {
   if (!value) return "";
@@ -113,6 +114,7 @@ function changedRows(before?: Record<string, unknown> | null, after?: Record<str
     key,
     before: formatAuditValue(before?.[key]),
     after: formatAuditValue(after?.[key]),
+    critical: criticalFieldKeywords.some((keyword) => key.toLowerCase().includes(keyword)),
   }));
 }
 
@@ -191,6 +193,16 @@ export default function AuditoriaEventos() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  async function copyDiffRow(row: { key: string; before: string; after: string }) {
+    const text = `Campo: ${row.key}\nAntes: ${row.before}\nDepois: ${row.after}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Linha do diff copiada.");
+    } catch {
+      toast.error("Nao foi possivel copiar automaticamente.");
+    }
   }
 
   useEffect(() => {
@@ -446,14 +458,26 @@ export default function AuditoriaEventos() {
                           <TableHead>Campo</TableHead>
                           <TableHead>Antes</TableHead>
                           <TableHead>Depois</TableHead>
+                          <TableHead className="text-right">Ação</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedChangedRows.map((row) => (
-                          <TableRow key={row.key}>
-                            <TableCell className="w-[180px] align-top font-medium">{row.key}</TableCell>
+                          <TableRow key={row.key} className={row.critical ? "bg-amber-50/70" : undefined}>
+                            <TableCell className="w-[180px] align-top font-medium">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span>{row.key}</span>
+                                {row.critical ? <Badge variant="outline" className="border-amber-300 bg-amber-100 text-amber-900">Crítico</Badge> : null}
+                              </div>
+                            </TableCell>
                             <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm text-muted-foreground">{row.before}</TableCell>
                             <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm">{row.after}</TableCell>
+                            <TableCell className="text-right align-top">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => copyDiffRow(row)}>
+                                <Copy className="mr-1 h-3.5 w-3.5" />
+                                Copiar
+                              </Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

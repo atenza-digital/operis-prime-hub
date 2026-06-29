@@ -461,5 +461,22 @@ Entregas realizadas:
 Backlog remanescente da Etapa 20A:
 
 - Expandir objetos/listas aninhados no diff com navegacao por campo.
-- Destacar visualmente campos criticos, como status, permissao, valor, validade, quantidade e hash.
-- Permitir copiar uma linha especifica do diff para evidencias/suporte.
+- Permitir configurar por tenant quais campos devem ser considerados criticos.
+- Permitir copiar o diff completo do evento para evidencias/suporte.
+
+## Atualizacao - Etapa 21A executada
+
+Status: concluida no escopo minimo de apoio a evidencias no diff de auditoria.
+
+Entregas realizadas:
+
+- Campos criticos no diff passaram a receber destaque visual.
+- A classificacao inicial considera nomes relacionados a status, permissao, valor, validade, quantidade, hash, senha, certificado, medicao, contrato e ativo.
+- Cada linha do diff ganhou botao `Copiar`.
+- A copia inclui campo, valor anterior e novo valor em texto simples, facilitando envio para suporte/evidencia.
+
+Backlog remanescente da Etapa 21A:
+
+- Permitir configurar campos criticos por tenant.
+- Copiar o diff completo do evento em uma unica acao.
+- Registrar quando uma evidencia de auditoria for copiada/exportada, caso isso seja exigido por compliance.
