@@ -298,3 +298,24 @@ Backlog remanescente da Etapa 12A:
 - Incluir assinatura digital/coleta de assinatura no snapshot de encerramento.
 - Criar rotina para enriquecer snapshots legados com dados completos de POP, empresa e contrato quando possivel.
 - Aplicar conceito semelhante de snapshot final em todos os documentos financeiros e comerciais.
+
+## Atualizacao - Etapa 13A executada
+
+Status: concluida no escopo minimo de documentos historicos imutaveis.
+
+Entregas realizadas:
+
+- Anexos passaram a ter `hash_sha256` e flag `imutavel`.
+- Fluxo de encerramento de OS passou a salvar documento historico HTML imutavel com hash.
+- Fluxo de emissao de certificado passou a salvar documento historico HTML imutavel com hash.
+- Fluxo de geracao de medicao passou a salvar documento historico HTML imutavel com hash.
+- Visualizacao da OS passou a separar fotos de documentos historicos e mostrar hash parcial dos documentos imutaveis.
+- Estrutura ficou preparada para substituir o HTML historico por PDF binario server-side mantendo os mesmos metadados e vinculos.
+
+Backlog remanescente da Etapa 13A:
+
+- Implementar geracao real de PDF no backend para OS, certificado e medicao.
+- Criar rota segura de download/visualizacao dos documentos historicos.
+- Criar tela de auditoria para conferir hash, data, usuario e versao do documento.
+- Impedir alteracao/delecao de anexos marcados como imutaveis, exceto por rotina administrativa auditada.
+- Versionar templates de documentos para rastrear qual layout gerou cada historico.

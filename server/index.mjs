@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
@@ -93,6 +94,90 @@ function parseDataUrl(dataUrl) {
     base64Data,
     bytes: Math.floor((base64Data.length * 3) / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0),
   };
+}
+
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function htmlList(items = []) {
+  return items.length ? `<ul>${items.map((item) => `<li>${htmlEscape(item)}</li>`).join("")}</ul>` : "<p>-</p>";
+}
+
+function encodeHtmlDocument(html) {
+  const base64 = Buffer.from(html, "utf8").toString("base64");
+  return {
+    dataUrl: `data:text/html;base64,${base64}`,
+    bytes: Buffer.byteLength(html, "utf8"),
+    hash: crypto.createHash("sha256").update(html, "utf8").digest("hex"),
+  };
+}
+
+async function saveImmutableDocumentAttachment(client, { tenantId, userId, entityType, entityId, fileName, html, metadata = {} }) {
+  const encoded = encodeHtmlDocument(html);
+  await client.query(
+    `INSERT INTO ciperprag_hub.evidencias_anexos
+     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, imutavel, criado_por)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'text/html',$6,$7,$8,$9,TRUE,$10)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      makeId("DOC"),
+      tenantId,
+      entityType,
+      entityId,
+      fileName,
+      encoded.bytes,
+      encoded.dataUrl,
+      JSON.stringify({ ...metadata, formato: "html_historico", hashSha256: encoded.hash }),
+      encoded.hash,
+      userId || null,
+    ],
+  );
+}
+
+function buildHistoricalOrderHtml(snapshot, order) {
+  const data = snapshot.encerramento || snapshot.emissao || {};
+  const servico = data.servico || {};
+  const pop = servico.pop || {};
+  const operacao = data.operacao || {};
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(order.numero)}</title><style>body{font-family:Arial,sans-serif;color:#111;padding:28px}h1{color:#065f46}table{border-collapse:collapse;width:100%;margin:12px 0}td,th{border:1px solid #999;padding:7px;text-align:left}.muted{color:#666;font-size:12px}.box{border:1px solid #aaa;padding:12px;margin:12px 0}</style></head><body>
+    <h1>Ordem de Serviço ${htmlEscape(order.numero)}</h1>
+    <p class="muted">Documento histórico gerado em ${new Date().toLocaleString("pt-BR")}.</p>
+    <table><tr><th>Cliente</th><td>${htmlEscape(data.cliente?.nome || order.cliente)}</td><th>CNPJ</th><td>${htmlEscape(data.cliente?.cnpj || order.cnpj)}</td></tr>
+    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Contrato</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id)}</td></tr>
+    <tr><th>Técnico</th><td>${htmlEscape(data.tecnico?.nome || order.tecnico)}</td><th>Local</th><td>${htmlEscape(operacao.localExecucao || order.local_execucao)}</td></tr>
+    <tr><th>Emissão</th><td>${htmlEscape(data.os?.dataEmissao || formatDbDate(order.data_emissao))}</td><th>Execução</th><td>${htmlEscape(data.os?.dataExecucao || formatDbDate(order.data_execucao))}</td></tr></table>
+    <div class="box"><strong>POP:</strong> ${htmlEscape([pop.codigo, pop.titulo, pop.versao ? `versão ${pop.versao}` : ""].filter(Boolean).join(" - ") || "-")}</div>
+    <h2>Procedimentos</h2>${htmlList(servico.procedimentos || [])}
+    <h2>Checklist</h2>${htmlList((operacao.checklistRespostas || servico.checklistItens || []).map((item) => typeof item === "string" ? item : `${item.concluido ? "[X]" : "[ ]"} ${item.item}`))}
+    <h2>Evidências</h2><p>${(operacao.evidencias || []).length} evidência(s) vinculada(s).</p>
+  </body></html>`;
+}
+
+function buildHistoricalMeasurementHtml(snapshot, measurement) {
+  const itens = snapshot.itens || [];
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(measurement.numero)}</title><style>body{font-family:Arial,sans-serif;padding:28px}h1{color:#065f46}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:7px;text-align:left}.right{text-align:right}</style></head><body>
+    <h1>Medição ${htmlEscape(measurement.numero)}</h1>
+    <p><strong>Cliente:</strong> ${htmlEscape(snapshot.cliente?.nome || measurement.cliente_nome)}</p>
+    <p><strong>Período:</strong> ${htmlEscape(snapshot.periodo?.inicio || measurement.periodo_inicio)} até ${htmlEscape(snapshot.periodo?.fim || measurement.periodo_fim)}</p>
+    <table><thead><tr><th>OS</th><th>Serviço</th><th>Data</th><th>Qtd.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>
+    ${itens.map((item) => `<tr><td>${htmlEscape(item.osNumero)}</td><td>${htmlEscape(item.servico)}</td><td>${htmlEscape(item.dataExecucao)}</td><td>${htmlEscape(item.quantidade)} ${htmlEscape(item.unidade)}</td><td class="right">${Number(item.valorUnitario || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td class="right">${Number(item.valorTotal || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>`).join("")}
+    </tbody><tfoot><tr><th colspan="5" class="right">Total</th><th class="right">${Number(snapshot.total || measurement.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</th></tr></tfoot></table>
+  </body></html>`;
+}
+
+function buildHistoricalCertificateHtml(snapshot, certificate) {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(certificate.numero)}</title><style>body{font-family:Arial,sans-serif;padding:28px}h1{color:#065f46}.box{border:1px solid #999;padding:14px;margin:12px 0}</style></head><body>
+    <h1>Certificado ${htmlEscape(certificate.numero)}</h1>
+    <div class="box"><strong>Hash:</strong> ${htmlEscape(certificate.hash)}</div>
+    <p>Certificamos que <strong>${htmlEscape(snapshot.cliente?.nome || certificate.cliente_nome)}</strong>, CNPJ ${htmlEscape(snapshot.cliente?.cnpj || certificate.cliente_cnpj)}, recebeu o serviço de <strong>${htmlEscape(snapshot.servico?.nome || certificate.servico)}</strong>.</p>
+    <p><strong>OS:</strong> ${htmlEscape(snapshot.os?.numero || certificate.os_numero)} | <strong>Data de execução:</strong> ${htmlEscape(snapshot.os?.dataExecucao || certificate.data_execucao)}</p>
+    <p><strong>Validade até:</strong> ${htmlEscape(snapshot.certificado?.validadeAte || "")}</p>
+  </body></html>`;
 }
 
 function formatDbDate(value) {
@@ -531,6 +616,8 @@ async function getAttachmentsByEntity(entityType) {
       conteudoBase64: row.conteudo_base64,
       url: row.url,
       metadados: row.metadados ?? {},
+      hashSha256: row.hash_sha256,
+      imutavel: row.imutavel,
       criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
     };
     if (!map.has(row.entidade_id)) map.set(row.entidade_id, []);
@@ -684,7 +771,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao } = {}) {
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const snapshot = buildCertificateSnapshot({ order, customer, service, company, hash, number: certNumber, dataExecucao: executionDate, validadeDias });
 
-  await client.query(
+  const insertResult = await client.query(
     `INSERT INTO ciperprag_hub.certificados
      (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17,$18,$19,'emitido')
@@ -711,6 +798,17 @@ async function issueCertificateForOrder(client, order, { dataExecucao } = {}) {
       JSON.stringify(snapshot),
     ],
   );
+  if (insertResult.rowCount > 0) {
+    await saveImmutableDocumentAttachment(client, {
+      tenantId: order.tenant_id || customer?.tenant_id || null,
+      userId: null,
+      entityType: "certificado",
+      entityId: certId,
+      fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
+      html: buildHistoricalCertificateHtml(snapshot, { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero }),
+      metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id },
+    });
+  }
   await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [order.id, hash]);
   return hash;
 }
@@ -1681,6 +1779,15 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
         [id, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
       );
     }
+    await saveImmutableDocumentAttachment(client, {
+      tenantId: req.auth.user.tenant.id,
+      userId: req.auth.user.id,
+      entityType: "medicao",
+      entityId: id,
+      fileName: `medicao-${number.replaceAll("/", "-")}.html`,
+      html: buildHistoricalMeasurementHtml(snapshot, { id, numero: number, cliente_nome: clienteNome, periodo_inicio: dataInicio, periodo_fim: dataFim, total }),
+      metadata: { origem: "geracao_medicao", numero: number, periodo: { inicio: dataInicio, fim: dataFim } },
+    });
 
     return {
       id,
@@ -1871,6 +1978,15 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_encerrado_em = NOW() WHERE id = $1",
       [orderId, JSON.stringify(snapshot)],
     );
+    await saveImmutableDocumentAttachment(client, {
+      tenantId: req.auth.user.tenant.id,
+      userId: req.auth.user.id,
+      entityType: "os",
+      entityId: orderId,
+      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.html`,
+      html: buildHistoricalOrderHtml(snapshot, updatedOrderRows[0]),
+      metadata: { origem: "encerramento_os", osNumero: updatedOrderRows[0].numero, dataExecucao },
+    });
 
     if (!isNotExecuted) {
       await client.query(

@@ -473,6 +473,8 @@ export async function ensureDatabaseShape() {
       conteudo_base64 TEXT,
       url TEXT,
       metadados JSONB NOT NULL DEFAULT '{}'::jsonb,
+      hash_sha256 VARCHAR(64),
+      imutavel BOOLEAN NOT NULL DEFAULT FALSE,
       criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato')),
@@ -480,9 +482,17 @@ export async function ensureDatabaseShape() {
     )
   `);
 
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos
+    ADD COLUMN IF NOT EXISTS hash_sha256 VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS imutavel BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_entidade ON ciperprag_hub.evidencias_anexos(entidade_tipo, entidade_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_tenant ON ciperprag_hub.evidencias_anexos(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_categoria ON ciperprag_hub.evidencias_anexos(categoria)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_hash_sha256 ON ciperprag_hub.evidencias_anexos(hash_sha256)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_imutavel ON ciperprag_hub.evidencias_anexos(imutavel)");
 
   await query(`
     WITH tenant AS (

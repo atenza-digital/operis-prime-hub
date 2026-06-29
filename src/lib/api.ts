@@ -136,6 +136,8 @@ export interface EvidenciaAnexoApp {
   conteudoBase64?: string;
   url?: string;
   metadados?: Record<string, unknown>;
+  hashSha256?: string;
+  imutavel?: boolean;
   criadoEm: string;
 }
 
