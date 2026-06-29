@@ -1157,6 +1157,26 @@ async function getAuditLogsForTenant(tenantId, filters = {}) {
     params.push(filters.action);
     where.push(`l.acao = $${params.length}`);
   }
+  if (filters.entityId) {
+    params.push(`%${String(filters.entityId).trim()}%`);
+    where.push(`l.entidade_id ILIKE $${params.length}`);
+  }
+  if (filters.user) {
+    params.push(`%${String(filters.user).trim()}%`);
+    where.push(`(u.email ILIKE $${params.length} OR u.nome ILIKE $${params.length})`);
+  }
+  if (filters.ip) {
+    params.push(`%${String(filters.ip).trim()}%`);
+    where.push(`l.ip::text ILIKE $${params.length}`);
+  }
+  if (filters.dateFrom) {
+    params.push(`${filters.dateFrom}T00:00:00`);
+    where.push(`l.created_at >= $${params.length}::timestamptz`);
+  }
+  if (filters.dateTo) {
+    params.push(`${filters.dateTo}T23:59:59`);
+    where.push(`l.created_at <= $${params.length}::timestamptz`);
+  }
   if (filters.search) {
     params.push(`%${String(filters.search).trim()}%`);
     where.push(`(l.resumo ILIKE $${params.length} OR l.entidade_id ILIKE $${params.length} OR l.acao ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.nome ILIKE $${params.length})`);
@@ -1361,6 +1381,11 @@ app.get("/api/audit-logs", requirePermission("auditoria.view"), async (req, res)
   const logs = await getAuditLogsForTenant(req.auth.user.tenant.id, {
     entityType: req.query.entityType,
     action: req.query.action,
+    entityId: req.query.entityId,
+    user: req.query.user,
+    ip: req.query.ip,
+    dateFrom: req.query.dateFrom,
+    dateTo: req.query.dateTo,
     search: req.query.search,
     limit: req.query.limit,
   });

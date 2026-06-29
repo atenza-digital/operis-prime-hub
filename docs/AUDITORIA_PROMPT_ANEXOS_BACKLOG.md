@@ -406,3 +406,24 @@ Backlog remanescente da Etapa 17A:
 - Auditar exclusoes/inativacoes quando forem criados endpoints dedicados.
 - Adicionar filtros por periodo, cliente, contrato, servico e usuario diretamente na tela.
 - Implementar exportacao da trilha de auditoria para CSV/PDF.
+
+## Atualizacao - Etapa 18A executada
+
+Status: concluida no escopo minimo de investigacao visual dos eventos de auditoria.
+
+Entregas realizadas:
+
+- Endpoint `/api/audit-logs` passou a aceitar filtros por periodo, usuario/e-mail, IP e ID da entidade.
+- Tela `Eventos de Auditoria` passou a ter filtros avancados em duas linhas, incluindo periodo, usuario, entidade, IP e limite de resultados.
+- Adicionado botao para limpar filtros e recarregar a trilha padrao.
+- Cada evento passou a ter acao `Ver`, abrindo detalhe em modal.
+- Modal exibe metadados do evento, resumo, origem, user-agent e JSON de `antes`/`depois` lado a lado.
+- Quando existe antes/depois, a tela destaca as chaves alteradas para acelerar investigacao.
+
+Backlog remanescente da Etapa 18A:
+
+- Implementar diff visual por campo com valores antigos e novos lado a lado em formato amigavel.
+- Criar filtros especificos por cliente, contrato, servico, numero de OS, certificado e medicao usando relacionamentos.
+- Adicionar exportacao CSV/PDF dos eventos filtrados.
+- Salvar presets de filtros frequentes para administradores.
+- Criar painel de eventos suspeitos e alertas operacionais.

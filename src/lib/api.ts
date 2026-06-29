@@ -525,11 +525,26 @@ export const changePassword = (payload: { currentPassword: string; newPassword: 
   api<{ ok: boolean; user: AuthUser }>("/auth/change-password", { method: "POST", body: JSON.stringify(payload) });
 export const getRoles = () => api<{ ok: boolean; roles: RoleApp[] }>("/roles");
 export const getUsers = () => api<{ ok: boolean; users: UserApp[] }>("/users");
-export const getAuditLogs = (params: { search?: string; entityType?: string; action?: string; limit?: number } = {}) => {
+export const getAuditLogs = (params: {
+  search?: string;
+  entityType?: string;
+  action?: string;
+  entityId?: string;
+  user?: string;
+  ip?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+} = {}) => {
   const search = new URLSearchParams();
   if (params.search) search.set("search", params.search);
   if (params.entityType && params.entityType !== "todos") search.set("entityType", params.entityType);
   if (params.action && params.action !== "todas") search.set("action", params.action);
+  if (params.entityId) search.set("entityId", params.entityId);
+  if (params.user) search.set("user", params.user);
+  if (params.ip) search.set("ip", params.ip);
+  if (params.dateFrom) search.set("dateFrom", params.dateFrom);
+  if (params.dateTo) search.set("dateTo", params.dateTo);
   if (params.limit) search.set("limit", String(params.limit));
   const queryString = search.toString();
   return api<{ ok: boolean; logs: AuditLogApp[] }>(`/audit-logs${queryString ? `?${queryString}` : ""}`);

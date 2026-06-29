@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Clock, DatabaseZap, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Activity, Clock, DatabaseZap, Eye, RotateCcw, Search, ShieldCheck, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -64,23 +65,48 @@ const actionLabels: Record<string, string> = {
   contract_generated_from_proposal: "Contrato gerado",
 };
 
+const defaultFilters = {
+  search: "",
+  entityType: "todos",
+  action: "todas",
+  entityId: "",
+  user: "",
+  ip: "",
+  dateFrom: "",
+  dateTo: "",
+  limit: "250",
+};
+
 function compactJson(value?: Record<string, unknown> | null) {
   if (!value) return "";
   const text = JSON.stringify(value);
   return text.length > 150 ? `${text.slice(0, 150)}...` : text;
 }
 
+function prettyJson(value?: Record<string, unknown> | null) {
+  return value ? JSON.stringify(value, null, 2) : "Sem dados registrados.";
+}
+
+function changedKeys(before?: Record<string, unknown> | null, after?: Record<string, unknown> | null) {
+  if (!before || !after) return [];
+  return Array.from(new Set([...Object.keys(before), ...Object.keys(after)]))
+    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    .sort();
+}
+
 export default function AuditoriaEventos() {
   const [logs, setLogs] = useState<AuditLogApp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [entityType, setEntityType] = useState("todos");
-  const [action, setAction] = useState("todas");
+  const [filters, setFilters] = useState(defaultFilters);
+  const [selectedLog, setSelectedLog] = useState<AuditLogApp | null>(null);
 
-  async function reload() {
+  async function reload(nextFilters = filters) {
     setLoading(true);
     try {
-      const response = await getAuditLogs({ search, entityType, action, limit: 250 });
+      const response = await getAuditLogs({
+        ...nextFilters,
+        limit: Number(nextFilters.limit || 250),
+      });
       setLogs(response.logs);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar eventos de auditoria");
@@ -89,8 +115,17 @@ export default function AuditoriaEventos() {
     }
   }
 
+  function updateFilter(key: keyof typeof defaultFilters, value: string) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function clearFilters() {
+    setFilters(defaultFilters);
+    reload(defaultFilters);
+  }
+
   useEffect(() => {
-    reload();
+    reload(defaultFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -105,21 +140,23 @@ export default function AuditoriaEventos() {
   );
 
   const entityOptions = useMemo(() => {
-    const values = Array.from(new Set(logs.map((item) => item.entidadeTipo))).sort();
-    return values.length ? values : Object.keys(entityLabels);
+    const values = Array.from(new Set([...Object.keys(entityLabels), ...logs.map((item) => item.entidadeTipo)])).sort();
+    return values;
   }, [logs]);
 
   const actionOptions = useMemo(() => {
-    const values = Array.from(new Set(logs.map((item) => item.acao))).sort();
-    return values.length ? values : Object.keys(actionLabels);
+    const values = Array.from(new Set([...Object.keys(actionLabels), ...logs.map((item) => item.acao)])).sort();
+    return values;
   }, [logs]);
+
+  const selectedChangedKeys = useMemo(() => changedKeys(selectedLog?.dadosAntes, selectedLog?.dadosDepois), [selectedLog]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Administração"
         title="Eventos de Auditoria"
-        description="Consulte ações sensíveis executadas na plataforma, com usuário, origem, data/hora e resumo da alteração."
+        description="Consulte ações sensíveis executadas na plataforma, com filtros por período, usuário, IP, entidade e comparação antes/depois."
       />
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -169,9 +206,15 @@ export default function AuditoriaEventos() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_auto]">
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por resumo, usuário, ação ou entidade..." />
-            <Select value={entityType} onValueChange={setEntityType}>
+          <div className="grid gap-3 xl:grid-cols-[1.5fr_0.8fr_0.9fr_0.8fr]">
+            <Input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} placeholder="Buscar por resumo, usuário, ação ou entidade..." />
+            <Input value={filters.user} onChange={(event) => updateFilter("user", event.target.value)} placeholder="Usuário ou e-mail" />
+            <Input value={filters.entityId} onChange={(event) => updateFilter("entityId", event.target.value)} placeholder="ID da entidade" />
+            <Input value={filters.ip} onChange={(event) => updateFilter("ip", event.target.value)} placeholder="IP" />
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[0.9fr_0.9fr_0.8fr_0.8fr_0.6fr_auto_auto]">
+            <Select value={filters.entityType} onValueChange={(value) => updateFilter("entityType", value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Entidade" />
               </SelectTrigger>
@@ -184,7 +227,7 @@ export default function AuditoriaEventos() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={action} onValueChange={setAction}>
+            <Select value={filters.action} onValueChange={(value) => updateFilter("action", value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Ação" />
               </SelectTrigger>
@@ -197,9 +240,25 @@ export default function AuditoriaEventos() {
                 ))}
               </SelectContent>
             </Select>
-            <Button type="button" onClick={reload} disabled={loading}>
+            <Input type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} />
+            <Input type="date" value={filters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} />
+            <Select value={filters.limit} onValueChange={(value) => updateFilter("limit", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Limite" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="100">100</SelectItem>
+                <SelectItem value="250">250</SelectItem>
+                <SelectItem value="500">500</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button type="button" onClick={() => reload()} disabled={loading}>
               <Search className="mr-2 h-4 w-4" />
               Filtrar
+            </Button>
+            <Button type="button" variant="outline" onClick={clearFilters} disabled={loading}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Limpar
             </Button>
           </div>
 
@@ -213,19 +272,20 @@ export default function AuditoriaEventos() {
                   <TableHead>Entidade</TableHead>
                   <TableHead>Resumo</TableHead>
                   <TableHead>Origem</TableHead>
+                  <TableHead className="text-right">Detalhes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                       Carregando eventos...
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!loading && logs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                       Nenhum evento encontrado para os filtros selecionados.
                     </TableCell>
                   </TableRow>
@@ -256,6 +316,12 @@ export default function AuditoriaEventos() {
                       <div className="text-sm">{item.ip || "-"}</div>
                       <div className="max-w-[220px] truncate text-xs text-muted-foreground">{item.userAgent || "Origem não informada"}</div>
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setSelectedLog(item)}>
+                        <Eye className="mr-1 h-3.5 w-3.5" />
+                        Ver
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -263,6 +329,70 @@ export default function AuditoriaEventos() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(selectedLog)} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto">
+          {selectedLog ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Detalhes do evento #{selectedLog.id}</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3 rounded-xl border bg-muted/30 p-4 md:grid-cols-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Quando</p>
+                  <p>{formatDateBr(selectedLog.criadoEm)} {formatTimeBr(selectedLog.criadoEm)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Usuário</p>
+                  <p>{selectedLog.usuario?.nome || "Sistema"}</p>
+                  <p className="text-xs text-muted-foreground">{selectedLog.usuario?.email || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Entidade</p>
+                  <p>{entityLabels[selectedLog.entidadeTipo] || selectedLog.entidadeTipo}</p>
+                  <p className="text-xs text-muted-foreground">{selectedLog.entidadeId || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Origem</p>
+                  <p>{selectedLog.ip || "-"}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold">Resumo</p>
+                <p className="text-sm text-muted-foreground">{selectedLog.resumo || "-"}</p>
+              </div>
+
+              {selectedChangedKeys.length ? (
+                <div>
+                  <p className="mb-2 text-sm font-semibold">Campos alterados</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedChangedKeys.map((key) => (
+                      <Badge key={key} variant="outline">{key}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-sm font-semibold">Antes</p>
+                  <pre className="max-h-[420px] overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-50">{prettyJson(selectedLog.dadosAntes)}</pre>
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-semibold">Depois</p>
+                  <pre className="max-h-[420px] overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-50">{prettyJson(selectedLog.dadosDepois)}</pre>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-semibold">User-agent</p>
+                <code className="block rounded-lg bg-muted p-3 text-xs">{selectedLog.userAgent || "Origem não informada"}</code>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
