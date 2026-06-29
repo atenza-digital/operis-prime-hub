@@ -590,3 +590,24 @@ Backlog remanescente da Etapa 27A:
 - Criar visualizador expansivel para objetos/listas muito grandes dentro do modal de auditoria.
 - Expandir testes para formularios, estados de erro e permissoes negadas.
 - Criar testes de fluxo completo para agendamento, OS, encerramento, certificado e medicao.
+
+## Atualizacao - Etapa 28A executada
+
+Status: concluida no escopo agrupado de compliance leve para evidencias de auditoria.
+
+Entregas realizadas:
+
+- Exportacao CSV de auditoria passou a exigir justificativa antes de gerar o arquivo.
+- Copia de linha do diff e copia do diff completo passaram a exigir justificativa antes de copiar evidencias.
+- Endpoint `/api/audit-logs/evidence` passou a persistir a justificativa informada no snapshot do evento.
+- Tela `Eventos de Auditoria` ganhou exportacao PDF simples usando a impressao do navegador.
+- Exportacao PDF tambem registra evento `audit_evidence_exported` com formato `pdf`, filtros aplicados e justificativa.
+- Eventos de inativacao/bloqueio de usuarios passaram a ser classificados como `user_inactivated`.
+- Inativacao de clientes, servicos, tecnicos e veiculos passou a gerar acoes especificas na auditoria.
+- Labels amigaveis foram adicionados para os novos eventos de inativacao.
+
+Backlog remanescente da Etapa 28A:
+
+- Criar PDF server-side/assinado para auditoria quando houver exigencia formal de validade documental.
+- Auditar exclusoes fisicas e remocoes de itens filhos em cadastros compostos, sem gerar ruido excessivo.
+- Evoluir a justificativa obrigatoria para politica configuravel por tenant/perfil quando houver multiempresa em producao.

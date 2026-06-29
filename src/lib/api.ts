@@ -556,6 +556,7 @@ export const registerAuditEvidence = (payload: {
   format?: string;
   totalEventos?: number;
   filters?: Record<string, unknown>;
+  justification?: string;
 }) => api<{ ok: boolean }>("/audit-logs/evidence", { method: "POST", body: JSON.stringify(payload) });
 export const saveUser = (payload: { id?: string; nome: string; email: string; status: UserApp["status"]; perfilCodigos: string[] }) =>
   api<{ ok: boolean; user: UserApp; temporaryPassword?: string }>("/users", { method: "POST", body: JSON.stringify(payload) });

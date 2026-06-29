@@ -1404,6 +1404,7 @@ app.post("/api/audit-logs/evidence", requirePermission("auditoria.view"), async 
       formato: req.body.format || null,
       totalEventos: req.body.totalEventos || null,
       filtros: req.body.filters || null,
+      justificativa: req.body.justification || null,
     },
   });
   res.json({ ok: true });
@@ -1484,6 +1485,16 @@ app.post("/api/users", requirePermission("usuarios.manage"), async (req, res) =>
       throw error;
     }
 
+    const { rows: beforeUserRows } = body.id
+      ? await client.query(
+          `SELECT id, nome, email, status
+           FROM ciperprag_hub.usuarios
+           WHERE id = $1 AND tenant_id = $2`,
+          [body.id, tenantId],
+        )
+      : { rows: [] };
+    const beforeUser = beforeUserRows[0] || null;
+
     const { rows } = body.id
       ? await client.query(
           `UPDATE ciperprag_hub.usuarios
@@ -1520,18 +1531,25 @@ app.post("/api/users", requirePermission("usuarios.manage"), async (req, res) =>
       );
     }
 
-    await client.query(
-      `INSERT INTO ciperprag_hub.audit_logs
-       (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo)
-       VALUES ($1,$2,'usuario',$3,$4,$5)`,
-      [
-        tenantId,
-        req.auth.user.id,
-        savedUser.id,
-        body.id ? "user_updated" : "user_created",
-        body.id ? `Usuario ${savedUser.email} atualizado` : `Usuario ${savedUser.email} criado`,
-      ],
-    );
+    const auditAction =
+      beforeUser && beforeUser.status !== savedUser.status && ["bloqueado", "inativo"].includes(savedUser.status)
+        ? "user_inactivated"
+        : body.id
+          ? "user_updated"
+          : "user_created";
+    await logAuditEvent(client, req, {
+      entityType: "usuario",
+      entityId: savedUser.id,
+      action: auditAction,
+      summary:
+        auditAction === "user_inactivated"
+          ? `Usuario ${savedUser.email} inativado/bloqueado`
+          : body.id
+            ? `Usuario ${savedUser.email} atualizado`
+            : `Usuario ${savedUser.email} criado`,
+      before: beforeUser,
+      after: { id: savedUser.id, nome: savedUser.nome, email: savedUser.email, status: savedUser.status, perfis: roleCodes },
+    });
 
     return savedUser;
   });
@@ -1633,11 +1651,12 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
         [equipamentoId, req.auth.user.tenant.id, id, localId, equipamento.tag, equipamento.descricao || null, equipamento.tipo || null, equipamento.setor || null, equipamento.observacoes || null, equipamento.ativo ?? true],
       );
     }
+    const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "client_inactivated" : before ? "client_updated" : "client_created";
     await logAuditEvent(client, req, {
       entityType: "cliente",
       entityId: id,
-      action: before ? "client_updated" : "client_created",
-      summary: `${before ? "Cliente atualizado" : "Cliente criado"}: ${body.razaoSocial || body.nomeFantasia || id}`,
+      action: auditAction,
+      summary: `${auditAction === "client_inactivated" ? "Cliente inativado" : before ? "Cliente atualizado" : "Cliente criado"}: ${body.razaoSocial || body.nomeFantasia || id}`,
       before,
       after: {
         id,
@@ -1660,6 +1679,8 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   await withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE id = $1", [id]);
     const before = beforeRows[0] || null;
+    const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "service_inactivated" : before ? "service_updated" : "service_created";
+    const auditSummaryPrefix = auditAction === "service_inactivated" ? "Servico inativado" : before ? "Servico atualizado" : "Servico criado";
     await client.query(
       `INSERT INTO ciperprag_hub.servicos_catalogo (
         id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
@@ -1730,8 +1751,8 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
       await logAuditEvent(client, req, {
         entityType: "servico",
         entityId: id,
-        action: before ? "service_updated" : "service_created",
-        summary: `${before ? "Servico atualizado" : "Servico criado"}: ${body.nome || id}`,
+        action: auditAction,
+        summary: `${auditSummaryPrefix}: ${body.nome || id}`,
         before,
         after: {
           id,
@@ -1794,8 +1815,8 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     await logAuditEvent(client, req, {
       entityType: "servico",
       entityId: id,
-      action: before ? "service_updated" : "service_created",
-      summary: `${before ? "Servico atualizado" : "Servico criado"}: ${body.nome || id}`,
+      action: auditAction,
+      summary: `${auditSummaryPrefix}: ${body.nome || id}`,
       before,
       after: {
         id,
@@ -1818,6 +1839,7 @@ app.post("/api/technicians", requirePermission("equipes.manage"), async (req, re
   const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.tecnicos WHERE id = $1", [id]);
   const before = beforeRows[0] || null;
+  const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "technician_inactivated" : before ? "technician_updated" : "technician_created";
   await query(
     `INSERT INTO ciperprag_hub.tecnicos (id, nome, cpf, cargo, data_admissao, telefone, ativo)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -1827,8 +1849,8 @@ app.post("/api/technicians", requirePermission("equipes.manage"), async (req, re
   await logAuditEvent(null, req, {
     entityType: "tecnico",
     entityId: id,
-    action: before ? "technician_updated" : "technician_created",
-    summary: `${before ? "Tecnico atualizado" : "Tecnico criado"}: ${body.nome || id}`,
+    action: auditAction,
+    summary: `${auditAction === "technician_inactivated" ? "Tecnico inativado" : before ? "Tecnico atualizado" : "Tecnico criado"}: ${body.nome || id}`,
     before,
     after: { id, nome: body.nome, cpf: body.cpf, cargo: body.cargo, ativo: body.ativo },
   });
@@ -1840,6 +1862,7 @@ app.post("/api/vehicles", requirePermission("equipes.manage"), async (req, res) 
   const id = body.id || `VEI-${String(Date.now()).slice(-6)}`;
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.veiculos WHERE id = $1", [id]);
   const before = beforeRows[0] || null;
+  const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "vehicle_inactivated" : before ? "vehicle_updated" : "vehicle_created";
   await query(
     `INSERT INTO ciperprag_hub.veiculos (id, placa, modelo, ano, ativo)
      VALUES ($1,$2,$3,$4,$5)
@@ -1849,8 +1872,8 @@ app.post("/api/vehicles", requirePermission("equipes.manage"), async (req, res) 
   await logAuditEvent(null, req, {
     entityType: "veiculo",
     entityId: id,
-    action: before ? "vehicle_updated" : "vehicle_created",
-    summary: `${before ? "Veiculo atualizado" : "Veiculo criado"}: ${body.placa || id}`,
+    action: auditAction,
+    summary: `${auditAction === "vehicle_inactivated" ? "Veiculo inativado" : before ? "Veiculo atualizado" : "Veiculo criado"}: ${body.placa || id}`,
     before,
     after: { id, placa: body.placa, modelo: body.modelo, ano: body.ano, ativo: body.ativo },
   });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, BookmarkPlus, Clock, Copy, DatabaseZap, Download, Eye, RotateCcw, Search, ShieldCheck, Trash2, UserRoundCheck } from "lucide-react";
+import { Activity, AlertTriangle, BookmarkPlus, Clock, Copy, DatabaseZap, Download, Eye, FileText, RotateCcw, Search, ShieldCheck, Trash2, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,7 @@ const actionLabels: Record<string, string> = {
   password_reset: "Senha resetada",
   user_created: "Usuário criado",
   user_updated: "Usuário atualizado",
+  user_inactivated: "Usuário inativado",
   attachment_view: "Anexo visualizado",
   attachment_download: "Anexo baixado",
   schedule_created: "Agendamento criado",
@@ -51,12 +52,16 @@ const actionLabels: Record<string, string> = {
   recurrence_dismissed: "Recorrência dispensada",
   client_created: "Cliente criado",
   client_updated: "Cliente atualizado",
+  client_inactivated: "Cliente inativado",
   service_created: "Serviço criado",
   service_updated: "Serviço atualizado",
+  service_inactivated: "Serviço inativado",
   technician_created: "Técnico criado",
   technician_updated: "Técnico atualizado",
+  technician_inactivated: "Técnico inativado",
   vehicle_created: "Veículo criado",
   vehicle_updated: "Veículo atualizado",
+  vehicle_inactivated: "Veículo inativado",
   allocation_created: "Alocação criada",
   allocation_updated: "Alocação atualizada",
   company_config_updated: "Config. empresa alterada",
@@ -86,7 +91,7 @@ const FILTER_STORAGE_KEY = "ciperprag_hub_audit_filters";
 const FILTER_PRESETS_STORAGE_KEY = "ciperprag_hub_audit_filter_presets";
 const criticalFieldKeywords = ["status", "permiss", "valor", "validade", "quantidade", "hash", "senha", "certificado", "medicao", "contrato", "ativo"];
 const evidenceActions = ["audit_evidence_copied", "audit_evidence_exported"];
-const sensitiveActions = ["password_reset", "password_changed", "user_created", "user_updated", "company_config_updated", "numbering_config_updated"];
+const sensitiveActions = ["password_reset", "password_changed", "user_created", "user_updated", "user_inactivated", "company_config_updated", "numbering_config_updated"];
 
 const investigationShortcuts: Array<{ label: string; description: string; filters: Partial<AuditFilters> }> = [
   { label: "OS", description: "Eventos de ordens de serviço", filters: { entityType: "os" } },
@@ -212,6 +217,26 @@ function persistPresets(presets: AuditFilterPreset[]) {
 function csvCell(value: unknown) {
   const text = String(value ?? "").replaceAll('"', '""');
   return `"${text}"`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function requestEvidenceJustification(actionLabel: string) {
+  const value = window.prompt(`Informe a justificativa para ${actionLabel}:`);
+  if (value === null) return null;
+  const justification = value.trim();
+  if (!justification) {
+    toast.info("Justificativa obrigatória para evidência de auditoria.");
+    return null;
+  }
+  return justification;
 }
 
 function severityClasses(severity: SuspiciousFinding["severity"]) {
@@ -403,6 +428,8 @@ export default function AuditoriaEventos() {
       toast.info("Nenhum evento para exportar.");
       return;
     }
+    const justification = requestEvidenceJustification("exportar CSV de auditoria");
+    if (!justification) return;
     const headers = ["ID", "Data", "Hora", "Usuario", "Email", "Acao", "Entidade", "Entidade ID", "Resumo", "IP", "User-agent"];
     const rows = logs.map((item) => [
       item.id,
@@ -427,14 +454,93 @@ export default function AuditoriaEventos() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    registerAuditEvidence({ action: "export", origin: "audit_events", format: "csv", totalEventos: logs.length, filters }).catch(() => {});
+    registerAuditEvidence({ action: "export", origin: "audit_events", format: "csv", totalEventos: logs.length, filters, justification }).catch(() => {});
+  }
+
+  function exportPdf() {
+    if (!logs.length) {
+      toast.info("Nenhum evento para exportar.");
+      return;
+    }
+    const justification = requestEvidenceJustification("exportar PDF de auditoria");
+    if (!justification) return;
+
+    const generatedAt = new Date().toISOString();
+    const rows = logs
+      .map(
+        (item) => `
+          <tr>
+            <td>#${escapeHtml(item.id)}</td>
+            <td>${escapeHtml(formatDateBr(item.criadoEm))}<br><small>${escapeHtml(formatTimeBr(item.criadoEm))}</small></td>
+            <td>${escapeHtml(item.usuario?.nome || "Sistema")}<br><small>${escapeHtml(item.usuario?.email || "")}</small></td>
+            <td>${escapeHtml(actionLabels[item.acao] || item.acao)}<br><small>${escapeHtml(item.acao)}</small></td>
+            <td>${escapeHtml(entityLabels[item.entidadeTipo] || item.entidadeTipo)}<br><small>${escapeHtml(item.entidadeId || "-")}</small></td>
+            <td>${escapeHtml(item.resumo || "-")}</td>
+            <td>${escapeHtml(item.ip || "-")}</td>
+          </tr>
+        `,
+      )
+      .join("");
+
+    const popup = window.open("", "_blank", "noopener,noreferrer");
+    if (!popup) {
+      toast.error("Não foi possível abrir a janela de impressão do PDF.");
+      return;
+    }
+
+    popup.document.write(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>Auditoria - Eventos</title>
+          <style>
+            @page { size: A4 landscape; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { color: #101828; font-family: Arial, sans-serif; font-size: 11px; margin: 0; }
+            h1 { font-size: 20px; margin: 0 0 4px; }
+            .meta { color: #475467; margin-bottom: 14px; }
+            .justification { border: 1px solid #d0d5dd; border-radius: 8px; margin-bottom: 12px; padding: 8px; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #d0d5dd; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #ecfdf3; color: #064e3b; font-size: 10px; text-transform: uppercase; }
+            small { color: #667085; }
+          </style>
+        </head>
+        <body>
+          <h1>Eventos de Auditoria</h1>
+          <div class="meta">Gerado em ${escapeHtml(formatDateBr(generatedAt))} ${escapeHtml(formatTimeBr(generatedAt))} - ${escapeHtml(logs.length)} evento(s)</div>
+          <div class="justification"><strong>Justificativa:</strong> ${escapeHtml(justification)}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Quando</th>
+                <th>Usuario</th>
+                <th>Acao</th>
+                <th>Entidade</th>
+                <th>Resumo</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => popup.print(), 250);
+    registerAuditEvidence({ action: "export", origin: "audit_events", format: "pdf", totalEventos: logs.length, filters, justification }).catch(() => {});
   }
 
   async function copyDiffRow(row: Pick<AuditDiffRow, "key" | "before" | "after">, auditLogId?: number) {
+    const justification = requestEvidenceJustification("copiar linha do diff");
+    if (!justification) return;
     const text = `Campo: ${row.key}\nAntes: ${row.before}\nDepois: ${row.after}`;
     try {
       await navigator.clipboard.writeText(text);
-      registerAuditEvidence({ action: "copy", auditLogId, origin: "audit_diff_row", format: "text" }).catch(() => {});
+      registerAuditEvidence({ action: "copy", auditLogId, origin: "audit_diff_row", format: "text", justification }).catch(() => {});
       toast.success("Linha do diff copiada.");
     } catch {
       toast.error("Nao foi possivel copiar automaticamente.");
@@ -442,6 +548,8 @@ export default function AuditoriaEventos() {
   }
 
   async function copyFullDiff(log: AuditLogApp, rows: Array<Pick<AuditDiffRow, "key" | "before" | "after">>) {
+    const justification = requestEvidenceJustification("copiar diff completo");
+    if (!justification) return;
     const header = [
       `Evento: #${log.id}`,
       `Acao: ${actionLabels[log.acao] || log.acao}`,
@@ -455,7 +563,7 @@ export default function AuditoriaEventos() {
       : "\nSem diferenças estruturadas registradas.";
     try {
       await navigator.clipboard.writeText(`${header.join("\n")}\n${body}`);
-      registerAuditEvidence({ action: "copy", auditLogId: log.id, origin: "audit_full_diff", format: "text" }).catch(() => {});
+      registerAuditEvidence({ action: "copy", auditLogId: log.id, origin: "audit_full_diff", format: "text", justification }).catch(() => {});
       toast.success("Diff completo copiado.");
     } catch {
       toast.error("Nao foi possivel copiar automaticamente.");
@@ -651,7 +759,7 @@ export default function AuditoriaEventos() {
             <Input value={filters.ip} onChange={(event) => updateFilter("ip", event.target.value)} placeholder="IP" />
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[0.9fr_0.9fr_0.8fr_0.8fr_0.6fr_auto_auto_auto]">
+          <div className="grid gap-3 xl:grid-cols-[0.9fr_0.9fr_0.8fr_0.8fr_0.6fr_auto_auto_auto_auto]">
             <Select value={filters.entityType} onValueChange={(value) => updateFilter("entityType", value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Entidade" />
@@ -701,6 +809,10 @@ export default function AuditoriaEventos() {
             <Button type="button" variant="outline" onClick={exportCsv} disabled={loading || logs.length === 0}>
               <Download className="mr-2 h-4 w-4" />
               CSV
+            </Button>
+            <Button type="button" variant="outline" onClick={exportPdf} disabled={loading || logs.length === 0}>
+              <FileText className="mr-2 h-4 w-4" />
+              PDF
             </Button>
           </div>
 
