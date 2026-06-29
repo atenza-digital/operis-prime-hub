@@ -117,6 +117,27 @@ function encodeHtmlDocument(html) {
   };
 }
 
+function decodeStoredAttachmentContent(content) {
+  const value = String(content || "");
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (match) {
+    return { mimeType: match[1], buffer: Buffer.from(match[2], "base64") };
+  }
+  return { mimeType: null, buffer: Buffer.from(value, "utf8") };
+}
+
+function attachmentPermissionFor(entityType) {
+  const map = {
+    os: "os.manage",
+    certificado: "certificados.manage",
+    medicao: "medicoes.manage",
+    servico_pop: "servicos.manage",
+    cliente: "clientes.manage",
+    contrato: "contratos.manage",
+  };
+  return map[entityType] || "dashboard.view";
+}
+
 async function saveImmutableDocumentAttachment(client, { tenantId, userId, entityType, entityId, fileName, html, metadata = {} }) {
   const encoded = encodeHtmlDocument(html);
   await client.query(
@@ -613,7 +634,8 @@ async function getAttachmentsByEntity(entityType) {
       nomeArquivo: row.nome_arquivo,
       mimeType: row.mime_type,
       tamanhoBytes: row.tamanho_bytes,
-      conteudoBase64: row.conteudo_base64,
+      conteudoBase64: row.mime_type?.startsWith("image/") ? row.conteudo_base64 : undefined,
+      downloadUrl: `/api/attachments/${encodeURIComponent(row.id)}/download`,
       url: row.url,
       metadados: row.metadados ?? {},
       hashSha256: row.hash_sha256,
@@ -1225,6 +1247,31 @@ app.post("/api/auth/change-password", async (req, res) => {
 app.get("/api/bootstrap", async (_req, res) => {
   if (_req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
   res.json(await getBootstrap());
+});
+
+app.get("/api/attachments/:id/download", async (req, res) => {
+  if (req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
+  const { rows } = await query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE id = $1 LIMIT 1", [req.params.id]);
+  const attachment = rows[0];
+  if (!attachment) return res.status(404).json({ error: "Anexo nao encontrado." });
+
+  const requiredPermission = attachmentPermissionFor(attachment.entidade_tipo);
+  const granted = new Set(req.auth?.user?.permissoes || []);
+  if (!granted.has(requiredPermission)) return res.status(403).json({ error: "Usuario sem permissao para acessar este anexo." });
+  if (!attachment.conteudo_base64 && !attachment.url) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
+  if (attachment.url && !attachment.conteudo_base64) return res.redirect(attachment.url);
+
+  const decoded = decodeStoredAttachmentContent(attachment.conteudo_base64);
+  const mimeType = attachment.mime_type || decoded.mimeType || "application/octet-stream";
+  const dispositionType = req.query.download === "1" ? "attachment" : "inline";
+  const fileName = String(attachment.nome_arquivo || `${attachment.id}.bin`).replaceAll('"', "");
+
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Length", decoded.buffer.length);
+  res.setHeader("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(fileName)}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (attachment.hash_sha256) res.setHeader("X-Document-Hash-Sha256", attachment.hash_sha256);
+  res.send(decoded.buffer);
 });
 
 app.get("/api/roles", requirePermission("usuarios.manage"), async (req, res) => {

@@ -319,3 +319,23 @@ Backlog remanescente da Etapa 13A:
 - Criar tela de auditoria para conferir hash, data, usuario e versao do documento.
 - Impedir alteracao/delecao de anexos marcados como imutaveis, exceto por rotina administrativa auditada.
 - Versionar templates de documentos para rastrear qual layout gerou cada historico.
+
+## Atualizacao - Etapa 14A executada
+
+Status: concluida no escopo minimo de download/visualizacao segura de anexos historicos.
+
+Entregas realizadas:
+
+- Bootstrap passou a omitir o conteudo de anexos nao-imagem, mantendo somente metadados e `downloadUrl`.
+- Criada rota autenticada `/api/attachments/:id/download` para abrir ou baixar anexos.
+- A rota valida permissao conforme o tipo de entidade vinculada ao anexo: OS, certificado, medicao, POP, cliente ou contrato.
+- Download/visualizacao retorna `Content-Type`, `Content-Disposition`, tamanho e header de hash SHA-256 quando existir.
+- Tela de OS passou a ter botoes para abrir e baixar documentos historicos imutaveis.
+
+Backlog remanescente da Etapa 14A:
+
+- Criar uma tela central de anexos/auditoria por cliente, OS, certificado e medicao.
+- Adicionar assinatura de URL temporaria quando o armazenamento sair do banco para storage externo.
+- Implementar preview integrado em modal para PDF/HTML sem abrir nova aba.
+- Criar endpoint administrativo auditado para revogar/substituir anexos quando permitido.
+- Reduzir tambem o payload de imagens usando thumbnails ou URLs assinadas.

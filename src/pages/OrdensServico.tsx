@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { closeOrder, getBootstrap, type BootstrapData, type OSApp, updateOrder } from "@/lib/api";
+import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
 import { PageHeader } from "@/components/PageHeader";
 import { todayInputDateBr } from "@/lib/formatters";
@@ -30,6 +30,25 @@ function formatBytes(bytes?: number) {
 
 function isImageEvidence(anexo: { mimeType?: string; conteudoBase64?: string }) {
   return Boolean(anexo.conteudoBase64) && (anexo.mimeType?.startsWith("image/") || anexo.conteudoBase64?.startsWith("data:image/"));
+}
+
+async function openAttachment(anexo: EvidenciaAnexoApp) {
+  const { blob } = await fetchAttachmentBlob(anexo.id);
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function downloadAttachment(anexo: EvidenciaAnexoApp) {
+  const { blob, fileName } = await fetchAttachmentBlob(anexo.id, true);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = decodeURIComponent(fileName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function printElement(html: string, title: string) {
@@ -351,7 +370,63 @@ export default function OrdensServico() {
       <Dialog open={!!viewOs} onOpenChange={(value) => { if (!value) setViewOs(null); }}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center justify-between"><span>{viewOs?.numero}</span>{viewOs ? <Button size="sm" variant="outline" className="mr-6 gap-1.5" onClick={() => handleImprimirOS(viewOs)}><Printer className="h-3.5 w-3.5" /> Imprimir</Button> : null}</DialogTitle></DialogHeader>
-          {viewOs ? <div className="space-y-3 text-sm"><div className="grid grid-cols-2 gap-3">{[["Número", viewOs.numero], ["Status", viewOs.status === "aberta" ? "Aberta" : "Encerrada"], ["Cliente", viewOs.clienteNome], ["Serviço", viewOs.servico], ["Técnico líder", viewOs.tecnicoNome], ["Equipe", viewOs.equipeTecnicosNomes?.join(" • ") || viewOs.tecnicoNome], ["Local", viewOs.localExecucao], ["Tag equipamento", viewOs.tagEquipamentoServico || "—"], ["Emissão", fmtDate(viewOs.dataEmissao)], ["Execução", viewOs.dataExecucao ? fmtDate(viewOs.dataExecucao) : "—"], ["Quantidade", `${viewOs.quantidade} ${viewOs.unidade}`], ["Certificado", viewOs.certificadoHash || "—"], ["Anexos", `${viewOs.evidencias?.length || viewOs.fotos?.length || 0}`]].map(([label, value]) => <div key={label} className="rounded-lg border bg-muted/30 p-2"><p className="text-[10px] text-muted-foreground">{label}</p><p className="text-xs font-medium">{value}</p></div>)}</div>{(viewOs.evidencias?.length || viewOs.fotos?.length) ? <div><p className="mb-2 text-xs text-muted-foreground">Evidências anexadas</p><div className="flex flex-wrap gap-2">{(viewOs.evidencias?.length ? viewOs.evidencias.filter(isImageEvidence) : viewOs.fotos.map((foto, index) => ({ id: `foto-${index}`, nomeArquivo: `Foto ${index + 1}`, conteudoBase64: foto, tamanhoBytes: undefined }))).map((anexo, index) => <div key={anexo.id || index} className="space-y-1"><img src={anexo.conteudoBase64} alt={anexo.nomeArquivo || `Foto ${index + 1}`} className="h-24 w-24 rounded-lg border object-cover" /><p className="max-w-24 truncate text-[10px] text-muted-foreground">{anexo.nomeArquivo} {formatBytes(anexo.tamanhoBytes)}</p></div>)}</div>{viewOs.evidencias?.some((item) => item.categoria === "pdf_historico") ? <div className="mt-3 rounded-lg border bg-muted/30 p-3"><p className="text-xs font-semibold">Documentos históricos</p>{viewOs.evidencias.filter((item) => item.categoria === "pdf_historico").map((item) => <p key={item.id} className="mt-1 text-[11px] text-muted-foreground">{item.nomeArquivo} {item.imutavel ? "· imutável" : ""} {item.hashSha256 ? `· hash ${item.hashSha256.slice(0, 12)}...` : ""}</p>)}</div> : null}</div> : null}</div> : null}
+          {viewOs ? (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ["Número", viewOs.numero],
+                  ["Status", viewOs.status === "aberta" ? "Aberta" : "Encerrada"],
+                  ["Cliente", viewOs.clienteNome],
+                  ["Serviço", viewOs.servico],
+                  ["Técnico líder", viewOs.tecnicoNome],
+                  ["Equipe", viewOs.equipeTecnicosNomes?.join(" • ") || viewOs.tecnicoNome],
+                  ["Local", viewOs.localExecucao],
+                  ["Tag equipamento", viewOs.tagEquipamentoServico || "—"],
+                  ["Emissão", fmtDate(viewOs.dataEmissao)],
+                  ["Execução", viewOs.dataExecucao ? fmtDate(viewOs.dataExecucao) : "—"],
+                  ["Quantidade", `${viewOs.quantidade} ${viewOs.unidade}`],
+                  ["Certificado", viewOs.certificadoHash || "—"],
+                  ["Anexos", `${viewOs.evidencias?.length || viewOs.fotos?.length || 0}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border bg-muted/30 p-2">
+                    <p className="text-[10px] text-muted-foreground">{label}</p>
+                    <p className="text-xs font-medium">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {(viewOs.evidencias?.length || viewOs.fotos?.length) ? (
+                <div>
+                  <p className="mb-2 text-xs text-muted-foreground">Evidências anexadas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(viewOs.evidencias?.length ? viewOs.evidencias.filter(isImageEvidence) : viewOs.fotos.map((foto, index) => ({ id: `foto-${index}`, nomeArquivo: `Foto ${index + 1}`, conteudoBase64: foto, tamanhoBytes: undefined }))).map((anexo, index) => (
+                      <div key={anexo.id || index} className="space-y-1">
+                        <img src={anexo.conteudoBase64} alt={anexo.nomeArquivo || `Foto ${index + 1}`} className="h-24 w-24 rounded-lg border object-cover" />
+                        <p className="max-w-24 truncate text-[10px] text-muted-foreground">{anexo.nomeArquivo} {formatBytes(anexo.tamanhoBytes)}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {viewOs.evidencias?.some((item) => item.categoria === "pdf_historico") ? (
+                    <div className="mt-3 rounded-lg border bg-muted/30 p-3">
+                      <p className="text-xs font-semibold">Documentos históricos</p>
+                      {viewOs.evidencias.filter((item) => item.categoria === "pdf_historico").map((item) => (
+                        <div key={item.id} className="mt-2 flex flex-col gap-2 rounded-md border bg-background p-2 md:flex-row md:items-center md:justify-between">
+                          <p className="text-[11px] text-muted-foreground">
+                            {item.nomeArquivo} {item.imutavel ? "· imutável" : ""} {item.hashSha256 ? `· hash ${item.hashSha256.slice(0, 12)}...` : ""}
+                          </p>
+                          <div className="flex gap-1.5">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAttachment(item)}>Abrir</Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadAttachment(item)}>Baixar</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

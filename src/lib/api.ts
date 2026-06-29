@@ -134,6 +134,7 @@ export interface EvidenciaAnexoApp {
   mimeType?: string;
   tamanhoBytes?: number;
   conteudoBase64?: string;
+  downloadUrl?: string;
   url?: string;
   metadados?: Record<string, unknown>;
   hashSha256?: string;
@@ -471,6 +472,24 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(error.error || "Erro na API");
   }
   return response.json();
+}
+
+export async function fetchAttachmentBlob(id: string, download = false) {
+  const token = getAuthToken();
+  const response = await fetch(`/api/attachments/${encodeURIComponent(id)}/download${download ? "?download=1" : ""}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Erro ao carregar anexo" }));
+    throw new Error(error.error || "Erro ao carregar anexo");
+  }
+  return {
+    blob: await response.blob(),
+    fileName: response.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1] ?? `${id}.bin`,
+    hashSha256: response.headers.get("x-document-hash-sha256"),
+  };
 }
 
 export const addDays = (dateStr: string, days: number) => {
