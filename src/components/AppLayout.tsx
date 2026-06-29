@@ -11,6 +11,7 @@ import {
   Menu,
   Receipt,
   Settings,
+  ShieldCheck,
   LogOut,
   Users,
   X,
@@ -49,7 +50,10 @@ const navGroups = [
   },
   {
     label: "Administração",
-    items: [{ to: "/usuarios", label: "Usuários e Perfis", shortLabel: "Usuários", icon: Users, permission: "usuarios.manage" }],
+    items: [
+      { to: "/usuarios", label: "Usuários e Perfis", shortLabel: "Usuários", icon: Users, permission: "usuarios.manage" },
+      { to: "/auditoria-eventos", label: "Eventos de Auditoria", shortLabel: "Auditoria", icon: ShieldCheck, permission: "auditoria.view" },
+    ],
   },
 ];
 
@@ -63,6 +67,7 @@ const routeMeta: Record<string, { section: string; title: string; description: s
   "/auditoria-anexos": { section: "Operacional", title: "Auditoria de Anexos", description: "Rastreie evidências, documentos históricos, hashes e downloads seguros." },
   "/equipes": { section: "Equipes", title: "Quadro Semanal", description: "Visualize a alocação operacional de técnicos e veículos." },
   "/usuarios": { section: "Administração", title: "Usuários e Perfis", description: "Gerencie contas, perfis e resets de senha da plataforma." },
+  "/auditoria-eventos": { section: "Administração", title: "Eventos de Auditoria", description: "Consulte ações sensíveis, origem dos acessos e trilha de alterações." },
 };
 
 function NavLink({

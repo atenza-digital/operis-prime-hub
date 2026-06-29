@@ -19,6 +19,7 @@ import Visualizador from "@/pages/Visualizador";
 import Certificados from "@/pages/Certificados";
 import ValidarCertificado from "@/pages/ValidarCertificado";
 import Usuarios from "@/pages/Usuarios";
+import AuditoriaEventos from "@/pages/AuditoriaEventos";
 import AlterarSenha from "@/pages/AlterarSenha";
 import Clientes from "@/pages/comercial/Clientes";
 import Servicos from "@/pages/comercial/Servicos";
@@ -55,6 +56,7 @@ const App = () => (
             <Route element={<ProtectedRoute permission="equipes.manage"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path="/equipes" />
             <Route element={<ProtectedRoute permission="dashboard.view"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path="/visualizar" />
             <Route element={<ProtectedRoute permission="usuarios.manage"><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} path="/usuarios" />
+            <Route element={<ProtectedRoute permission="auditoria.view"><AppLayout><AuditoriaEventos /></AppLayout></ProtectedRoute>} path="/auditoria-eventos" />
 
             {/* Comercial */}
             <Route element={<ProtectedRoute permission="clientes.manage"><ComercialLayout><Clientes /></ComercialLayout></ProtectedRoute>} path="/comercial/clientes" />

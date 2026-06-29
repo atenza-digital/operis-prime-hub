@@ -361,3 +361,27 @@ Backlog remanescente da Etapa 15A:
 - Registrar eventos de visualizacao/download em tabela de auditoria.
 - Adicionar filtros por cliente, contrato, numero de OS, numero de certificado e numero de medicao.
 - Evoluir para storage externo com thumbnails e URLs temporarias assinadas.
+
+## Atualizacao - Etapa 16A executada
+
+Status: concluida no escopo minimo de eventos de auditoria operacional.
+
+Entregas realizadas:
+
+- Reaproveitada a tabela `audit_logs` da fundacao SaaS para registrar eventos reais da aplicacao.
+- Criado endpoint protegido `/api/audit-logs` com filtros por busca, entidade, acao e limite de resultados.
+- Criada tela administrativa `Eventos de Auditoria`, protegida por `auditoria.view`.
+- Menu lateral passou a exibir `Eventos de Auditoria` para perfis autorizados.
+- Downloads e visualizacoes de anexos passaram a registrar usuario, IP, user-agent, entidade vinculada, categoria e hash quando houver.
+- Logout passou a registrar evento de sessao; login e troca/reset de senha ja eram registrados e agora ficam visiveis na tela.
+- Fluxos operacionais principais passaram a registrar eventos: criar/editar agendamento, gerar OS, editar OS, encerrar OS, gerar certificado, gerar/cancelar medicao e confirmar/dispensar recorrencia.
+- Criada migration `012_operational_audit_events.sql` com indices e reforco da permissao `auditoria.view`.
+
+Backlog remanescente da Etapa 16A:
+
+- Registrar eventos de clientes, servicos, contratos, configuracoes e POPs com antes/depois detalhado.
+- Criar exportacao CSV/PDF da auditoria para evidencias de compliance.
+- Adicionar filtros avancados por periodo, usuario, IP, cliente, contrato e numero de documento.
+- Criar tela de detalhe do evento com diff visual entre `dados_antes` e `dados_depois`.
+- Definir politica de retencao de logs por tenant e rotina de arquivamento.
+- Adicionar alertas para eventos suspeitos: muitas tentativas de login, download em massa, alteracoes fora do horario.

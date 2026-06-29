@@ -138,6 +138,31 @@ function attachmentPermissionFor(entityType) {
   return map[entityType] || "dashboard.view";
 }
 
+async function logAuditEvent(db, req, { entityType, entityId = null, action, summary, before = null, after = null }) {
+  try {
+    const runner = db?.query ? db : { query };
+    await runner.query(
+      `INSERT INTO ciperprag_hub.audit_logs
+       (tenant_id, usuario_id, entidade_tipo, entidade_id, acao, resumo, dados_antes, dados_depois, ip, user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        req.auth?.user?.tenant?.id || null,
+        req.auth?.user?.id || null,
+        entityType,
+        entityId,
+        action,
+        summary,
+        before ? JSON.stringify(before) : null,
+        after ? JSON.stringify(after) : null,
+        getRequestIp(req),
+        req.headers["user-agent"] || null,
+      ],
+    );
+  } catch (error) {
+    console.warn("Falha ao registrar auditoria", error.message);
+  }
+}
+
 async function saveImmutableDocumentAttachment(client, { tenantId, userId, entityType, entityId, fileName, html, metadata = {} }) {
   const encoded = encodeHtmlDocument(html);
   await client.query(
@@ -1119,6 +1144,67 @@ async function getUsersForTenant(tenantId) {
   }));
 }
 
+async function getAuditLogsForTenant(tenantId, filters = {}) {
+  const limit = Math.min(Math.max(Number(filters.limit || 150), 1), 500);
+  const where = ["l.tenant_id = $1"];
+  const params = [tenantId];
+
+  if (filters.entityType && filters.entityType !== "todos") {
+    params.push(filters.entityType);
+    where.push(`l.entidade_tipo = $${params.length}`);
+  }
+  if (filters.action && filters.action !== "todas") {
+    params.push(filters.action);
+    where.push(`l.acao = $${params.length}`);
+  }
+  if (filters.search) {
+    params.push(`%${String(filters.search).trim()}%`);
+    where.push(`(l.resumo ILIKE $${params.length} OR l.entidade_id ILIKE $${params.length} OR l.acao ILIKE $${params.length} OR u.email ILIKE $${params.length} OR u.nome ILIKE $${params.length})`);
+  }
+
+  params.push(limit);
+  const { rows } = await query(
+    `SELECT
+       l.id,
+       l.entidade_tipo,
+       l.entidade_id,
+       l.acao,
+       l.resumo,
+       l.dados_antes,
+       l.dados_depois,
+       l.ip::text AS ip,
+       l.user_agent,
+       l.created_at,
+       u.nome AS usuario_nome,
+       u.email AS usuario_email
+     FROM ciperprag_hub.audit_logs l
+     LEFT JOIN ciperprag_hub.usuarios u ON u.id = l.usuario_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY l.created_at DESC, l.id DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    entidadeTipo: row.entidade_tipo,
+    entidadeId: row.entidade_id,
+    acao: row.acao,
+    resumo: row.resumo,
+    dadosAntes: row.dados_antes,
+    dadosDepois: row.dados_depois,
+    ip: row.ip,
+    userAgent: row.user_agent,
+    criadoEm: row.created_at?.toISOString?.() ?? row.created_at,
+    usuario: row.usuario_email
+      ? {
+          nome: row.usuario_nome,
+          email: row.usuario_email,
+        }
+      : null,
+  }));
+}
+
 async function getBootstrap() {
   const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
     await Promise.all([
@@ -1243,6 +1329,12 @@ app.get("/api/auth/me", async (req, res) => {
 });
 
 app.post("/api/auth/logout", async (req, res) => {
+  await logAuditEvent(null, req, {
+    entityType: "usuario",
+    entityId: req.auth.user.id,
+    action: "logout",
+    summary: "Logout realizado",
+  });
   await revokeSession(req.auth.tokenHash);
   res.json({ ok: true });
 });
@@ -1265,6 +1357,16 @@ app.get("/api/bootstrap", async (_req, res) => {
   res.json(await getBootstrap());
 });
 
+app.get("/api/audit-logs", requirePermission("auditoria.view"), async (req, res) => {
+  const logs = await getAuditLogsForTenant(req.auth.user.tenant.id, {
+    entityType: req.query.entityType,
+    action: req.query.action,
+    search: req.query.search,
+    limit: req.query.limit,
+  });
+  res.json({ ok: true, logs });
+});
+
 app.get("/api/attachments/:id/download", async (req, res) => {
   if (req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
   const { rows } = await query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE id = $1 LIMIT 1", [req.params.id]);
@@ -1275,6 +1377,19 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   const granted = new Set(req.auth?.user?.permissoes || []);
   if (!granted.has(requiredPermission)) return res.status(403).json({ error: "Usuario sem permissao para acessar este anexo." });
   if (!attachment.conteudo_base64 && !attachment.url) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
+  await logAuditEvent(null, req, {
+    entityType: "anexo",
+    entityId: attachment.id,
+    action: req.query.download === "1" ? "attachment_download" : "attachment_view",
+    summary: `${req.query.download === "1" ? "Download" : "Visualizacao"} do anexo ${attachment.nome_arquivo}`,
+    after: {
+      entidadeTipo: attachment.entidade_tipo,
+      entidadeId: attachment.entidade_id,
+      categoria: attachment.categoria,
+      nomeArquivo: attachment.nome_arquivo,
+      hashSha256: attachment.hash_sha256,
+    },
+  });
   if (attachment.url && !attachment.conteudo_base64) return res.redirect(attachment.url);
 
   const decoded = decodeStoredAttachmentContent(attachment.conteudo_base64);
@@ -1851,6 +1966,13 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       html: buildHistoricalMeasurementHtml(snapshot, { id, numero: number, cliente_nome: clienteNome, periodo_inicio: dataInicio, periodo_fim: dataFim, total }),
       metadata: { origem: "geracao_medicao", numero: number, periodo: { inicio: dataInicio, fim: dataFim } },
     });
+    await logAuditEvent(client, req, {
+      entityType: "medicao",
+      entityId: id,
+      action: "measurement_generated",
+      summary: `Medicao ${number} gerada para ${clienteNome}`,
+      after: { numero: number, clienteNome, periodoInicio: dataInicio, periodoFim: dataFim, total, itens: items.length },
+    });
 
     return {
       id,
@@ -1877,11 +1999,24 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
 app.patch("/api/measurements/:id/cancel", requirePermission("medicoes.manage"), async (req, res) => {
   const { rowCount } = await query("UPDATE ciperprag_hub.medicoes SET status = 'cancelada', atualizado_em = NOW() WHERE id = $1", [req.params.id]);
   if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
+  await logAuditEvent(null, req, {
+    entityType: "medicao",
+    entityId: req.params.id,
+    action: "measurement_cancelled",
+    summary: `Medicao ${req.params.id} cancelada`,
+  });
   res.json({ ok: true });
 });
 
 app.post("/api/agendamentos", requirePermission("agenda.manage"), async (req, res) => {
   const id = await upsertSchedule(req.body);
+  await logAuditEvent(null, req, {
+    entityType: "agendamento",
+    entityId: id,
+    action: req.body.id ? "schedule_updated" : "schedule_created",
+    summary: `${req.body.id ? "Agendamento atualizado" : "Agendamento criado"} para ${req.body.clienteNome || req.body.cliente || id}`,
+    after: { ...req.body, id },
+  });
   res.json({ ok: true, id });
 });
 
@@ -1889,6 +2024,14 @@ app.patch("/api/agendamentos/:id", requirePermission("agenda.manage"), async (re
   const current = (await getSchedules()).find((item) => item.id === req.params.id);
   if (!current) return res.status(404).json({ error: "Agendamento não encontrado" });
   const id = await upsertSchedule({ ...current, ...req.body, id: req.params.id });
+  await logAuditEvent(null, req, {
+    entityType: "agendamento",
+    entityId: id,
+    action: "schedule_updated",
+    summary: `Agendamento ${id} atualizado`,
+    before: current,
+    after: { ...current, ...req.body, id },
+  });
   res.json({ ok: true, id });
 });
 
@@ -1936,6 +2079,13 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       [orderId, JSON.stringify(snapshot)],
     );
     await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'os_gerada', os_id = $2 WHERE id = $1", [agendamentoId, orderId]);
+    await logAuditEvent(client, req, {
+      entityType: "os",
+      entityId: orderId,
+      action: "order_generated",
+      summary: `OS ${number} gerada a partir do agendamento ${agendamentoId}`,
+      after: { numero: number, agendamentoId, cliente: ag.cliente, servico: ag.servico, tecnico: tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "" },
+    });
     return orderId;
   });
   res.json({ ok: true, id: result });
@@ -1952,6 +2102,26 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
     [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null],
   ).catch(async () => {
     await query(`UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4, tags=$5, tag_equipamento_servico=$6 WHERE id = $1`, [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null]);
+  });
+  await logAuditEvent(null, req, {
+    entityType: "os",
+    entityId: req.params.id,
+    action: "order_updated",
+    summary: `OS ${current.numero || req.params.id} atualizada`,
+    before: {
+      tecnicoNome: current.tecnicoNome,
+      localExecucao: current.localExecucao,
+      observacao: current.observacao,
+      tags: current.tags,
+      tagEquipamentoServico: current.tagEquipamentoServico,
+    },
+    after: {
+      tecnicoNome: body.tecnicoNome,
+      localExecucao: body.localExecucao,
+      observacao: body.observacao,
+      tags: body.tags,
+      tagEquipamentoServico: body.tagEquipamentoServico,
+    },
   });
   res.json({ ok: true });
 });
@@ -2079,6 +2249,13 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     let certificateHash = null;
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
       certificateHash = await issueCertificateForOrder(client, { ...order, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] }, { dataExecucao });
+      await logAuditEvent(client, req, {
+        entityType: "certificado",
+        entityId: certificateHash,
+        action: "certificate_generated",
+        summary: `Certificado ${certificateHash} gerado automaticamente no encerramento da OS ${order.numero || orderId}`,
+        after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+      });
     }
 
     const recorrenciaDias = Number(service?.recorrencia_dias || contract?.validade_dias || 0);
@@ -2090,6 +2267,21 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         [makeId("RC"), order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
       );
     }
+    await logAuditEvent(client, req, {
+      entityType: "os",
+      entityId: orderId,
+      action: "order_closed",
+      summary: `OS ${order.numero || orderId} encerrada${isNotExecuted ? " como nao executada" : ""}`,
+      before: { status: order.status, quantidade: order.quantidade, dataExecucao: order.data_execucao },
+      after: {
+        status: "encerrada",
+        dataExecucao,
+        quantidade: isNotExecuted ? 0 : qty,
+        naoExecutada: isNotExecuted,
+        fotos: Array.isArray(fotos) ? fotos.length : 0,
+        certificadoHash,
+      },
+    });
 
     return { certificateHash };
   });
@@ -2103,7 +2295,17 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   const order = orderRows[0];
   if (!order) return res.status(404).json({ error: "OS nao encontrada" });
   if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
-  const hash = await withTransaction(async (client) => issueCertificateForOrder(client, order));
+  const hash = await withTransaction(async (client) => {
+    const certificateHash = await issueCertificateForOrder(client, order);
+    await logAuditEvent(client, req, {
+      entityType: "certificado",
+      entityId: certificateHash,
+      action: "certificate_generated",
+      summary: `Certificado ${certificateHash} gerado para OS ${order.numero || orderId}`,
+      after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+    });
+    return certificateHash;
+  });
   res.json({ ok: true, hash });
 });
 
@@ -2147,9 +2349,23 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
         [newId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
       );
       await client.query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'confirmada' WHERE id = $1", [id]);
+      await logAuditEvent(client, req, {
+        entityType: "recorrencia",
+        entityId: id,
+        action: "recurrence_confirmed",
+        summary: `Recorrencia ${id} confirmada e novo agendamento ${newId} criado`,
+        after: { agendamentoId: newId, suggestedDate: suggestion.suggested_date, cliente: suggestion.cliente_nome, servico: suggestion.servico },
+      });
     });
   } else {
     await query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'dispensada' WHERE id = $1", [id]);
+    await logAuditEvent(null, req, {
+      entityType: "recorrencia",
+      entityId: id,
+      action: "recurrence_dismissed",
+      summary: `Recorrencia ${id} dispensada`,
+      after: { suggestedDate: suggestion.suggested_date, cliente: suggestion.cliente_nome, servico: suggestion.servico },
+    });
   }
   res.json({ ok: true });
 });

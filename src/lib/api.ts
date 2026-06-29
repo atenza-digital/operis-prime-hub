@@ -437,6 +437,23 @@ export interface UserApp {
   perfis: Array<{ codigo: string; nome: string }>;
 }
 
+export interface AuditLogApp {
+  id: number;
+  entidadeTipo: string;
+  entidadeId?: string | null;
+  acao: string;
+  resumo?: string | null;
+  dadosAntes?: Record<string, unknown> | null;
+  dadosDepois?: Record<string, unknown> | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  criadoEm: string;
+  usuario?: {
+    nome?: string | null;
+    email?: string | null;
+  } | null;
+}
+
 export function getAuthToken() {
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }
@@ -508,6 +525,15 @@ export const changePassword = (payload: { currentPassword: string; newPassword: 
   api<{ ok: boolean; user: AuthUser }>("/auth/change-password", { method: "POST", body: JSON.stringify(payload) });
 export const getRoles = () => api<{ ok: boolean; roles: RoleApp[] }>("/roles");
 export const getUsers = () => api<{ ok: boolean; users: UserApp[] }>("/users");
+export const getAuditLogs = (params: { search?: string; entityType?: string; action?: string; limit?: number } = {}) => {
+  const search = new URLSearchParams();
+  if (params.search) search.set("search", params.search);
+  if (params.entityType && params.entityType !== "todos") search.set("entityType", params.entityType);
+  if (params.action && params.action !== "todas") search.set("action", params.action);
+  if (params.limit) search.set("limit", String(params.limit));
+  const queryString = search.toString();
+  return api<{ ok: boolean; logs: AuditLogApp[] }>(`/audit-logs${queryString ? `?${queryString}` : ""}`);
+};
 export const saveUser = (payload: { id?: string; nome: string; email: string; status: UserApp["status"]; perfilCodigos: string[] }) =>
   api<{ ok: boolean; user: UserApp; temporaryPassword?: string }>("/users", { method: "POST", body: JSON.stringify(payload) });
 export const resetUserPassword = (id: string) =>
