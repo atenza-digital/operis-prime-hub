@@ -422,7 +422,7 @@ Entregas realizadas:
 
 Backlog remanescente da Etapa 18A:
 
-- Implementar diff visual por campo com valores antigos e novos lado a lado em formato amigavel.
+- Melhorar o diff visual para tipos complexos com expansao por item/campo aninhado.
 - Criar filtros especificos por cliente, contrato, servico, numero de OS, certificado e medicao usando relacionamentos.
 - Adicionar exportacao PDF dos eventos filtrados.
 - Evoluir de ultimo filtro salvo para presets nomeados por administrador.
@@ -445,3 +445,21 @@ Backlog remanescente da Etapa 19A:
 - Implementar exportacao PDF dos eventos filtrados.
 - Criar presets nomeados de filtros para administradores.
 - Adicionar exportacao CSV server-side quando o volume de logs crescer alem do limite carregado na tela.
+
+## Atualizacao - Etapa 20A executada
+
+Status: concluida no escopo minimo de diff visual amigavel de auditoria.
+
+Entregas realizadas:
+
+- Modal de detalhes dos eventos passou a mostrar uma tabela `Diferenças identificadas`.
+- A tabela compara campo, valor anterior e novo valor lado a lado.
+- Valores booleanos agora aparecem como `Sim`/`Não`.
+- Listas e objetos grandes passam a ser resumidos para reduzir ruido visual.
+- O JSON completo de antes/depois continua disponivel abaixo da tabela para investigacao profunda.
+
+Backlog remanescente da Etapa 20A:
+
+- Expandir objetos/listas aninhados no diff com navegacao por campo.
+- Destacar visualmente campos criticos, como status, permissao, valor, validade, quantidade e hash.
+- Permitir copiar uma linha especifica do diff para evidencias/suporte.

@@ -96,6 +96,26 @@ function changedKeys(before?: Record<string, unknown> | null, after?: Record<str
     .sort();
 }
 
+function formatAuditValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (Array.isArray(value)) return value.length ? `${value.length} item(ns)` : "Lista vazia";
+  if (typeof value === "object") {
+    const text = JSON.stringify(value);
+    return text.length > 120 ? `${text.slice(0, 120)}...` : text;
+  }
+  const text = String(value);
+  return text.length > 160 ? `${text.slice(0, 160)}...` : text;
+}
+
+function changedRows(before?: Record<string, unknown> | null, after?: Record<string, unknown> | null) {
+  return changedKeys(before, after).map((key) => ({
+    key,
+    before: formatAuditValue(before?.[key]),
+    after: formatAuditValue(after?.[key]),
+  }));
+}
+
 function loadSavedFilters() {
   try {
     const saved = localStorage.getItem(FILTER_STORAGE_KEY);
@@ -198,7 +218,7 @@ export default function AuditoriaEventos() {
     return values;
   }, [logs]);
 
-  const selectedChangedKeys = useMemo(() => changedKeys(selectedLog?.dadosAntes, selectedLog?.dadosDepois), [selectedLog]);
+  const selectedChangedRows = useMemo(() => changedRows(selectedLog?.dadosAntes, selectedLog?.dadosDepois), [selectedLog]);
 
   return (
     <div className="space-y-6">
@@ -416,13 +436,28 @@ export default function AuditoriaEventos() {
                 <p className="text-sm text-muted-foreground">{selectedLog.resumo || "-"}</p>
               </div>
 
-              {selectedChangedKeys.length ? (
+              {selectedChangedRows.length ? (
                 <div>
-                  <p className="mb-2 text-sm font-semibold">Campos alterados</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedChangedKeys.map((key) => (
-                      <Badge key={key} variant="outline">{key}</Badge>
-                    ))}
+                  <p className="mb-2 text-sm font-semibold">Diferenças identificadas</p>
+                  <div className="overflow-hidden rounded-xl border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Campo</TableHead>
+                          <TableHead>Antes</TableHead>
+                          <TableHead>Depois</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedChangedRows.map((row) => (
+                          <TableRow key={row.key}>
+                            <TableCell className="w-[180px] align-top font-medium">{row.key}</TableCell>
+                            <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm text-muted-foreground">{row.before}</TableCell>
+                            <TableCell className="max-w-[330px] whitespace-pre-wrap break-words align-top text-sm">{row.after}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               ) : null}
