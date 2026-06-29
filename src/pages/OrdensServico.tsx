@@ -21,6 +21,13 @@ function fmtDate(date: string) {
   return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
+function formatBytes(bytes?: number) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function printElement(html: string, title: string) {
   const printWindow = window.open("", "_blank", "width=900,height=700");
   if (!printWindow) return;
@@ -248,6 +255,7 @@ export default function OrdensServico() {
                       <div className="flex items-center gap-1 text-muted-foreground"><Users className="h-3 w-3" /> {os.equipeTecnicosNomes?.join(" • ") || os.tecnicoNome}</div>
                       <div className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" /> {os.localExecucao}</div>
                       {(os.tagEquipamentoServico || os.tags) ? <div className="flex items-center gap-1 text-muted-foreground"><Tag className="h-3 w-3" /> {os.tagEquipamentoServico || os.tags}</div> : null}
+                      {os.evidencias?.length ? <div className="flex items-center gap-1 font-medium text-primary"><FileCheck2 className="h-3 w-3" /> {os.evidencias.length} evidência(s)</div> : null}
                       {os.naoExecutada ? <div className="flex items-center gap-1 font-medium text-destructive"><XCircle className="h-3 w-3" /> Não executada</div> : null}
                       {os.certificadoHash ? <div className="flex items-center gap-1 font-medium text-primary"><Award className="h-3 w-3" /> {os.certificadoHash}</div> : null}
                     </div>
@@ -339,7 +347,7 @@ export default function OrdensServico() {
       <Dialog open={!!viewOs} onOpenChange={(value) => { if (!value) setViewOs(null); }}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center justify-between"><span>{viewOs?.numero}</span>{viewOs ? <Button size="sm" variant="outline" className="mr-6 gap-1.5" onClick={() => handleImprimirOS(viewOs)}><Printer className="h-3.5 w-3.5" /> Imprimir</Button> : null}</DialogTitle></DialogHeader>
-          {viewOs ? <div className="space-y-3 text-sm"><div className="grid grid-cols-2 gap-3">{[["Número", viewOs.numero], ["Status", viewOs.status === "aberta" ? "Aberta" : "Encerrada"], ["Cliente", viewOs.clienteNome], ["Serviço", viewOs.servico], ["Técnico líder", viewOs.tecnicoNome], ["Equipe", viewOs.equipeTecnicosNomes?.join(" • ") || viewOs.tecnicoNome], ["Local", viewOs.localExecucao], ["Tag equipamento", viewOs.tagEquipamentoServico || "—"], ["Emissão", fmtDate(viewOs.dataEmissao)], ["Execução", viewOs.dataExecucao ? fmtDate(viewOs.dataExecucao) : "—"], ["Quantidade", `${viewOs.quantidade} ${viewOs.unidade}`], ["Certificado", viewOs.certificadoHash || "—"]].map(([label, value]) => <div key={label} className="rounded-lg border bg-muted/30 p-2"><p className="text-[10px] text-muted-foreground">{label}</p><p className="text-xs font-medium">{value}</p></div>)}</div>{viewOs.fotos?.length ? <div><p className="mb-2 text-xs text-muted-foreground">Fotos de evidência</p><div className="flex flex-wrap gap-2">{viewOs.fotos.map((foto, index) => <img key={index} src={foto} alt={`Foto ${index + 1}`} className="h-24 w-24 rounded-lg border object-cover" />)}</div></div> : null}</div> : null}
+          {viewOs ? <div className="space-y-3 text-sm"><div className="grid grid-cols-2 gap-3">{[["Número", viewOs.numero], ["Status", viewOs.status === "aberta" ? "Aberta" : "Encerrada"], ["Cliente", viewOs.clienteNome], ["Serviço", viewOs.servico], ["Técnico líder", viewOs.tecnicoNome], ["Equipe", viewOs.equipeTecnicosNomes?.join(" • ") || viewOs.tecnicoNome], ["Local", viewOs.localExecucao], ["Tag equipamento", viewOs.tagEquipamentoServico || "—"], ["Emissão", fmtDate(viewOs.dataEmissao)], ["Execução", viewOs.dataExecucao ? fmtDate(viewOs.dataExecucao) : "—"], ["Quantidade", `${viewOs.quantidade} ${viewOs.unidade}`], ["Certificado", viewOs.certificadoHash || "—"], ["Evidências", `${viewOs.evidencias?.length || viewOs.fotos?.length || 0}`]].map(([label, value]) => <div key={label} className="rounded-lg border bg-muted/30 p-2"><p className="text-[10px] text-muted-foreground">{label}</p><p className="text-xs font-medium">{value}</p></div>)}</div>{(viewOs.evidencias?.length || viewOs.fotos?.length) ? <div><p className="mb-2 text-xs text-muted-foreground">Evidências anexadas</p><div className="flex flex-wrap gap-2">{(viewOs.evidencias?.length ? viewOs.evidencias : viewOs.fotos.map((foto, index) => ({ id: `foto-${index}`, nomeArquivo: `Foto ${index + 1}`, conteudoBase64: foto, tamanhoBytes: undefined }))).map((anexo, index) => <div key={anexo.id || index} className="space-y-1"><img src={anexo.conteudoBase64} alt={anexo.nomeArquivo || `Foto ${index + 1}`} className="h-24 w-24 rounded-lg border object-cover" /><p className="max-w-24 truncate text-[10px] text-muted-foreground">{anexo.nomeArquivo} {formatBytes(anexo.tamanhoBytes)}</p></div>)}</div></div> : null}</div> : null}
         </DialogContent>
       </Dialog>
 

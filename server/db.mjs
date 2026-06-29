@@ -424,6 +424,66 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_os ON ciperprag_hub.medicao_itens(os_id)");
 
   await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.evidencias_anexos (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
+      entidade_tipo VARCHAR(30) NOT NULL,
+      entidade_id VARCHAR(40) NOT NULL,
+      categoria VARCHAR(40) NOT NULL DEFAULT 'evidencia',
+      nome_arquivo TEXT NOT NULL,
+      mime_type VARCHAR(120),
+      tamanho_bytes INTEGER,
+      conteudo_base64 TEXT,
+      url TEXT,
+      metadados JSONB NOT NULL DEFAULT '{}'::jsonb,
+      criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato')),
+      CONSTRAINT evidencias_anexos_categoria_check CHECK (categoria IN ('evidencia','foto','documento','pop_aprovado','pdf_historico','outro'))
+    )
+  `);
+
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_entidade ON ciperprag_hub.evidencias_anexos(entidade_tipo, entidade_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_tenant ON ciperprag_hub.evidencias_anexos(tenant_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_categoria ON ciperprag_hub.evidencias_anexos(categoria)");
+
+  await query(`
+    WITH tenant AS (
+      SELECT id FROM ciperprag_hub.tenants WHERE slug = 'ciperprag' LIMIT 1
+    ),
+    expanded AS (
+      SELECT
+        o.id AS os_id,
+        tenant.id AS tenant_id,
+        foto,
+        ord::int AS posicao
+      FROM ciperprag_hub.ordens_servico o
+      CROSS JOIN tenant
+      CROSS JOIN LATERAL unnest(COALESCE(o.fotos, ARRAY[]::TEXT[])) WITH ORDINALITY AS f(foto, ord)
+      WHERE COALESCE(array_length(o.fotos, 1), 0) > 0
+    )
+    INSERT INTO ciperprag_hub.evidencias_anexos (
+      id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type,
+      conteudo_base64, metadados
+    )
+    SELECT
+      'EV-' || os_id || '-' || LPAD(posicao::text, 2, '0'),
+      tenant_id,
+      'os',
+      os_id,
+      'foto',
+      'evidencia-' || LPAD(posicao::text, 2, '0') || '.jpg',
+      CASE
+        WHEN foto LIKE 'data:%;base64,%' THEN split_part(split_part(foto, ';', 1), ':', 2)
+        ELSE 'image/jpeg'
+      END,
+      foto,
+      jsonb_build_object('origem', 'migracao_fotos_os', 'posicao', posicao)
+    FROM expanded
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  await query(`
     UPDATE ciperprag_hub.certificados c
     SET os_numero = COALESCE(c.os_numero, o.numero)
     FROM ciperprag_hub.ordens_servico o

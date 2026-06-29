@@ -31,7 +31,7 @@ O ponto mais critico antes de novas telas grandes e organizar a base operacional
 | Etapa 4 - Comercial/propostas/contratos | Parcial | Ha cadastros comerciais basicos. | Evoluir oportunidade, proposta, aceite, geracao de contrato e status comercial depois dos documentos operacionais. |
 | Etapa 5 - Agenda/calendario | Parcial | Existe agenda/agendamento e quadro semanal. | Melhorar conflitos, visao calendario/kanban, alocacao de equipes, recorrencia confirmada e transicoes de status. |
 | Etapa 6 - OS robusta | Parcial | OS gerada e ajustada para se aproximar do modelo em duas paginas. | Persistir mais campos da OS, suportar cancelamento/nao execucao, acompanhantes, assinaturas, varios itens, riscos, EPI/EPC e textos parametrizados. |
-| Etapa 7 - Evidencias/fotos/anexos | Parcial | Encerramento aceita fotos de forma limitada. | Criar armazenamento estruturado de anexos, metadados, limites por tipo, preview, download e associacao com OS/certificado/medicao. |
+| Etapa 7 - Evidencias/fotos/anexos | Parcial avancado | Evidencias de OS agora possuem tabela estruturada, metadados, vinculo por entidade e visualizacao na OS. | Expandir anexos para POP aprovado, medicao, certificado PDF, download e armazenamento externo. |
 | Etapa 8 - Certificados antifraude | Parcial | Certificado com QR Code e rota publica de validacao foram implementados. | Persistir snapshot final, status, revogacao, hash imutavel, divergencia entre certificado e relatorio e aderencia total ao modelo original. |
 | Etapa 9 - Medicao | Parcial avancado | Medicao persistida com itens, status, historico, snapshot, reimpressao e cancelamento inicial. | Evoluir baixa contratual detalhada, anexos, NF, PDF historico server-side e auditoria de cancelamento. |
 | Etapa 10 - POPs/checklists | Parcial avancado | POPs versionados por servico, checklist ativo e uso no encerramento/OS implementados no escopo inicial. | Evoluir anexos de POP, fluxo de aprovacao formal, historico visual de versoes e assinatura do responsavel tecnico. |
@@ -256,3 +256,25 @@ Backlog remanescente da Etapa 10A:
 - Persistir na OS um snapshot do POP/checklist usado no momento da emissao/encerramento.
 - Melhorar checklist com tipos de resposta, obrigatoriedade por item, observacao obrigatoria quando nao conforme e evidencias por item.
 - Criar relatorio de conformidade mostrando OS encerradas com checklist incompleto ou POP vencido/inativo.
+
+## Atualizacao - Etapa 11A executada
+
+Status: concluida no escopo minimo de evidencias/anexos estruturados.
+
+Entregas realizadas:
+
+- Criada tabela `evidencias_anexos` para centralizar anexos por entidade: OS, certificado, medicao, POP, cliente e contrato.
+- Fotos antigas das OS foram migradas para anexos estruturados sem remover o campo legado `fotos`.
+- Encerramento de OS passou a salvar as fotos tambem como anexos estruturados, com categoria, nome de arquivo, mime type, tamanho aproximado, metadados, usuario e data de criacao.
+- Bootstrap passou a carregar anexos vinculados a cada OS.
+- Tela de Ordens de Servico passou a exibir quantidade de evidencias e galeria baseada preferencialmente nos anexos estruturados.
+- Base ficou preparada para anexar POP aprovado, PDF historico de medicao, certificado gerado e documentos de cliente/contrato.
+
+Backlog remanescente da Etapa 11A:
+
+- Criar upload/download dedicado de anexos fora do fluxo de encerramento da OS.
+- Migrar armazenamento de base64 no banco para storage externo ou filesystem controlado, mantendo apenas metadados e URL segura.
+- Permitir anexos por item de checklist, com obrigatoriedade de evidencia quando item estiver nao conforme.
+- Criar anexos formais para POP aprovado e versoes assinadas.
+- Armazenar PDFs historicos de certificado e medicao como anexos imutaveis.
+- Adicionar antivirus/validador de tipo de arquivo antes de aceitar documentos em producao.

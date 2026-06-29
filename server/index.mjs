@@ -83,6 +83,18 @@ function formatSequential(format, value) {
     .replaceAll("{ANO}", String(year));
 }
 
+function parseDataUrl(dataUrl) {
+  const value = String(dataUrl || "");
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return { mimeType: null, base64Data: value, bytes: null };
+  const base64Data = match[2];
+  return {
+    mimeType: match[1],
+    base64Data,
+    bytes: Math.floor((base64Data.length * 3) / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0),
+  };
+}
+
 function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias }) {
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
@@ -352,7 +364,37 @@ async function getSchedules() {
   }));
 }
 
+async function getAttachmentsByEntity(entityType) {
+  const { rows } = await query(
+    `SELECT *
+     FROM ciperprag_hub.evidencias_anexos
+     WHERE entidade_tipo = $1
+     ORDER BY entidade_id, criado_em, id`,
+    [entityType],
+  );
+  const map = new Map();
+  for (const row of rows) {
+    const item = {
+      id: row.id,
+      entidadeTipo: row.entidade_tipo,
+      entidadeId: row.entidade_id,
+      categoria: row.categoria,
+      nomeArquivo: row.nome_arquivo,
+      mimeType: row.mime_type,
+      tamanhoBytes: row.tamanho_bytes,
+      conteudoBase64: row.conteudo_base64,
+      url: row.url,
+      metadados: row.metadados ?? {},
+      criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
+    };
+    if (!map.has(row.entidade_id)) map.set(row.entidade_id, []);
+    map.get(row.entidade_id).push(item);
+  }
+  return map;
+}
+
 async function getOrders() {
+  const attachmentsByOrder = await getAttachmentsByEntity("os");
   const { rows } = await query("SELECT * FROM ciperprag_hub.ordens_servico ORDER BY data_emissao, id");
   return rows.map((row) => ({
     id: row.id,
@@ -383,6 +425,7 @@ async function getOrders() {
     unidade: row.unidade,
     status: row.status,
     fotos: row.fotos ?? [],
+    evidencias: attachmentsByOrder.get(row.id) ?? [],
     certificadoHash: row.certificado_hash,
     checklistRespostas: row.checklist_respostas ?? [],
     naoExecutada: row.nao_executada ?? false,
@@ -1620,6 +1663,27 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
        WHERE id = $1`,
       [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, fotos || [], JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null],
     );
+
+    await client.query("DELETE FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND categoria = 'foto'", [orderId]);
+    for (const [index, foto] of (Array.isArray(fotos) ? fotos : []).entries()) {
+      const parsed = parseDataUrl(foto);
+      await client.query(
+        `INSERT INTO ciperprag_hub.evidencias_anexos
+         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, criado_por)
+         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9)`,
+        [
+          `${makeId("EV")}-${index + 1}`,
+          req.auth.user.tenant.id,
+          orderId,
+          `evidencia-${String(index + 1).padStart(2, "0")}.jpg`,
+          parsed.mimeType || "image/jpeg",
+          parsed.bytes,
+          foto,
+          JSON.stringify({ origem: "encerramento_os", posicao: index + 1, dataExecucao }),
+          req.auth.user.id,
+        ],
+      );
+    }
 
     if (!isNotExecuted) {
       await client.query(

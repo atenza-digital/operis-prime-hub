@@ -125,6 +125,20 @@ export interface AgendamentoApp {
   createdAt: string;
 }
 
+export interface EvidenciaAnexoApp {
+  id: string;
+  entidadeTipo: "os" | "certificado" | "medicao" | "servico_pop" | "cliente" | "contrato";
+  entidadeId: string;
+  categoria: "evidencia" | "foto" | "documento" | "pop_aprovado" | "pdf_historico" | "outro";
+  nomeArquivo: string;
+  mimeType?: string;
+  tamanhoBytes?: number;
+  conteudoBase64?: string;
+  url?: string;
+  metadados?: Record<string, unknown>;
+  criadoEm: string;
+}
+
 export interface OSApp {
   id: string;
   numero: string;
@@ -154,6 +168,7 @@ export interface OSApp {
   unidade: string;
   status: "aberta" | "encerrada";
   fotos: string[];
+  evidencias?: EvidenciaAnexoApp[];
   certificadoHash?: string;
   checklistRespostas?: Array<{ item: string; concluido: boolean; observacao?: string }>;
   naoExecutada?: boolean;
