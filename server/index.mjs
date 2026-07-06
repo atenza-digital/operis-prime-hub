@@ -84,6 +84,13 @@ function formatSequential(format, value) {
     .replaceAll("{ANO}", String(year));
 }
 
+function assertTenantWrite(rowCount, entityName) {
+  if (rowCount > 0) return;
+  const error = new Error(`${entityName} nao encontrado neste tenant ou pertence a outro tenant.`);
+  error.status = 404;
+  throw error;
+}
+
 function parseDataUrl(dataUrl) {
   const value = String(dataUrl || "");
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
@@ -344,32 +351,6 @@ function buildOrderOperationalSnapshot({ order, customer, contract, service, com
     } : null,
   };
   return { ...(existing || {}), [phase]: phaseSnapshot };
-}
-
-async function getServiceForSnapshot(client, serviceName) {
-  const { rows } = await client.query(
-    `SELECT
-      s.*,
-      p.id AS pop_id,
-      p.codigo AS pop_codigo,
-      p.titulo AS pop_titulo,
-      p.versao AS pop_versao,
-      p.status AS pop_status,
-      p.objetivo AS pop_objetivo,
-      p.aplicacao AS pop_aplicacao,
-      p.responsabilidades AS pop_responsabilidades,
-      p.materiais AS pop_materiais,
-      p.procedimentos AS pop_procedimentos,
-      p.checklist_itens AS pop_checklist_itens,
-      p.aprovado_por AS pop_aprovado_por,
-      p.aprovado_em AS pop_aprovado_em
-    FROM ciperprag_hub.servicos_catalogo s
-    LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id
-    WHERE s.nome = $1
-    LIMIT 1`,
-    [serviceName],
-  );
-  return rows[0];
 }
 
 async function getServiceForTenantSnapshot(client, serviceName, tenantId) {
@@ -1317,7 +1298,7 @@ async function nextSequential(field, tenantId) {
 
 async function upsertSchedule(body, tenantId) {
   const id = body.id || makeId("AG");
-  await query(
+  const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
     (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18, NOW()))
@@ -1359,6 +1340,7 @@ async function upsertSchedule(body, tenantId) {
       body.createdAt || null,
     ],
   );
+  assertTenantWrite(rowCount, "Agendamento");
   return id;
 }
 
@@ -1641,7 +1623,7 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
   await withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
-    await client.query(
+    const { rowCount: clientRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.clientes (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, endereco, bairro, municipio, uf, cep, logo_url, ativo)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (id) DO UPDATE SET
@@ -1657,9 +1639,10 @@ app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) 
          logo_url = EXCLUDED.logo_url,
          ativo = EXCLUDED.ativo,
          atualizado_em = NOW()
-       WHERE ciperprag_hub.clientes.tenant_id = EXCLUDED.tenant_id`,
+      WHERE ciperprag_hub.clientes.tenant_id = EXCLUDED.tenant_id`,
       [id, tenantId, body.razaoSocial, body.nomeFantasia, body.cnpj, body.inscricaoEstadual, body.endereco, body.bairro, body.municipio, body.uf, body.cep, body.logoUrl || null, body.ativo],
     );
+    assertTenantWrite(clientRowCount, "Cliente");
     await client.query("DELETE FROM ciperprag_hub.contatos_cliente WHERE cliente_id = $1 AND EXISTS (SELECT 1 FROM ciperprag_hub.clientes c WHERE c.id = contatos_cliente.cliente_id AND c.tenant_id = $2)", [id, tenantId]);
     for (const contato of body.contatos || []) {
       await client.query(
@@ -1725,7 +1708,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     const before = beforeRows[0] || null;
     const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "service_inactivated" : before ? "service_updated" : "service_created";
     const auditSummaryPrefix = auditAction === "service_inactivated" ? "Servico inativado" : before ? "Servico atualizado" : "Servico criado";
-    await client.query(
+    const { rowCount: serviceRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.servicos_catalogo (
         id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
         produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
@@ -1779,6 +1762,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
         body.ativo,
       ],
     );
+    assertTenantWrite(serviceRowCount, "Servico");
 
     const hasPopData = Boolean(
       body.popCodigo ||
@@ -1886,13 +1870,14 @@ app.post("/api/technicians", requirePermission("equipes.manage"), async (req, re
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.tecnicos WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
   const before = beforeRows[0] || null;
   const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "technician_inactivated" : before ? "technician_updated" : "technician_created";
-  await query(
+  const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.tecnicos (id, tenant_id, nome, cpf, cargo, data_admissao, telefone, ativo)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (id) DO UPDATE SET nome=EXCLUDED.nome, cpf=EXCLUDED.cpf, cargo=EXCLUDED.cargo, data_admissao=EXCLUDED.data_admissao, telefone=EXCLUDED.telefone, ativo=EXCLUDED.ativo, atualizado_em = NOW()
      WHERE ciperprag_hub.tecnicos.tenant_id = EXCLUDED.tenant_id`,
     [id, tenantId, body.nome, body.cpf, body.cargo, body.dataAdmissao || null, body.telefone, body.ativo],
   );
+  assertTenantWrite(rowCount, "Tecnico");
   await logAuditEvent(null, req, {
     entityType: "tecnico",
     entityId: id,
@@ -1911,13 +1896,14 @@ app.post("/api/vehicles", requirePermission("equipes.manage"), async (req, res) 
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.veiculos WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
   const before = beforeRows[0] || null;
   const auditAction = before && before.ativo !== body.ativo && body.ativo === false ? "vehicle_inactivated" : before ? "vehicle_updated" : "vehicle_created";
-  await query(
+  const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.veiculos (id, tenant_id, placa, modelo, ano, ativo)
      VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (id) DO UPDATE SET placa=EXCLUDED.placa, modelo=EXCLUDED.modelo, ano=EXCLUDED.ano, ativo=EXCLUDED.ativo, atualizado_em = NOW()
      WHERE ciperprag_hub.veiculos.tenant_id = EXCLUDED.tenant_id`,
     [id, tenantId, body.placa, body.modelo, body.ano, body.ativo],
   );
+  assertTenantWrite(rowCount, "Veiculo");
   await logAuditEvent(null, req, {
     entityType: "veiculo",
     entityId: id,
@@ -1935,13 +1921,14 @@ app.post("/api/allocations", requirePermission("equipes.manage"), async (req, re
   const tenantId = req.auth.user.tenant.id;
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.alocacoes_semanais WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
   const before = beforeRows[0] || null;
-  await query(
+  const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.alocacoes_semanais (id, tenant_id, tecnico_id, veiculo_id, dia_semana, cliente, servico, turno)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (id) DO UPDATE SET tecnico_id=EXCLUDED.tecnico_id, veiculo_id=EXCLUDED.veiculo_id, dia_semana=EXCLUDED.dia_semana, cliente=EXCLUDED.cliente, servico=EXCLUDED.servico, turno=EXCLUDED.turno
      WHERE ciperprag_hub.alocacoes_semanais.tenant_id = EXCLUDED.tenant_id`,
     [id, tenantId, body.tecnicoId, body.veiculoId || null, body.diaSemana, body.cliente, body.servico, body.turno],
   );
+  assertTenantWrite(rowCount, "Alocacao");
   await logAuditEvent(null, req, {
     entityType: "alocacao",
     entityId: id,
@@ -1958,7 +1945,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
   const tenantId = req.auth.user.tenant.id;
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
   const before = beforeRows[0] || null;
-  await query(
+  const { rowCount } = await query(
     `UPDATE ciperprag_hub.empresa_config SET
       razao_social=$1, nome_fantasia=$2, cnpj=$3, endereco=$4, telefone=$5, email=$6, logo_url=$7,
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
@@ -1989,6 +1976,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       tenantId,
     ],
   );
+  assertTenantWrite(rowCount, "Configuracao da empresa");
   await logAuditEvent(null, req, {
     entityType: "configuracao",
     entityId: "empresa_config",
@@ -2012,7 +2000,7 @@ app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), as
   const tenantId = req.auth.user.tenant.id;
   const { rows: beforeRows } = await query("SELECT * FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
   const before = beforeRows[0] || null;
-  await query(
+  const { rowCount } = await query(
     `UPDATE ciperprag_hub.numeracao_config SET
       proposta_formato=$1, proposta_ultimo=$2, contrato_formato=$3, contrato_ultimo=$4, os_formato=$5, os_ultimo=$6,
       certificado_formato=$7, certificado_ultimo=$8, medicao_formato=$9, medicao_ultimo=$10, atualizado_em = NOW()
@@ -2031,6 +2019,7 @@ app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), as
       tenantId,
     ],
   );
+  assertTenantWrite(rowCount, "Configuracao de numeracao");
   await logAuditEvent(null, req, {
     entityType: "configuracao",
     entityId: "numeracao_config",
@@ -2049,14 +2038,25 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   await withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
-    await client.query(
+    const { rowCount: templateRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.contratos_templates (id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT (id) DO UPDATE SET numero=EXCLUDED.numero, cliente_id=EXCLUDED.cliente_id, tipo=EXCLUDED.tipo, vigencia_meses=EXCLUDED.vigencia_meses, forma_pagamento=EXCLUDED.forma_pagamento, prazo_pagamento_dias=EXCLUDED.prazo_pagamento_dias, status=EXCLUDED.status, data_criacao=EXCLUDED.data_criacao, observacoes=EXCLUDED.observacoes
        WHERE ciperprag_hub.contratos_templates.tenant_id = EXCLUDED.tenant_id`,
       [id, tenantId, body.numero, body.clienteId, body.tipo, body.vigenciaMeses, body.formaPagamento, body.prazoPagamentoDias, body.status, body.dataCriacao, body.observacoes],
     );
-    await client.query("DELETE FROM ciperprag_hub.contratos_templates_servicos WHERE template_id = $1", [id]);
+    assertTenantWrite(templateRowCount, "Modelo comercial");
+    await client.query(
+      `DELETE FROM ciperprag_hub.contratos_templates_servicos s
+       WHERE s.template_id = $1
+         AND EXISTS (
+           SELECT 1
+           FROM ciperprag_hub.contratos_templates t
+           WHERE t.id = s.template_id
+             AND t.tenant_id = $2
+         )`,
+      [id, tenantId],
+    );
     for (const servico of body.servicos || []) {
       await client.query(
         `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
@@ -2100,7 +2100,14 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
        VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9)`,
       [newId, tenantId, number, item.cliente_id, item.vigencia_meses, item.forma_pagamento, item.prazo_pagamento_dias, new Date().toISOString().split("T")[0], `Gerado a partir da proposta ${item.numero}. ${item.observacoes || ""}`],
     );
-    const { rows: services } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates_servicos WHERE template_id = $1", [id]);
+    const { rows: services } = await client.query(
+      `SELECT s.*
+       FROM ciperprag_hub.contratos_templates_servicos s
+       JOIN ciperprag_hub.contratos_templates t ON t.id = s.template_id
+       WHERE s.template_id = $1
+         AND t.tenant_id = $2`,
+      [id, tenantId],
+    );
     for (const service of services) {
       await client.query(
         `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
@@ -2576,32 +2583,6 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
     return certificateHash;
   });
   res.json({ ok: true, hash });
-});
-
-app.post("/api/internal-disabled/legacy-certificado", requirePermission("certificados.manage"), async (req, res) => {
-  return res.status(410).json({ error: "Rota legada removida." });
-  /*
-  const orderId = req.params.id;
-  const { rows: orderRows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1", [orderId]);
-  const order = orderRows[0];
-  if (!order) return res.status(404).json({ error: "OS não encontrada" });
-  const { rows: serviceRows } = await query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1", [order.servico]);
-  const service = serviceRows[0];
-  const { rows: clientRows } = await query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1", [order.cliente_id]);
-  const customer = clientRows[0];
-  const certId = makeId("CERT");
-  const hash = await generateUniqueCertificateHash();
-  const { rows: countRows } = await query("SELECT COUNT(*)::int AS total FROM ciperprag_hub.certificados");
-  const certNumber = `${7297 + countRows[0].total}/${new Date().getFullYear()}`;
-  await query(
-    `INSERT INTO ciperprag_hub.certificados
-    (id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),$16,$17)`,
-    [certId, hash, certNumber, order.id, order.numero, order.cliente_id, order.cliente, order.cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco, customer?.logo_url || order.cliente_logo_url || null, order.contrato_id, order.servico, order.tecnico, order.local_execucao, order.data_execucao || order.data_emissao, service?.validade_certificado_dias || 0, service?.produtos_quimicos || []],
-  );
-  await query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1", [orderId, hash]);
-  res.json({ ok: true, hash });
-  */
 });
 
 app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {

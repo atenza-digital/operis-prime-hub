@@ -959,3 +959,32 @@ Backlog atualizado apos esta etapa:
 Proxima etapa sugerida:
 
 - Concluir a segunda passada P0 de tenant/limpeza tecnica e, na mesma leva, remover fisicamente a rota legada comentada antes de partir para integracao comercial-operacional.
+
+## Atualizacao - Etapa 1 de 8 P0 concluida em segunda passada
+
+Data: 2026-07-06
+
+Status: concluida para o escopo P0 planejado; pendencias futuras foram realocadas dentro das etapas seguintes.
+
+Entregue nesta etapa:
+
+- Removido fisicamente o corpo legado da rota antiga de certificado.
+- Removida funcao antiga de busca de servico sem escopo por tenant.
+- Adicionada protecao `assertTenantWrite()` para evitar sucesso falso quando um ID em conflito pertence a outro tenant.
+- Agenda, clientes, servicos, tecnicos, veiculos, alocacoes, configuracao da empresa, numeracao e modelos comerciais agora validam escrita efetiva por tenant.
+- Servicos vinculados a modelos comerciais passaram a ser apagados/consultados somente quando o modelo pai pertence ao tenant autenticado.
+
+Backlog por etapas, sem itens soltos:
+
+- Quantidade total: 15 itens, todos contemplados em etapas.
+- Etapa 2 de 8 - Documentacao Atenza e rebranding base: criar estrutura `docs/*`, reconciliar documentacao completa com estado real, rebranding Atenza FieldOps em UI/docs/pacote/deploy/pasta local.
+- Etapa 3 de 8 - Integracao comercial para operacional: transformar contrato comercial vigente em contrato operacional, vincular itens comerciais ao saldo operacional, evitar duplicidade entre modelos comerciais e contratos executaveis.
+- Etapa 4 de 8 - Aderencia documental Ciperprag: revisar proposta, contrato, OS, certificado e medicao contra modelos originais; quando houver alteracao visual, gerar PNGs de conferencia.
+- Etapa 5 de 8 - Medicao e acompanhamento financeiro operacional: implementar kanban/status da medicao, NF enviada, aguardando pagamento, pago/baixado no ERP e pendencias, sem contas a pagar/receber.
+- Etapa 6 de 8 - PDFs server-side e anexos imutaveis: gerar documentos server-side, anexar PDF/HTML imutavel com hash e versionar templates.
+- Etapa 7 de 8 - QA, testes E2E e homologacao guiada: implementar E2E completo, teste multi-tenant dedicado, roteiro formal de homologacao e evidencias.
+- Etapa 8 de 8 - Producao e governanca SaaS: observabilidade, backup/restauracao testada, rotina de release, painel Atenza dono do SaaS para tenants, planos, pagamentos e bloqueios.
+
+Proxima etapa sugerida:
+
+- Iniciar Etapa 2 de 8: documentacao Atenza e rebranding base, porque ela organiza o projeto para as proximas entregas e elimina divergencias entre nome, docs, versao, ambiente e estrutura de releases.
