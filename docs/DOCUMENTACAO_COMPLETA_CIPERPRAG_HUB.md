@@ -1313,7 +1313,9 @@ Rota:
 
 Função:
 
-Consolidar serviços executados para faturamento/medição.
+Consolidar serviços executados para medição e acompanhamento operacional pós-serviço.
+
+O sistema não substitui o ERP financeiro. A medição funciona como controle operacional para saber quais serviços foram medidos, qual cliente/contrato está aguardando NF, qual medição já teve NF enviada, qual está aguardando pagamento e qual já foi baixada/paga no ERP.
 
 Entrada:
 
@@ -1343,15 +1345,41 @@ Saída:
 - Valor unitário.
 - Valor total.
 - Total da medição.
+- Status operacional da medição, em evolução para visão tipo kanban.
+- Número/data de NF, quando informado.
+- Observações e pendências de acompanhamento.
 
 Ação:
 
 - Gerar medição.
 - Imprimir PDF via impressão do navegador.
+- Acompanhar status operacional da medição.
 
 Observação:
 
-A medição é gerada para impressão, mas o código atual não cria uma tabela persistente de medições fechadas. Ela é calculada a partir das OS encerradas.
+A medição já possui persistência no banco em `medicoes` e `medicao_itens`. A evolução planejada é transformar essa tela em um acompanhamento tipo kanban/status, sem criar contas a pagar, contas a receber, conciliação, cobrança ou emissão fiscal dentro do sistema.
+
+Status previstos para a evolução:
+
+```text
+em_conferencia
+aguardando_nf
+nf_enviada
+aguardando_pagamento
+pago_no_erp
+pendente_cliente
+cancelada
+```
+
+Fora do escopo:
+
+- Contas a pagar.
+- Contas a receber completo.
+- Emissão fiscal dentro da plataforma.
+- Integração bancária.
+- Conciliação financeira.
+- Controle de caixa.
+- Substituição do ERP.
 
 ## 9.7 Equipes
 
@@ -2112,10 +2140,12 @@ Usuário consegue saber tudo que foi executado para um cliente, com ou sem certi
 6. Clicar em gerar medição.
 7. Conferir total.
 8. Imprimir PDF.
+9. Acompanhar status operacional da medição, quando o kanban/status estiver implementado.
+10. Informar NF enviada, aguardando pagamento, pago/baixado no ERP ou pendência aplicável.
 
 Resultado:
 
-Documento de medição fica pronto para envio/faturamento.
+Documento de medição fica pronto para envio/faturamento operacional e acompanhamento. O ERP permanece responsável pelo financeiro formal, contas a receber, cobrança, fiscal e baixa contábil.
 
 ## 16.10 Fluxo de Recorrência
 
@@ -2135,15 +2165,30 @@ O fluxo operacional reinicia automaticamente na agenda.
 
 É necessário controle externo.
 
-### 17.2 Medição Não Persistida
+### 17.2 Acompanhamento Financeiro Limitado à Medição
 
-A medição é calculada e impressa, mas não há tabela de medições fechadas no banco.
+A medição já é persistida no banco, mas o acompanhamento financeiro dentro do sistema deve ser propositalmente limitado.
+
+O sistema deve apenas indicar o andamento operacional da medição:
+
+- Aguardando conferência.
+- Aguardando NF.
+- NF enviada.
+- Aguardando pagamento.
+- Pago/baixado no ERP.
+- Pendência com cliente.
+- Cancelada.
+
+O sistema não terá contas a pagar, contas a receber completo, conciliação, cobrança, controle de caixa ou emissão fiscal. Esses processos continuam no ERP.
 
 Recomendação futura:
 
-- Criar tabela `medicoes`.
-- Criar tabela `medicao_itens`.
-- Gravar número, período, cliente, total e itens.
+- Criar visão tipo kanban para medições.
+- Registrar número da NF.
+- Registrar data de envio da NF.
+- Registrar observações e pendências.
+- Registrar data/status de baixa informada pelo ERP ou pela equipe.
+- Filtrar por cliente, contrato, período e status operacional.
 
 ### 17.3 Fotos em Base64 no Banco
 
@@ -2321,6 +2366,58 @@ Gestão do dono do SaaS:
 - Definir processo de backup, exportação e encerramento de conta por tenant.
 
 Este backlog deve permanecer visível até ser transformado em épicos/tarefas de produto.
+
+## 22.1 Roadmap Atual por Etapas
+
+O roadmap atual da homologação está organizado em 8 etapas.
+
+### Etapa 1 de 8 - Correções P0 de segurança e consistência
+
+- Isolamento por tenant.
+- Remoção de rota duplicada de certificado.
+- Revisão de endpoints críticos.
+
+### Etapa 2 de 8 - Documentação Atenza e rebranding base
+
+- Estrutura documental padrão Atenza.
+- Atualização da documentação completa.
+- Planejamento do rebranding para Atenza FieldOps.
+
+### Etapa 3 de 8 - Integração comercial para operacional
+
+- Contrato comercial aprovado gerando contrato operacional.
+- Integração entre proposta, contrato, agenda, OS e medição.
+
+### Etapa 4 de 8 - Aderência documental Ciperprag
+
+- Revisão de OS, certificado, proposta, contrato e medição conforme modelos enviados.
+
+### Etapa 5 de 8 - Medição e acompanhamento financeiro operacional
+
+- Kanban/status de medição.
+- NF enviada.
+- Aguardando pagamento.
+- Pago/baixado no ERP.
+- Pendências operacionais por cliente/contrato.
+- Sem contas a pagar/receber dentro do sistema.
+
+### Etapa 6 de 8 - PDFs server-side e anexos imutáveis
+
+- PDF histórico de OS, certificado, medição, proposta e contrato.
+- Hash e versionamento de documentos.
+
+### Etapa 7 de 8 - QA, testes E2E e homologação guiada
+
+- Roteiro formal de homologação.
+- Testes ponta a ponta dos fluxos críticos.
+- Evidências de validação.
+
+### Etapa 8 de 8 - Preparação para produção e governança SaaS
+
+- Separação homologação/produção.
+- Backup e restauração testada.
+- Monitoramento.
+- Painel Atenza para tenants, planos, pagamentos do SaaS e bloqueios.
 
 ## 23. Resumo Executivo Final
 

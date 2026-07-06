@@ -676,7 +676,7 @@ Diagnostico de prontidao:
 - OS e certificado estao mais proximos dos modelos recebidos do que proposta, contrato e medicao.
 - Proposta/contrato comercial ainda sao modelos simplificados e nao devem ser considerados aderentes ao padrao documental final da Ciperprag.
 - Integracao comercial-operacional ainda e parcial: propostas/contratos comerciais ficam em `contratos_templates`, enquanto agenda/OS/medicao usam `contratos`; gerar contrato a partir de proposta ainda nao cria automaticamente o contrato operacional consumido pela agenda.
-- Financeiro ainda esta limitado a medicao; nao ha NF, faturamento, contas a receber, status financeiro ou bloqueios por faturamento.
+- Acompanhamento financeiro operacional ainda esta limitado a medicao; ainda nao ha status/kanban de NF enviada, aguardando pagamento, pago no ERP ou pendencias por cliente/contrato.
 
 Pendencias criticas identificadas por prioridade:
 
@@ -709,10 +709,194 @@ Backlog por ordem de importancia apos diagnostico:
 - P1 - Rebranding: Atenza FieldOps em UI, docs, pacote, deploy e pasta local.
 - P1 - Documentos Ciperprag: revisar proposta, contrato, OS, certificado e medicao contra modelos originais.
 - P1 - PDFs server-side: documentos imutaveis, assinados/hashados e anexados.
-- P1 - E2E: fluxo completo comercial-operacional-financeiro.
+- P1 - E2E: fluxo completo comercial -> operacional -> medicao -> recorrencia.
 - P2 - UX: polir telas comerciais, medicao, empty states, confirmacoes e guias de fluxo.
-- P2 - Financeiro: NF, faturamento, status financeiro e bloqueios.
+- P2 - Acompanhamento financeiro operacional: kanban/status da medicao com NF enviada, aguardando pagamento, pago/baixado no ERP e pendencias, sem contas a pagar/receber dentro do sistema.
 - P2 - POP/anexos: historico de versoes, aprovacao formal e anexos assinados.
 - P2 - Auditoria: filtros server-side, retencao, alertas e politicas por tenant.
 - P3 - Sustentacao: observabilidade, backup/restauracao testada e rotina de release.
 - P3 - SaaS Atenza: painel dono do SaaS, planos, pagamentos e bloqueios.
+
+## Atualizacao - Decisao de escopo financeiro e roadmap por etapas
+
+Data: 2026-07-06
+
+Status: decisao de escopo registrada e backlog reordenado.
+
+Decisao confirmada:
+
+- O sistema nao tera modulo financeiro completo.
+- Nao havera contas a pagar.
+- Nao havera contas a receber.
+- Nao havera conciliacao financeira, caixa, boleto, baixa bancaria ou gestao contabil.
+- O ERP continuara responsavel por contas a pagar, contas a receber, fiscal, cobranca e financeiro formal.
+- O escopo financeiro dentro do Atenza FieldOps sera apenas o acompanhamento operacional das medicoes geradas a partir dos servicos executados.
+
+Escopo financeiro correto para o sistema:
+
+- Gerar medicao com base nas OS executadas e no contrato.
+- Permitir acompanhar a medicao em formato de status ou kanban.
+- Registrar se a NF foi solicitada/enviada.
+- Registrar numero da NF, quando informado pela equipe.
+- Registrar data de envio da NF ao cliente.
+- Indicar se esta aguardando pagamento.
+- Indicar se foi pago/baixado no ERP.
+- Indicar pendencias simples de medicao, como aguardando conferencia, aguardando NF, aguardando cliente, aguardando pagamento ou concluida.
+- Manter historico da medicao, anexos e documentos relacionados.
+- Servir como visao operacional para a equipe saber em que ponto esta cada cliente/contrato apos a execucao do servico.
+
+Fora do escopo financeiro:
+
+- Contas a pagar.
+- Contas a receber completo.
+- Fluxo de cobranca.
+- Emissao fiscal dentro da plataforma.
+- Integracao bancaria.
+- Conciliacao.
+- Controle de caixa.
+- DRE, balancete ou financeiro gerencial amplo.
+- Substituicao do ERP.
+
+Roadmap reestruturado por etapas:
+
+### Etapa 1 de 8 - Correcoes P0 de seguranca e consistencia
+
+Objetivo:
+
+- Remover riscos bloqueantes antes de ampliar homologacao.
+
+Escopo:
+
+- Aplicar isolamento por tenant nas consultas e mutacoes operacionais.
+- Remover rota duplicada de geracao manual de certificado.
+- Revisar endpoints criticos com permissao e tenant.
+- Rodar testes, lint e build.
+
+Status: pendente.
+
+### Etapa 2 de 8 - Documentacao Atenza e rebranding base
+
+Objetivo:
+
+- Organizar o projeto no padrao Atenza e preparar a mudanca para Atenza FieldOps.
+
+Escopo:
+
+- Criar estrutura `docs/backlog`, `docs/cliente`, `docs/interno`, `docs/evidencias`, `docs/versoes`, `docs/releases` e `docs/validados`.
+- Atualizar documentacao completa para refletir login, auditoria, medicao persistida e anexos.
+- Planejar rebranding completo para Atenza FieldOps.
+- Registrar versao/release da base de homologacao.
+
+Status: parcial, com backlog vivo atualizado, mas estrutura documental ainda pendente.
+
+### Etapa 3 de 8 - Integracao comercial para operacional
+
+Objetivo:
+
+- Fazer o contrato comercial aprovado virar base operacional para agenda, OS e medicao.
+
+Escopo:
+
+- Ao gerar contrato a partir de proposta aprovada, criar/atualizar contrato operacional.
+- Vincular itens comerciais aos servicos operacionais.
+- Definir saldo contratado, valor unitario, frequencia, recorrencia e locais/tags aplicaveis.
+- Evitar duplicidade entre `contratos_templates` e `contratos`.
+
+Status: pendente.
+
+### Etapa 4 de 8 - Aderencia documental Ciperprag
+
+Objetivo:
+
+- Aproximar OS, certificado, proposta, contrato e medicao dos modelos reais enviados.
+
+Escopo:
+
+- Revisar layout e campos da OS.
+- Revisar layout e campos do certificado.
+- Revisar proposta e contrato comercial, hoje simplificados.
+- Revisar medicao conforme modelo original.
+- Parametrizar textos e evitar conteudo fixo espalhado.
+
+Status: parcial; OS e certificado estao mais avancados, proposta/contrato/medicao ainda precisam evoluir.
+
+### Etapa 5 de 8 - Medicao e acompanhamento financeiro operacional
+
+Objetivo:
+
+- Transformar a medicao em painel operacional de acompanhamento pos-servico, sem substituir o ERP.
+
+Escopo:
+
+- Criar status/kanban de medicao.
+- Status sugeridos: `em_conferencia`, `aguardando_nf`, `nf_enviada`, `aguardando_pagamento`, `pago_no_erp`, `pendente_cliente`, `cancelada`.
+- Registrar numero da NF, data de envio, observacoes e anexos.
+- Permitir filtros por cliente, contrato, periodo, status e vencimento operacional.
+- Manter historico de alteracoes e auditoria.
+- Nao criar contas a pagar/receber.
+
+Status: pendente.
+
+### Etapa 6 de 8 - PDFs server-side e anexos imutaveis
+
+Objetivo:
+
+- Substituir documentos apenas imprimiveis por documentos historicos mais confiaveis.
+
+Escopo:
+
+- Gerar PDF server-side de OS, certificado, medicao, proposta e contrato.
+- Armazenar PDF como anexo imutavel com hash.
+- Permitir download/visualizacao segura.
+- Versionar templates de documentos.
+
+Status: parcial; anexos historicos HTML ja existem, PDF server-side ainda pendente.
+
+### Etapa 7 de 8 - QA, testes E2E e homologacao guiada
+
+Objetivo:
+
+- Preparar rodada formal de teste com usuarios.
+
+Escopo:
+
+- Criar roteiro formal de homologacao operacional/comercial.
+- Automatizar fluxo E2E: comercial -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
+- Revisar UX, estados vazios, mensagens e confirmacoes.
+- Registrar evidencias em `docs/evidencias`.
+
+Status: parcial; smoke tests existem, E2E e roteiro formal pendentes.
+
+### Etapa 8 de 8 - Preparacao para producao e governanca SaaS
+
+Objetivo:
+
+- Preparar o produto para operar como SaaS da Atenza.
+
+Escopo:
+
+- Separar homologacao e producao.
+- Definir backup/restauracao testada.
+- Definir monitoramento, logs e release/rollback.
+- Criar painel Atenza para tenants, planos, bloqueios e controle de pagamentos do SaaS.
+- Criar checklist de prontidao para producao e Go-Live.
+
+Status: pendente.
+
+Nota para Sinergia CRM:
+
+- A atualizacao deve ser registrada no CRM como mudanca de escopo/decisao funcional.
+- Nao registrar credenciais, senhas ou dados sensiveis.
+- Texto sugerido de anotacao:
+
+```text
+Resumo da atualizacao:
+- O que foi feito: escopo financeiro redefinido para acompanhamento operacional de medicoes, com status/kanban de NF e pagamento, sem contas a pagar/receber dentro do sistema.
+- Documentos atualizados: backlog tecnico e roadmap do projeto.
+- Testes/validacoes realizadas: revisao documental e reordenacao das etapas por prioridade.
+- Pendencias: implementar Etapa 5 de 8 com kanban/status de medicao, NF enviada, aguardando pagamento e pago no ERP.
+- Riscos/bloqueios: antes da homologacao ampla ainda existem P0 de tenant, rota duplicada de certificado e integracao comercial-operacional.
+- Backlog identificado: financeiro limitado a medicao; ERP permanece responsavel pelo financeiro formal.
+- Proxima acao: iniciar Etapa 1 de 8 com correcoes P0.
+- Status sugerido: Em andamento.
+```
