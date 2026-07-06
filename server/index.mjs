@@ -607,6 +607,10 @@ async function getContracts(tenantId) {
   const { rows } = await query("SELECT * FROM ciperprag_hub.contratos WHERE tenant_id = $1 ORDER BY id", [tenantId]);
   return rows.map((row) => ({
     id: row.id,
+    contratoTemplateId: row.contrato_template_id,
+    contratoTemplateServicoId: row.contrato_template_servico_id,
+    servicoCatalogoId: row.servico_catalogo_id,
+    numeroComercial: row.numero_comercial,
     clienteId: row.cliente_id,
     cliente: row.cliente,
     cnpj: row.cnpj,
@@ -617,8 +621,11 @@ async function getContracts(tenantId) {
     unidade: row.unidade,
     status: row.status,
     ultimaExecucao: row.ultima_execucao?.toISOString?.().split("T")[0] ?? row.ultima_execucao,
+    vigenciaInicio: row.vigencia_inicio?.toISOString?.().split("T")[0] ?? row.vigencia_inicio,
+    vigenciaFim: row.vigencia_fim?.toISOString?.().split("T")[0] ?? row.vigencia_fim,
     validadeDias: row.validade_dias,
     valorUnitario: Number(row.valor_unitario ?? 0),
+    frequencia: row.frequencia,
     tags: row.tags ?? [],
     produtosQuimicos: row.produtos_quimicos ?? [],
     epis: row.epis ?? [],
@@ -977,13 +984,21 @@ async function getContractTemplates(tenantId) {
   const { rows } = await query(`
     SELECT
       t.*,
+      s.id AS template_servico_id,
       s.servico_id,
       s.quantidade,
       s.valor_unitario,
-      s.frequencia
+      s.frequencia,
+      o.id AS contrato_operacional_id,
+      o.status AS contrato_operacional_status,
+      o.executado AS contrato_operacional_executado
     FROM ciperprag_hub.contratos_templates t
     LEFT JOIN ciperprag_hub.contratos_templates_servicos s
       ON s.template_id = t.id
+    LEFT JOIN ciperprag_hub.contratos o
+      ON o.tenant_id = t.tenant_id
+     AND o.contrato_template_id = t.id
+     AND o.servico_catalogo_id = s.servico_id
     WHERE t.tenant_id = $1
     ORDER BY t.id, s.id
   `, [tenantId]);
@@ -1002,18 +1017,241 @@ async function getContractTemplates(tenantId) {
         status: row.status,
         dataCriacao: row.data_criacao?.toISOString?.().split("T")[0] ?? row.data_criacao,
         observacoes: row.observacoes,
+        operacionalizado: false,
+        contratosOperacionaisIds: [],
       });
     }
     if (row.servico_id) {
+      if (row.contrato_operacional_id) {
+        map.get(row.id).operacionalizado = true;
+        map.get(row.id).contratosOperacionaisIds.push(row.contrato_operacional_id);
+      }
       map.get(row.id).servicos.push({
+        id: row.template_servico_id,
         servicoId: row.servico_id,
         quantidade: Number(row.quantidade),
         valorUnitario: Number(row.valor_unitario),
         frequencia: row.frequencia,
+        contratoOperacionalId: row.contrato_operacional_id,
+        contratoOperacionalStatus: row.contrato_operacional_status,
+        contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
       });
     }
   }
   return [...map.values()];
+}
+
+function makeCompactId(prefix) {
+  const random = crypto.randomBytes(2).toString("hex").toUpperCase();
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}${random}`;
+}
+
+function addMonthsToDate(dateStr, months) {
+  const date = new Date(`${dateStr || new Date().toISOString().split("T")[0]}T12:00:00`);
+  date.setMonth(date.getMonth() + Number(months || 0));
+  return date.toISOString().split("T")[0];
+}
+
+async function makeUniqueOperationalContractId(client) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const id = makeCompactId("CTO");
+    const { rows } = await client.query("SELECT 1 FROM ciperprag_hub.contratos WHERE id = $1 LIMIT 1", [id]);
+    if (!rows.length) return id;
+  }
+  throw new Error("Nao foi possivel gerar um ID unico para o contrato operacional.");
+}
+
+async function syncOperationalContractsFromTemplate(client, templateId, tenantId) {
+  const { rows: templateRows } = await client.query(
+    `SELECT
+       t.*,
+       c.razao_social,
+       c.nome_fantasia,
+       c.cnpj
+     FROM ciperprag_hub.contratos_templates t
+     LEFT JOIN ciperprag_hub.clientes c
+       ON c.id = t.cliente_id
+      AND c.tenant_id = $2
+     WHERE t.id = $1
+       AND t.tenant_id = $2`,
+    [templateId, tenantId],
+  );
+  const template = templateRows[0];
+  if (!template || template.tipo !== "contrato" || template.status !== "vigente") {
+    return { created: 0, updated: 0, disabled: 0, skipped: true };
+  }
+
+  const { rows: serviceRows } = await client.query(
+    `SELECT
+       s.id AS template_servico_id,
+       s.servico_id,
+       s.quantidade,
+       s.valor_unitario,
+       s.frequencia,
+       sc.nome,
+       sc.tipo,
+       sc.unidade,
+       sc.recorrencia_dias,
+       sc.produtos_quimicos,
+       sc.epis,
+       sc.riscos
+     FROM ciperprag_hub.contratos_templates_servicos s
+     JOIN ciperprag_hub.contratos_templates t
+       ON t.id = s.template_id
+      AND t.tenant_id = $2
+     LEFT JOIN ciperprag_hub.servicos_catalogo sc
+       ON sc.id = s.servico_id
+      AND sc.tenant_id = $2
+     WHERE s.template_id = $1
+     ORDER BY s.id`,
+    [templateId, tenantId],
+  );
+
+  const validServices = serviceRows.filter((service) => service.servico_id && service.nome);
+  if (!validServices.length) return { created: 0, updated: 0, disabled: 0, skipped: true };
+
+  const { rows: locationRows } = await client.query(
+    `SELECT nome
+     FROM ciperprag_hub.cliente_locais_execucao
+     WHERE tenant_id = $1
+       AND cliente_id = $2
+       AND ativo IS TRUE
+     ORDER BY nome`,
+    [tenantId, template.cliente_id],
+  );
+  const { rows: equipmentRows } = await client.query(
+    `SELECT tag
+     FROM ciperprag_hub.cliente_equipamentos
+     WHERE tenant_id = $1
+       AND cliente_id = $2
+       AND ativo IS TRUE
+     ORDER BY tag`,
+    [tenantId, template.cliente_id],
+  );
+
+  const locais = locationRows.map((row) => row.nome).filter(Boolean);
+  const tags = equipmentRows.map((row) => row.tag).filter(Boolean);
+  const clienteNome = template.razao_social || template.nome_fantasia || "Cliente sem nome";
+  const vigenciaInicio = template.data_criacao?.toISOString?.().split("T")[0] ?? template.data_criacao ?? new Date().toISOString().split("T")[0];
+  const vigenciaFim = addMonthsToDate(vigenciaInicio, template.vigencia_meses || 0);
+  let created = 0;
+  let updated = 0;
+
+  for (const service of validServices) {
+    const { rows: existingRows } = await client.query(
+      `SELECT id, executado
+       FROM ciperprag_hub.contratos
+       WHERE tenant_id = $1
+         AND contrato_template_id = $2
+         AND servico_catalogo_id = $3
+       ORDER BY criado_em
+       LIMIT 1`,
+      [tenantId, templateId, service.servico_id],
+    );
+    const existing = existingRows[0];
+    if (existing) {
+      await client.query(
+        `UPDATE ciperprag_hub.contratos
+         SET contrato_template_servico_id=$4,
+             numero_comercial=$5,
+             cliente_id=$6,
+             cliente=$7,
+             cnpj=$8,
+             servico=$9,
+             tipo=$10,
+             contratado=$11,
+             unidade=$12,
+             status='ativo',
+             validade_dias=$13,
+             valor_unitario=$14,
+             frequencia=$15,
+             tags=$16,
+             produtos_quimicos=$17,
+             epis=$18,
+             riscos=$19,
+             locais=$20,
+             vigencia_inicio=$21,
+             vigencia_fim=$22,
+             atualizado_em=NOW()
+         WHERE id=$1
+           AND tenant_id=$2
+           AND contrato_template_id=$3`,
+        [
+          existing.id,
+          tenantId,
+          templateId,
+          service.template_servico_id,
+          template.numero,
+          template.cliente_id,
+          clienteNome,
+          template.cnpj,
+          service.nome,
+          service.tipo,
+          service.quantidade,
+          service.unidade,
+          service.recorrencia_dias || 0,
+          service.valor_unitario,
+          service.frequencia,
+          tags,
+          service.produtos_quimicos || [],
+          service.epis || [],
+          service.riscos || [],
+          locais,
+          vigenciaInicio,
+          vigenciaFim,
+        ],
+      );
+      updated += 1;
+    } else {
+      const operationalId = await makeUniqueOperationalContractId(client);
+      await client.query(
+        `INSERT INTO ciperprag_hub.contratos
+         (id, tenant_id, contrato_template_id, contrato_template_servico_id, servico_catalogo_id, numero_comercial,
+          cliente_id, cliente, cnpj, servico, tipo, contratado, executado, unidade, status, ultima_execucao,
+          validade_dias, valor_unitario, frequencia, tags, produtos_quimicos, epis, riscos, locais, vigencia_inicio, vigencia_fim)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,0,$13,'ativo',NULL,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+        [
+          operationalId,
+          tenantId,
+          templateId,
+          service.template_servico_id,
+          service.servico_id,
+          template.numero,
+          template.cliente_id,
+          clienteNome,
+          template.cnpj,
+          service.nome,
+          service.tipo,
+          service.quantidade,
+          service.unidade,
+          service.recorrencia_dias || 0,
+          service.valor_unitario,
+          service.frequencia,
+          tags,
+          service.produtos_quimicos || [],
+          service.epis || [],
+          service.riscos || [],
+          locais,
+          vigenciaInicio,
+          vigenciaFim,
+        ],
+      );
+      created += 1;
+    }
+  }
+
+  const currentServiceIds = validServices.map((service) => service.servico_id);
+  const { rowCount: disabled } = await client.query(
+    `UPDATE ciperprag_hub.contratos
+     SET status='vencido',
+         atualizado_em=NOW()
+     WHERE tenant_id=$1
+       AND contrato_template_id=$2
+       AND servico_catalogo_id <> ALL($3::text[])`,
+    [tenantId, templateId, currentServiceIds],
+  );
+
+  return { created, updated, disabled, skipped: false };
 }
 
 async function getRecurrenceSuggestions(tenantId) {
@@ -2033,8 +2271,9 @@ app.patch("/api/numbering-config", requirePermission("configuracoes.manage"), as
 
 app.post("/api/contract-templates", requirePermission("contratos.manage"), async (req, res) => {
   const body = req.body;
-  const id = body.id || `TPL-${String(Date.now()).slice(-6)}`;
+  const id = body.id || makeCompactId("TPL");
   const tenantId = req.auth.user.tenant.id;
+  let operationalSync = null;
   await withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
@@ -2064,6 +2303,9 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         [id, servico.servicoId, servico.quantidade, servico.valorUnitario, servico.frequencia],
       );
     }
+    if (body.tipo === "contrato" && body.status === "vigente") {
+      operationalSync = await syncOperationalContractsFromTemplate(client, id, tenantId);
+    }
     await logAuditEvent(client, req, {
       entityType: "contrato_template",
       entityId: id,
@@ -2078,10 +2320,11 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         status: body.status,
         servicos: (body.servicos || []).length,
         vigenciaMeses: body.vigenciaMeses,
+        operationalSync,
       },
     });
   });
-  res.json({ ok: true, id });
+  res.json({ ok: true, id, operationalSync });
 });
 
 app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
@@ -2092,8 +2335,11 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
   const number = `CT-${next}/${year}`;
   const { rows } = await query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
   const item = rows[0];
+  if (item && item.tipo !== "proposta") return res.status(400).json({ error: "Apenas propostas podem gerar contrato." });
+  if (item && item.status !== "aprovado") return res.status(400).json({ error: "A proposta precisa estar aprovada para gerar contrato." });
   if (!item) return res.status(404).json({ error: "Modelo não encontrado" });
-  const newId = `TPL-${String(Date.now()).slice(-6)}`;
+  const newId = makeCompactId("TPL");
+  let operationalSync = null;
   await withTransaction(async (client) => {
     await client.query(
       `INSERT INTO ciperprag_hub.contratos_templates (id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
@@ -2115,16 +2361,17 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
         [newId, service.servico_id, service.quantidade, service.valor_unitario, service.frequencia],
       );
     }
+    operationalSync = await syncOperationalContractsFromTemplate(client, newId, tenantId);
     await logAuditEvent(client, req, {
       entityType: "contrato_template",
       entityId: newId,
       action: "contract_generated_from_proposal",
       summary: `Contrato ${number} gerado a partir da proposta ${item.numero || id}`,
       before: { id, numero: item.numero, tipo: item.tipo, status: item.status },
-      after: { id: newId, numero: number, tipo: "contrato", status: "vigente", propostaOrigemId: id },
+      after: { id: newId, numero: number, tipo: "contrato", status: "vigente", propostaOrigemId: id, operationalSync },
     });
   });
-  res.json({ ok: true });
+  res.json({ ok: true, id: newId, numero: number, operationalSync });
 });
 
 app.post("/api/measurements/generate", requirePermission("medicoes.manage"), async (req, res) => {
@@ -2641,7 +2888,7 @@ async function start() {
   await ensureDatabaseShape();
   await query("SELECT 1");
   app.listen(PORT, () => {
-    console.log(`API Ciperprag ouvindo em http://localhost:${PORT}`);
+    console.log(`API Atenza FieldOps ouvindo em http://localhost:${PORT}`);
   });
 }
 

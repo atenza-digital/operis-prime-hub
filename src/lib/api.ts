@@ -85,6 +85,10 @@ export interface ServicoCatalogo {
 
 export interface Contrato {
   id: string;
+  contratoTemplateId?: string;
+  contratoTemplateServicoId?: number;
+  servicoCatalogoId?: string;
+  numeroComercial?: string;
   clienteId?: string;
   cliente: string;
   cnpj: string;
@@ -95,8 +99,11 @@ export interface Contrato {
   unidade: string;
   status: "ativo" | "pendente" | "vencido";
   ultimaExecucao: string;
+  vigenciaInicio?: string;
+  vigenciaFim?: string;
   validadeDias: number;
   valorUnitario?: number;
+  frequencia?: string;
   tags?: string[];
   produtosQuimicos?: string[];
   epis?: string[];
@@ -266,10 +273,14 @@ export interface AlocacaoSemanal {
 }
 
 export interface ContratoServico {
+  id?: number;
   servicoId: string;
   quantidade: number;
   valorUnitario: number;
   frequencia: string;
+  contratoOperacionalId?: string;
+  contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
+  contratoOperacionalExecutado?: number;
 }
 
 export interface ContratoTemplate {
@@ -284,6 +295,8 @@ export interface ContratoTemplate {
   status: "rascunho" | "enviado" | "aprovado" | "vigente" | "encerrado";
   dataCriacao: string;
   observacoes: string;
+  operacionalizado?: boolean;
+  contratosOperacionaisIds?: string[];
 }
 
 export interface EmpresaConfig {
@@ -572,8 +585,17 @@ export const saveVehicle = (payload: Partial<Veiculo>) => api("/vehicles", { met
 export const saveAllocation = (payload: Partial<AlocacaoSemanal>) => api("/allocations", { method: "POST", body: JSON.stringify(payload) });
 export const saveCompanyConfig = (payload: EmpresaConfig) => api("/company-config", { method: "PATCH", body: JSON.stringify(payload) });
 export const saveNumberingConfig = (payload: NumeracaoConfig) => api("/numbering-config", { method: "PATCH", body: JSON.stringify(payload) });
-export const saveContractTemplate = (payload: Partial<ContratoTemplate>) => api("/contract-templates", { method: "POST", body: JSON.stringify(payload) });
-export const generateContractFromProposal = (id: string) => api(`/contract-templates/${id}/generate-contract`, { method: "POST" });
+export const saveContractTemplate = (payload: Partial<ContratoTemplate>) => api<{
+  ok: boolean;
+  id: string;
+  operationalSync?: { created: number; updated: number; disabled: number; skipped: boolean };
+}>("/contract-templates", { method: "POST", body: JSON.stringify(payload) });
+export const generateContractFromProposal = (id: string) => api<{
+  ok: boolean;
+  id: string;
+  numero: string;
+  operationalSync?: { created: number; updated: number; disabled: number; skipped: boolean };
+}>(`/contract-templates/${id}/generate-contract`, { method: "POST" });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });

@@ -1026,3 +1026,40 @@ Backlog por etapas atualizado:
 Proxima etapa sugerida:
 
 - Iniciar Etapa 3 de 8: integracao comercial para operacional, para que proposta/contrato aprovado alimente agenda, OS, baixa contratual e medicao sem duplicidade entre modelos comerciais e contratos operacionais.
+
+## Atualizacao - Etapa 3 de 8 integracao comercial para operacional
+
+Data: 2026-07-06
+
+Status: concluida no escopo base.
+
+Entregue nesta etapa:
+
+- Criada ponte entre contrato comercial vigente e contrato operacional executavel.
+- Contratos operacionais agora guardam origem comercial: contrato template, item do contrato, servico do catalogo, numero comercial, vigencia e frequencia.
+- Ao salvar contrato comercial como vigente, a API cria ou atualiza os contratos operacionais correspondentes aos servicos.
+- Ao gerar contrato a partir de proposta aprovada, a API cria o contrato comercial vigente e sincroniza automaticamente os contratos operacionais.
+- Locais de execucao ativos do cliente e tags de equipamentos ativos passam para o contrato operacional.
+- Agenda passou a listar apenas contratos operacionais ativos do cliente.
+- Tela comercial passou a indicar quando o contrato ja esta integrado ao operacional.
+- Criada migracao versionada `014_commercial_operational_contract_bridge.sql`.
+
+Itens identificados e alocados em etapas:
+
+- Revisao visual profunda de proposta/contrato e geracao de PNGs: Etapa 4 de 8.
+- Status financeiro/kanban da medicao: Etapa 5 de 8.
+- Geracao server-side e imutavel de proposta/contrato/OS/certificado/medicao: Etapa 6 de 8.
+- Teste E2E completo com criacao de proposta, contrato, agenda, OS, encerramento e medicao: Etapa 7 de 8.
+
+Backlog por etapas atualizado:
+
+- Quantidade total: 12 itens, todos contemplados nas Etapas 4 a 8.
+- Etapa 4: aderencia documental Ciperprag com PNGs de conferencia.
+- Etapa 5: medicao e acompanhamento financeiro operacional.
+- Etapa 6: PDFs server-side e anexos imutaveis.
+- Etapa 7: QA, E2E e homologacao guiada.
+- Etapa 8: producao, governanca SaaS, hardening, auditoria de dependencias, renomeacao fisica da pasta local e painel Atenza.
+
+Proxima etapa sugerida:
+
+- Iniciar Etapa 4 de 8: aderencia documental Ciperprag, com revisao de proposta, contrato, OS, certificado e medicao contra os modelos originais e geracao de PNGs para conferencia visual.

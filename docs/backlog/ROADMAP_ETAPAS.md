@@ -13,7 +13,7 @@ Status: concluida no escopo P0 planejado.
 
 ## Etapa 2 de 8 - Documentacao Atenza e rebranding base
 
-Status: em andamento nesta release.
+Status: concluida no escopo base.
 
 - Estrutura `docs/*` padrao Atenza.
 - Nome de produto: Atenza FieldOps.
@@ -24,10 +24,20 @@ Status: em andamento nesta release.
 
 ## Etapa 3 de 8 - Integracao comercial para operacional
 
+Status: concluida no escopo base desta release.
+
 - Transformar contrato comercial vigente em contrato operacional.
 - Vincular itens comerciais ao saldo executavel.
 - Definir unidade, valor unitario, recorrencia, locais e tags.
 - Evitar duplicidade entre `contratos_templates` e `contratos`.
+
+Entregue:
+
+- Contrato vigente sincroniza contratos operacionais ativos por item de servico.
+- Proposta aprovada, ao gerar contrato, cria tambem os contratos operacionais usados pela agenda.
+- Contrato operacional recebeu vinculo com template comercial, item, servico do catalogo, numero comercial, vigencia e frequencia.
+- Agenda passa a listar contratos operacionais ativos para iniciar o fluxo de OS.
+- Tela comercial indica quando o contrato esta integrado ao operacional.
 
 ## Etapa 4 de 8 - Aderencia documental Ciperprag
 

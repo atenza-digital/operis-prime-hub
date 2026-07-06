@@ -90,7 +90,10 @@ export default function Agendamento() {
 
   const clienteNomeSel = useMemo(() => clientesAtivos.find((item) => item.id === clienteId)?.razaoSocial ?? clienteId, [clienteId, clientesAtivos]);
   const clienteAtivo = useMemo(() => clientesAtivos.find((item) => item.id === clienteId), [clienteId, clientesAtivos]);
-  const contratosCliente = useMemo(() => contratos.filter((item) => item.cliente === clienteNomeSel), [clienteNomeSel, contratos]);
+  const contratosCliente = useMemo(
+    () => contratos.filter((item) => item.cliente === clienteNomeSel && item.status === "ativo"),
+    [clienteNomeSel, contratos],
+  );
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];

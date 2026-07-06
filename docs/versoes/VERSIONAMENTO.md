@@ -4,7 +4,7 @@
 
 - Produto: Atenza FieldOps
 - Ambiente: Homologacao
-- Versao: 0.2.0
+- Versao: 0.3.0
 - Data: 2026-07-06
 
 ## Regra de versao

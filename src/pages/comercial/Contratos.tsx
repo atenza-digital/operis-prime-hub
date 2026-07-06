@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight } from "lucide-react";
+import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight, CheckCircle2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -128,8 +128,11 @@ export default function Contratos() {
 
     setSaving(true);
     try {
-      await saveContractTemplate({ ...form, id: editId ?? undefined });
-      toast.success(editId ? "Registro atualizado" : "Registro criado");
+      const result = await saveContractTemplate({ ...form, id: editId ?? undefined });
+      const synced = result.operationalSync && !result.operationalSync.skipped
+        ? ` Operacional: ${result.operationalSync.created} criado(s), ${result.operationalSync.updated} atualizado(s).`
+        : "";
+      toast.success(`${editId ? "Registro atualizado" : "Registro criado"}.${synced}`);
       setDialogOpen(false);
       await reload();
     } catch (error) {
@@ -141,8 +144,11 @@ export default function Contratos() {
 
   async function handleGenerateContract(item: ContratoTemplate) {
     try {
-      await generateContractFromProposal(item.id);
-      toast.success(`Contrato gerado a partir da proposta ${item.numero}`);
+      const result = await generateContractFromProposal(item.id);
+      const synced = result.operationalSync && !result.operationalSync.skipped
+        ? ` Integração operacional: ${result.operationalSync.created} contrato(s) criado(s), ${result.operationalSync.updated} atualizado(s).`
+        : "";
+      toast.success(`Contrato ${result.numero} gerado a partir da proposta ${item.numero}.${synced}`);
       await reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao gerar contrato");
@@ -212,6 +218,7 @@ export default function Contratos() {
                   <TableHead>Valor Total</TableHead>
                   <TableHead>Vigência</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Operacional</TableHead>
                   <TableHead className="w-[220px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -237,6 +244,21 @@ export default function Contratos() {
                       <TableCell className="text-xs">{item.vigenciaMeses} meses</TableCell>
                       <TableCell>
                         <Badge variant={statusColors[item.status]}>{statusLabels[item.status]}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {item.operacionalizado ? (
+                          <Badge variant="secondary" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Integrado
+                          </Badge>
+                        ) : item.tipo === "contrato" && item.status === "vigente" ? (
+                          <Badge variant="outline" className="gap-1">
+                            <Link2 className="h-3 w-3" />
+                            Pendente
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -445,6 +467,11 @@ export default function Contratos() {
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Subtotal</p>
                       <p className="font-mono font-bold text-sm">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      {servico.contratoOperacionalId ? (
+                        <Badge variant="secondary" className="mt-1 text-[10px]">
+                          Operacional {servico.contratoOperacionalId}
+                        </Badge>
+                      ) : null}
                     </div>
                     {form.servicos.length > 1 && (
                       <Button type="button" variant="ghost" size="icon" className="ml-2 text-destructive" onClick={() => removeServico(index)}>
