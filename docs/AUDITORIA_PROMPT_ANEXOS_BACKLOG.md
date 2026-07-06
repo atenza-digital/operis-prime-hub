@@ -24,7 +24,7 @@ O ponto mais critico antes de novas telas grandes e organizar a base operacional
 | Etapa | Status | Evidencia atual | Proxima acao recomendada |
 | --- | --- | --- | --- |
 | Etapa 0 - Diagnostico e plano | Parcial | Analise inicial feita ao longo da evolucao, mas sem uma matriz unica ate este documento. | Manter este arquivo como referencia viva de aderencia e backlog. |
-| Etapa 1 - Fundacao SaaS, login e seguranca | Parcial avancado | Login interno, sessoes, usuarios, perfis, permissoes e troca de senha temporaria implementados. | Completar isolamento por tenant em todas as consultas, auditoria ampliada, politicas de senha e revisao de permissoes por modulo. |
+| Etapa 1 - Fundacao SaaS, login e seguranca | Parcial avancado | Login interno, sessoes, usuarios, perfis, permissoes, troca obrigatoria de senha e primeira passada de isolamento por tenant no nucleo operacional implementados. | Fazer segunda passada multi-tenant, remover fisicamente corpo legado de certificado, ampliar auditoria, politicas de senha e revisao de permissoes por modulo. |
 | Versionamento e homologacao | Concluido inicial | Interface mostra ambiente de homologacao e versao. | Padronizar leitura da versao via build/release e preparar diferenca visual futura para producao. |
 | Etapa 2 - Cadastros estruturantes | Parcial | Clientes, servicos, contratos e configuracoes existem, mas ainda nao cobrem todos os dados exigidos pelos documentos. | Priorizar locais de execucao, contatos por funcao, equipamentos/tags, regras por servico e configuracoes documentais. |
 | Etapa 3 - SMTP/e-mails | Pendente | Ainda nao ha configuracao generica de SMTP nem envio transacional. | Colocar apos a estabilizacao dos fluxos operacionais principais. |
@@ -101,7 +101,7 @@ Impacto: POP e checklist devem virar dados estruturados, nao apenas anexos solto
 
 ### Alta prioridade
 
-- Completar isolamento por tenant em consultas e mutacoes antes da base virar multiempresa real.
+- Fazer segunda passada de isolamento por tenant, cobrindo endpoints comerciais/legados e removendo corpo legado comentado da rota antiga de certificado antes da base virar multiempresa real.
 - Criar cadastros de locais de execucao, contatos por funcao e equipamentos/tags.
 - Parametrizar dados documentais da empresa: licencas, responsaveis tecnicos, rodapes, textos legais, numeracoes e validade padrao.
 - Evoluir OS para usar dados persistidos e suportar todos os campos criticos do modelo.
@@ -900,3 +900,62 @@ Resumo da atualizacao:
 - Proxima acao: iniciar Etapa 1 de 8 com correcoes P0.
 - Status sugerido: Em andamento.
 ```
+
+## Atualizacao - Etapa 1 de 8 P0 iniciada
+
+Data: 2026-07-06
+
+Status: parcial avancado.
+
+Entregue nesta etapa:
+
+- Bootstrap e consultas principais passaram a carregar dados por `tenant_id`: clientes, servicos, contratos, agendamentos, OS, certificados, equipes, veiculos, alocacoes, modelos comerciais, sugestoes de recorrencia, medicoes e anexos.
+- Endpoints criticos de escrita receberam escopo por tenant nos fluxos de clientes, servicos, equipes, configuracoes, modelos comerciais, medicao, agenda, geracao de OS, edicao/encerramento de OS, certificado e recorrencia.
+- Download de anexos passou a exigir que o anexo pertença ao tenant do usuario autenticado.
+- Geracao de certificado passou a consultar servico, cliente, empresa, numeracao e OS dentro do tenant.
+- A rota publica duplicada de `POST /api/orders/:id/certificado` foi retirada da superficie da API; a rota valida mantida e a versao legada ficou desativada com retorno `410`.
+- Criada migracao `013_tenant_scope_measurements_and_documents.sql` para garantir `tenant_id` em certificados, sugestoes de recorrencia e medicoes.
+- `ensureDatabaseShape()` tambem passou a garantir/backfill essas colunas em bases antigas.
+
+Parcial:
+
+- O isolamento por tenant foi aplicado no nucleo operacional, mas ainda precisa de uma segunda passada de revisao multi-tenant em endpoints comerciais/legados e contratos operacionais.
+- O corpo da implementacao legada de certificado ainda existe comentado dentro da rota desativada por causa de encoding antigo no arquivo; deve ser removido fisicamente em limpeza tecnica.
+
+Nao feito nesta etapa:
+
+- Teste E2E real com dois tenants diferentes.
+- Auditoria de CORS, rate limit, politica de sessao e backup.
+- Integracao comercial completa para criar/atualizar contrato operacional vigente.
+- Estrutura documental `docs/*` padrao Atenza.
+
+Validacoes executadas:
+
+- `node --check server/index.mjs`
+- `node --check server/db.mjs`
+- `npm test -- --run`: 8 testes passaram.
+- `npm run lint`: 0 erros, 17 warnings conhecidos.
+- `npm run build`: build concluido.
+
+Backlog atualizado apos esta etapa:
+
+- Quantidade: 15 itens priorizados principais.
+- P0 - Segunda passada de isolamento por tenant com teste multi-tenant dedicado.
+- P0 - Remover fisicamente corpo legado comentado da rota antiga de certificado.
+- P0 - Integrar contrato comercial vigente com contrato operacional.
+- P0 - Reconciliar documentacao completa com o estado real.
+- P1 - Criar estrutura documental padrao Atenza em `docs/*`.
+- P1 - Rebranding Atenza FieldOps em UI, docs, pacote, deploy e pasta local.
+- P1 - Revisar proposta, contrato, OS, certificado e medicao contra modelos originais.
+- P1 - Gerar PDFs server-side imutaveis com hash/anexos.
+- P1 - Implementar E2E do fluxo comercial -> operacional -> medicao -> recorrencia.
+- P2 - Melhorar UX de telas comerciais, medicao, empty states, confirmacoes e guias de fluxo.
+- P2 - Implementar kanban/status da medicao com NF enviada, aguardando pagamento, pago/baixado no ERP e pendencias.
+- P2 - Evoluir POP/anexos com versao, aprovacao formal e anexos assinados.
+- P2 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
+- P3 - Observabilidade, backup/restauracao testada e rotina de release.
+- P3 - Painel Atenza dono do SaaS para tenants, planos, pagamentos e bloqueios.
+
+Proxima etapa sugerida:
+
+- Concluir a segunda passada P0 de tenant/limpeza tecnica e, na mesma leva, remover fisicamente a rota legada comentada antes de partir para integracao comercial-operacional.

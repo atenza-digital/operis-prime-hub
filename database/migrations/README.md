@@ -69,4 +69,8 @@ Exemplo:
 \i database/migrations/001_saas_foundation.sql
 ```
 
+## Migracoes Recentes
+
+- `013_tenant_scope_measurements_and_documents.sql`: adiciona/garante `tenant_id` em certificados, sugestoes de recorrencia e medicoes, preenche dados legados da homologacao Ciperprag e cria indices de isolamento por tenant.
+
 No DBeaver, abra o arquivo, confira o banco/schema de destino e execute em uma transação controlada.

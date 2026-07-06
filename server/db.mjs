@@ -371,10 +371,19 @@ export async function ensureDatabaseShape() {
 
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.certificados
+    ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
     ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT
+  `);
+
+  await query(`
+    UPDATE ciperprag_hub.certificados
+    SET tenant_id = tenants.id
+    FROM ciperprag_hub.tenants
+    WHERE certificados.tenant_id IS NULL
+      AND tenants.slug = 'ciperprag'
   `);
 
   await query(`
@@ -396,6 +405,7 @@ export async function ensureDatabaseShape() {
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.recorrencia_sugestoes (
       id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
       cliente_id VARCHAR(20),
       cliente_nome TEXT NOT NULL,
       cliente_cnpj VARCHAR(18) NOT NULL,
@@ -418,8 +428,22 @@ export async function ensureDatabaseShape() {
   `);
 
   await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes
+    ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id)
+  `);
+
+  await query(`
+    UPDATE ciperprag_hub.recorrencia_sugestoes
+    SET tenant_id = tenants.id
+    FROM ciperprag_hub.tenants
+    WHERE recorrencia_sugestoes.tenant_id IS NULL
+      AND tenants.slug = 'ciperprag'
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.medicoes (
       id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
       numero VARCHAR(40) NOT NULL UNIQUE,
       cliente_id VARCHAR(20),
       cliente_nome TEXT NOT NULL,
@@ -436,6 +460,19 @@ export async function ensureDatabaseShape() {
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT medicoes_status_check CHECK (status IN ('emitida','cancelada'))
     )
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.medicoes
+    ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id)
+  `);
+
+  await query(`
+    UPDATE ciperprag_hub.medicoes
+    SET tenant_id = tenants.id
+    FROM ciperprag_hub.tenants
+    WHERE medicoes.tenant_id IS NULL
+      AND tenants.slug = 'ciperprag'
   `);
 
   await query(`
@@ -457,6 +494,9 @@ export async function ensureDatabaseShape() {
 
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_cliente_periodo ON ciperprag_hub.medicoes(cliente_nome, periodo_inicio, periodo_fim)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_status ON ciperprag_hub.medicoes(status)");
+  await query("CREATE INDEX IF NOT EXISTS idx_certificados_tenant ON ciperprag_hub.certificados(tenant_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_recorrencia_sugestoes_tenant ON ciperprag_hub.recorrencia_sugestoes(tenant_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_medicoes_tenant ON ciperprag_hub.medicoes(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_medicao ON ciperprag_hub.medicao_itens(medicao_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_os ON ciperprag_hub.medicao_itens(os_id)");
 
