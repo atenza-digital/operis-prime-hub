@@ -69,7 +69,7 @@ function mockApi() {
 function renderAt(path: string, token?: string) {
   window.history.pushState({}, "", path);
   localStorage.clear();
-  if (token) localStorage.setItem("ciperprag_hub_auth_token", token);
+  if (token) localStorage.setItem("atenza_fieldops_auth_token", token);
   return render(<App />);
 }
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { APP_VERSION_LABEL } from "@/lib/version";
+import { APP_VERSION_LABEL, PRODUCT_NAME, PRODUCT_SUBTITLE, PRODUCT_TAGLINE } from "@/lib/version";
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -51,12 +51,9 @@ export default function Login() {
 
           <div className="max-w-3xl py-16">
             <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-emerald-300">Operação protegida</p>
-            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
-              Acesse o hub para gerenciar agendas, OS e certificados.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/68">
-              Ambiente de homologação para validação dos fluxos operacionais antes da publicação em produção.
-            </p>
+            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">{PRODUCT_NAME}</h1>
+            <p className="mt-6 max-w-2xl text-xl font-semibold leading-8 text-white/78">{PRODUCT_TAGLINE}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/54">{PRODUCT_SUBTITLE}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.18em] text-white/45">

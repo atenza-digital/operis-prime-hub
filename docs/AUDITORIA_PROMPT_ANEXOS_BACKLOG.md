@@ -6,7 +6,7 @@ Ambiente analisado: homologacao
 
 ## Objetivo
 
-Consolidar o que ja foi implementado, o que esta parcial e o que ainda precisa entrar no backlog para evoluir o Ciperprag Hub como plataforma SaaS operacional, usando como base:
+Consolidar o que ja foi implementado, o que esta parcial e o que ainda precisa entrar no backlog para evoluir o Atenza FieldOps como plataforma SaaS operacional, usando como base:
 
 - Prompt de evolucao do sistema.
 - Estado atual da aplicacao.
@@ -646,7 +646,7 @@ Status: diagnostico executado antes de novas alteracoes funcionais, seguindo o p
 
 Identidade confirmada:
 
-- Nome atual do projeto: Ciperprag Hub, com rebranding planejado para Atenza FieldOps.
+- Nome atual do produto: Atenza FieldOps.
 - Cliente atual: Ciperprag.
 - Pasta local: `C:\Projetos\Atenza\ciperprag_hub`.
 - Tipo: projeto existente/em andamento com documentacao parcial.
@@ -988,3 +988,41 @@ Backlog por etapas, sem itens soltos:
 Proxima etapa sugerida:
 
 - Iniciar Etapa 2 de 8: documentacao Atenza e rebranding base, porque ela organiza o projeto para as proximas entregas e elimina divergencias entre nome, docs, versao, ambiente e estrutura de releases.
+
+## Atualizacao - Etapa 2 de 8 documentacao e rebranding base
+
+Data: 2026-07-06
+
+Status: concluida no escopo base.
+
+Entregue nesta etapa:
+
+- Nome da plataforma padronizado como Atenza FieldOps.
+- Chamada institucional aplicada: Do contrato ao campo. Do campo ao certificado.
+- Subtitulo aplicado: Gestao de servicos tecnicos, equipes de campo, OS, evidencias, certificados e medicoes.
+- Versao atualizada para `0.2.0`.
+- Login, metadados HTML, layout operacional, layout comercial e README atualizados para a identidade da plataforma.
+- Storage de token renomeado para `atenza_fieldops_auth_token`, mantendo compatibilidade com chave antiga.
+- Estrutura documental criada: `docs/backlog`, `docs/cliente`, `docs/interno`, `docs/evidencias`, `docs/versoes`, `docs/releases` e `docs/validados`.
+- Criados documentos de roadmap, versionamento, release de homologacao, guia de homologacao operacional e notas tecnicas do produto.
+- Documento completo recebeu nota separando plataforma Atenza FieldOps e marca documental do cliente Ciperprag.
+
+Itens identificados e alocados em etapas:
+
+- Vulnerabilidades apontadas por `npm audit`: Etapa 8 de 8 - Producao e governanca SaaS.
+- Renomear fisicamente a pasta local do projeto: Etapa 8 de 8, junto com preparacao de producao e ajuste de workspace/atalhos, para evitar quebra do ambiente atual durante homologacao.
+- Screenshots/PNGs de documentos: Etapa 4 de 8, sempre que houver alteracao visual em OS, proposta, contrato, certificado ou medicao.
+
+Backlog por etapas atualizado:
+
+- Quantidade total: 15 itens, todos contemplados nas Etapas 3 a 8.
+- Etapa 3: integracao comercial para operacional.
+- Etapa 4: aderencia documental Ciperprag com PNGs de conferencia.
+- Etapa 5: medicao e acompanhamento financeiro operacional.
+- Etapa 6: PDFs server-side e anexos imutaveis.
+- Etapa 7: QA, E2E e homologacao guiada.
+- Etapa 8: producao, governanca SaaS, hardening, auditoria de dependencias, renomeacao fisica da pasta local e painel Atenza.
+
+Proxima etapa sugerida:
+
+- Iniciar Etapa 3 de 8: integracao comercial para operacional, para que proposta/contrato aprovado alimente agenda, OS, baixa contratual e medicao sem duplicidade entre modelos comerciais e contratos operacionais.

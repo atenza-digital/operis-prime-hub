@@ -393,7 +393,8 @@ export interface BootstrapData {
   attachments: EvidenciaAnexoApp[];
 }
 
-const AUTH_TOKEN_KEY = "ciperprag_hub_auth_token";
+const AUTH_TOKEN_KEY = "atenza_fieldops_auth_token";
+const LEGACY_AUTH_TOKEN_KEY = "ciperprag_hub_auth_token";
 
 export interface AuthUser {
   id: string;
@@ -455,15 +456,17 @@ export interface AuditLogApp {
 }
 
 export function getAuthToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  return localStorage.getItem(AUTH_TOKEN_KEY) || localStorage.getItem(LEGACY_AUTH_TOKEN_KEY);
 }
 
 export function setAuthToken(token: string) {
   localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
 }
 
 export function clearAuthToken() {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

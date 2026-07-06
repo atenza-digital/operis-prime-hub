@@ -5,7 +5,7 @@ import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { APP_VERSION_LABEL } from "@/lib/version";
+import { APP_VERSION_LABEL, PRODUCT_NAME } from "@/lib/version";
 
 const navItems = [
   { to: "/comercial/clientes", label: "Clientes", icon: Users, description: "Cadastros e contatos", permission: "clientes.manage" },
@@ -34,9 +34,9 @@ export default function ComercialLayout({ children }: { children: React.ReactNod
           <div className="flex min-w-0 items-center gap-3">
             <img src={logoImg} alt="Ciperprag" className="h-9 object-contain" />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Hub Comercial</p>
+              <p className="truncate text-sm font-semibold">{PRODUCT_NAME}</p>
               <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-surface-dark-foreground/40">{APP_VERSION_LABEL}</p>
-              <p className="truncate text-xs text-surface-dark-foreground/55">Origem dos dados que sustentam a operação</p>
+              <p className="truncate text-xs text-surface-dark-foreground/55">Hub Comercial · Origem dos dados operacionais</p>
             </div>
           </div>
 

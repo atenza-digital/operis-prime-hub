@@ -21,7 +21,7 @@ import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { APP_VERSION, APP_VERSION_LABEL } from "@/lib/version";
+import { APP_VERSION, APP_VERSION_LABEL, PRODUCT_NAME } from "@/lib/version";
 
 const navGroups = [
   {
@@ -162,7 +162,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent collapsed={collapsed} />
         <div className="border-t border-sidebar-border p-2">
           <div className={cn("px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45", collapsed && "px-0 text-center")}>
-            {collapsed ? `v${APP_VERSION}` : APP_VERSION_LABEL}
+            {collapsed ? `v${APP_VERSION}` : `${PRODUCT_NAME} · ${APP_VERSION_LABEL}`}
           </div>
           {!collapsed && user ? (
             <div className="mb-2 rounded-xl border border-sidebar-border bg-sidebar-accent/35 px-3 py-2">
@@ -214,7 +214,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             ) : null}
             <div className="border-t border-sidebar-border px-4 py-3 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45">
-              {APP_VERSION_LABEL}
+              {PRODUCT_NAME} · {APP_VERSION_LABEL}
             </div>
           </aside>
         </div>

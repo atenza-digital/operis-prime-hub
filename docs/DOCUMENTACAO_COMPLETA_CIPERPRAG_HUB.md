@@ -1,10 +1,12 @@
-# Documentação Completa do Sistema Ciperprag Hub
+# Documentação Completa - Atenza FieldOps
+
+Nota de identidade: Atenza FieldOps é o nome da plataforma SaaS. Ciperprag é o tenant/cliente atual de homologação e permanece como marca documental nos certificados, OS, propostas, contratos e medições emitidos para esse cliente.
 
 ## 1. Resumo do Projeto
 
-O Ciperprag Hub é um sistema web operacional e comercial criado para centralizar o ciclo de atendimento da Ciperprag: cadastro comercial, contratos, agendamentos, emissão de Ordens de Serviço, execução em campo, encerramento com evidências, emissão de certificados, histórico do cliente, recorrência de serviços e geração de medição.
+Atenza FieldOps e um sistema web operacional e comercial criado para centralizar o ciclo de atendimento de empresas de servicos tecnicos. Na homologacao atual, atende a Ciperprag com cadastro comercial, contratos, agendamentos, emissao de Ordens de Servico, execucao em campo, encerramento com evidencias, emissao de certificados, historico do cliente, recorrencia de servicos e geracao de medicao.
 
-O sistema não possui tela de login. O controle de acesso deve ser feito externamente, por infraestrutura, rede, proxy, VPN, painel de hospedagem ou outro mecanismo definido pela empresa. A aplicação assume que o usuário que acessou a URL já tem permissão para operar.
+O sistema possui login interno por e-mail e senha. A base atual e de homologacao, com identificacao visual de ambiente para reduzir o risco de confusao com uma futura base de producao.
 
 O projeto usa dados persistidos em PostgreSQL, no schema `ciperprag_hub`. A interface não deve depender de dados locais/mock para operação. A API carrega os dados do banco e entrega ao frontend principalmente por meio do endpoint `/api/bootstrap`.
 
@@ -1988,14 +1990,14 @@ O Dockerfile possui três etapas:
 Build:
 
 ```bash
-docker build -t ciperprag-hub:latest .
+docker build -t atenza-fieldops:latest .
 ```
 
 Run:
 
 ```bash
 docker run -d \
-  --name ciperprag-hub \
+  --name atenza-fieldops \
   --restart unless-stopped \
   -p 3010:80 \
   -e PORT=80 \
@@ -2005,7 +2007,7 @@ docker run -d \
   -e PGDATABASE=atenza \
   -e PGUSER=root \
   -e PGPASSWORD='********' \
-  ciperprag-hub:latest
+  atenza-fieldops:latest
 ```
 
 Health check:
@@ -2421,7 +2423,7 @@ O roadmap atual da homologação está organizado em 8 etapas.
 
 ## 23. Resumo Executivo Final
 
-O Ciperprag Hub é uma aplicação web de gestão operacional e comercial para empresas de serviços, especialmente voltada à rotina da Ciperprag. O sistema centraliza cadastros comerciais, contratos, serviços, equipes, veículos, agendamentos, Ordens de Serviço, certificados, histórico e medição.
+Atenza FieldOps e uma aplicacao web de gestao operacional e comercial para empresas de servicos tecnicos, com a Ciperprag como tenant/cliente atual de homologacao. O sistema centraliza cadastros comerciais, contratos, servicos, equipes, veiculos, agendamentos, Ordens de Servico, certificados, historico e medicao.
 
 Na prática, ele transforma o processo manual em um fluxo rastreável: o usuário cadastra clientes e serviços, cria contratos/propostas, agenda uma visita, define equipe e veículo, gera a OS, imprime a via para campo, encerra a OS com quantidade executada, tag de equipamento e fotos, baixa o saldo do contrato, gera certificado quando aplicável, permite validação antifraude por QR Code e consolida as OS encerradas em uma medição por período.
 
