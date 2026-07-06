@@ -611,3 +611,108 @@ Backlog remanescente da Etapa 28A:
 - Criar PDF server-side/assinado para auditoria quando houver exigencia formal de validade documental.
 - Auditar exclusoes fisicas e remocoes de itens filhos em cadastros compostos, sem gerar ruido excessivo.
 - Evoluir a justificativa obrigatoria para politica configuravel por tenant/perfil quando houver multiempresa em producao.
+
+## Backlog - Rebranding para Atenza FieldOps
+
+Status: pendente para execucao planejada, pois envolve alteracoes amplas de identidade, documentacao, deploy e estrutura local.
+
+Nome definido do sistema:
+
+- Atenza FieldOps
+
+Subtitulo institucional:
+
+- Gestao de servicos tecnicos, equipes de campo, OS, evidencias, certificados e medicoes.
+
+Chamada principal sugerida:
+
+- Atenza FieldOps
+- Do contrato ao campo. Do campo ao certificado.
+
+Escopo previsto:
+
+- Alterar nome visivel do sistema em login, layout operacional, layout comercial, cabecalhos, rodapes, badges e metadados.
+- Atualizar documentacao funcional, tecnica, mensagens para cliente/equipe e referencias de projeto.
+- Revisar PDFs, certificados, OS, medicoes e telas de validacao para manter a nova identidade sem afetar a marca do cliente final quando aplicavel.
+- Atualizar variaveis, nomes de pacote, titulos HTML, manifestos, Docker/deploy e textos internos que ainda apontem para o nome antigo.
+- Renomear a pasta local do projeto de forma planejada, atualizando workspace, scripts, atalhos e referencias para evitar quebra de ambiente.
+- Manter rastreabilidade da mudanca em uma etapa propria, com testes de smoke, build e publicacao na VPS de homologacao.
+
+## Atualizacao - Diagnostico Atenza de prontidao para testes
+
+Data: 2026-07-06
+
+Status: diagnostico executado antes de novas alteracoes funcionais, seguindo o prompt mestre e os padroes Atenza.
+
+Identidade confirmada:
+
+- Nome atual do projeto: Ciperprag Hub, com rebranding planejado para Atenza FieldOps.
+- Cliente atual: Ciperprag.
+- Pasta local: `C:\Projetos\Atenza\ciperprag_hub`.
+- Tipo: projeto existente/em andamento com documentacao parcial.
+- Ambiente analisado: homologacao.
+- Anexos e referencias usados no historico pertencem ao fluxo Ciperprag/Atenza FieldOps de OS, certificados, medicoes, POPs, proposta e contrato.
+
+Validacoes executadas:
+
+- Leitura do prompt mestre Atenza e padroes de projeto existente.
+- Leitura de `README.md`, documentacao completa e backlog existente.
+- Verificacao da estrutura documental exigida pelos padroes Atenza.
+- Verificacao da API publicada na VPS de homologacao.
+- Healthcheck da API retornou sucesso.
+- Login administrativo validado.
+- Bootstrap retornou dados reais do banco de homologacao.
+- Rotas principais retornaram HTTP 200: login, dashboard, agendar, ordens, certificados, medicao, equipes, comercial/clientes, comercial/servicos, comercial/contratos, comercial/configuracoes e validacao de certificado.
+- `npm test -- --run` passou com 8 testes.
+- `npm run lint` passou sem erros, mantendo 17 warnings conhecidos.
+- `npm run build` passou.
+
+Diagnostico de prontidao:
+
+- O sistema esta apto para testes internos guiados em homologacao.
+- O sistema ainda nao esta recomendado para homologacao ampla com cliente final nem para producao.
+- Fluxos operacionais principais existem e estao conectados: cadastro, agenda, OS, encerramento, certificados, historico, recorrencia, anexos, auditoria e medicao.
+- A experiencia visual evoluiu, mas ainda precisa de polimento em telas comerciais, documentos impressos e estados de fluxo para aumentar aderencia dos usuarios.
+- OS e certificado estao mais proximos dos modelos recebidos do que proposta, contrato e medicao.
+- Proposta/contrato comercial ainda sao modelos simplificados e nao devem ser considerados aderentes ao padrao documental final da Ciperprag.
+- Integracao comercial-operacional ainda e parcial: propostas/contratos comerciais ficam em `contratos_templates`, enquanto agenda/OS/medicao usam `contratos`; gerar contrato a partir de proposta ainda nao cria automaticamente o contrato operacional consumido pela agenda.
+- Financeiro ainda esta limitado a medicao; nao ha NF, faturamento, contas a receber, status financeiro ou bloqueios por faturamento.
+
+Pendencias criticas identificadas por prioridade:
+
+1. Corrigir isolamento por tenant em todas as consultas e mutacoes operacionais antes de multiempresa/producao.
+2. Remover endpoint duplicado `POST /api/orders/:id/certificado`, mantendo apenas a versao com snapshot, auditoria e anexo historico.
+3. Integrar contrato comercial aprovado/vigente com contrato operacional usado por agendamento, OS, baixa e medicao.
+4. Atualizar documentacao completa, pois ha trechos desatualizados sobre login, auditoria e medicao persistida.
+5. Criar estrutura documental padrao Atenza: `docs/backlog`, `docs/cliente`, `docs/interno`, `docs/evidencias`, `docs/versoes`, `docs/releases` e `docs/validados`.
+6. Rebranding completo para Atenza FieldOps, incluindo pasta local, metadados, UI, docs, Docker/deploy e textos internos.
+7. Revisar proposta e contrato para aproximar o layout, linguagem e campos do modelo real da Ciperprag.
+8. Gerar PDFs server-side reais e imutaveis para OS, certificado, medicao, proposta e contrato.
+9. Finalizar aderencia da OS ao modelo Ciperprag com campos pendentes: acompanhante, assinaturas, setor/funcao, EPC, FISPQ, treinamentos e textos parametrizados.
+10. Finalizar aderencia do certificado ao modelo original com conferencia visual formal e snapshot/hashing forte.
+11. Evoluir medicao com selecao manual de itens, motivo de cancelamento, NF, faturamento e status financeiro.
+12. Criar roteiro formal de homologacao operacional/comercial quando for iniciar teste com equipe/cliente.
+13. Criar checklist de prontidao para producao antes de qualquer Go-Live.
+14. Corrigir warnings conhecidos de lint e dependencias de hooks.
+15. Implementar testes E2E dos fluxos criticos: comercial -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
+16. Validar seguranca: CORS restrito, rate limit, politica de senha, expiração/renovacao de sessao, scan de secrets/dependencias e backup testado.
+17. Evoluir storage de anexos/fotos para armazenamento externo ou filesystem controlado, com URLs seguras.
+18. Criar painel administrativo Atenza para tenants, planos, pagamentos, inadimplencia, bloqueios e governanca SaaS.
+
+Backlog por ordem de importancia apos diagnostico:
+
+- P0 - Segurança/dados: isolamento por tenant em todos os endpoints e consultas.
+- P0 - Bug tecnico: remover rota duplicada de certificado.
+- P0 - Integracao de negocio: transformar contrato comercial vigente em contrato operacional.
+- P0 - Documentacao: reconciliar documentacao completa com estado atual real do sistema.
+- P1 - Documentacao Atenza: criar estrutura `docs/*` padrao e versionar releases/evidencias.
+- P1 - Rebranding: Atenza FieldOps em UI, docs, pacote, deploy e pasta local.
+- P1 - Documentos Ciperprag: revisar proposta, contrato, OS, certificado e medicao contra modelos originais.
+- P1 - PDFs server-side: documentos imutaveis, assinados/hashados e anexados.
+- P1 - E2E: fluxo completo comercial-operacional-financeiro.
+- P2 - UX: polir telas comerciais, medicao, empty states, confirmacoes e guias de fluxo.
+- P2 - Financeiro: NF, faturamento, status financeiro e bloqueios.
+- P2 - POP/anexos: historico de versoes, aprovacao formal e anexos assinados.
+- P2 - Auditoria: filtros server-side, retencao, alertas e politicas por tenant.
+- P3 - Sustentacao: observabilidade, backup/restauracao testada e rotina de release.
+- P3 - SaaS Atenza: painel dono do SaaS, planos, pagamentos e bloqueios.
