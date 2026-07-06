@@ -4,7 +4,7 @@
 
 - Produto: Atenza FieldOps
 - Ambiente: Homologacao
-- Versao: 0.3.0
+- Versao: 0.4.0
 - Data: 2026-07-06
 
 ## Regra de versao
@@ -12,6 +12,12 @@
 - `0.x`: homologacao e evolucao funcional.
 - `1.0`: primeira producao validada.
 - Incrementos menores devem registrar release em `docs/releases`.
+
+## Historico resumido
+
+- `0.4.0` - Aderencia documental Ciperprag: medicao, proposta/contrato e isolamento de impressao com evidencias PNG.
+- `0.3.0` - Integracao comercial para operacional.
+- `0.2.0` - Documentacao Atenza, rebranding base, versao e ambiente visiveis.
 
 ## Exibicao na interface
 

@@ -1063,3 +1063,46 @@ Backlog por etapas atualizado:
 Proxima etapa sugerida:
 
 - Iniciar Etapa 4 de 8: aderencia documental Ciperprag, com revisao de proposta, contrato, OS, certificado e medicao contra os modelos originais e geracao de PNGs para conferencia visual.
+
+## Atualizacao - Etapa 4 de 8 aderencia documental Ciperprag
+
+Data: 2026-07-06
+
+Status: concluida no escopo visual-base; refinamentos finais permanecem alocados nas Etapas 6 e 7.
+
+Entregue nesta etapa:
+
+- Modelos originais de OS, certificado e medicao renderizados em PNG para comparacao visual.
+- Impressao de medicao ajustada para se aproximar do modelo Ciperprag, com cabecalho institucional, titulo, dados do contratante, itens, total em destaque, forma de pagamento, local de entrega e assinatura.
+- Impressao de proposta/contrato ajustada para formato documental com dados do contratante, tabela de servicos, condicoes comerciais e assinaturas.
+- Regra global de impressao criada para isolar o documento impresso da tela da aplicacao.
+- Evidencias PNG geradas em `docs/evidencias/etapa4_atual`.
+- Versao atualizada para `0.4.0`.
+
+Parcial:
+
+- OS e certificado foram conferidos contra os modelos e permanecem funcionais, mas o ajuste fino final sera melhor executado junto da geracao server-side e versionamento de templates.
+- Proposta/contrato e medicao foram aproximados visualmente, mas ainda nao sao PDF server-side historico.
+
+Nao feito nesta etapa:
+
+- PDF server-side real de OS, certificado, medicao, proposta e contrato.
+- Versionamento formal de templates de documentos.
+- Teste E2E completo com comparacao visual automatizada.
+
+Backlog por etapas atualizado:
+
+- Quantidade total: 9 itens principais, todos contemplados nas Etapas 5 a 8.
+- Etapa 5: kanban/status da medicao com NF enviada, aguardando pagamento, pago/baixado no ERP e pendencias.
+- Etapa 6: PDF server-side real e imutavel para OS, certificado, medicao, proposta e contrato.
+- Etapa 6: versionamento formal de templates de documentos.
+- Etapa 6: ajuste fino final de OS, certificado, proposta, contrato e medicao com documentos historicos.
+- Etapa 7: E2E completo comercial -> operacional -> medicao -> recorrencia.
+- Etapa 7: roteiro formal de homologacao guiada com evidencias.
+- Etapa 8: observabilidade, backup/restauracao testada e rotina de release/rollback.
+- Etapa 8: hardening de seguranca, CORS, rate limit, politicas de sessao e auditoria de dependencias.
+- Etapa 8: painel Atenza dono do SaaS para tenants, planos, pagamentos e bloqueios.
+
+Proxima etapa sugerida:
+
+- Iniciar Etapa 5 de 8: medicao e acompanhamento financeiro operacional, porque o layout da medicao ja esta mais aderente e agora falta transformar o pos-servico em uma visao operacional clara de NF, pagamento no ERP e pendencias.

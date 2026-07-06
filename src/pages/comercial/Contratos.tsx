@@ -286,43 +286,56 @@ export default function Contratos() {
       </Card>
 
       {pdfItem && (
-        <div className="hidden print:block" ref={printRef}>
-          <div className="max-w-[210mm] mx-auto p-8 text-sm font-sans">
-            <div className="flex items-center justify-between border-b-2 border-primary pb-4 mb-6">
-              <img src={companyConfig?.logoUrl || logoImg} alt="Ciperprag" className="h-12 object-contain" />
-              <div className="text-right text-xs">
-                <p className="font-bold">{companyConfig?.razaoSocial}</p>
-                <p>CNPJ: {companyConfig?.cnpj}</p>
-                <p>{companyConfig?.endereco}</p>
-                <p>{companyConfig?.telefone} | {companyConfig?.email}</p>
+        <div className="document-print-root hidden print:block" ref={printRef}>
+          <div className="mx-auto max-w-[210mm] border border-black bg-white p-0 font-sans text-[11px] text-black">
+            <div className="relative min-h-[82px] overflow-hidden border-b border-black">
+              <div className="absolute -right-10 -top-16 h-32 w-32 rounded-full bg-emerald-900" />
+              <div className="flex items-center gap-6 px-5 py-3">
+                <img src={companyConfig?.logoUrl || logoImg} alt="Ciperprag" className="h-14 w-28 object-contain" />
+                <div className="flex-1 text-center text-[13px] font-bold uppercase">
+                  {companyConfig?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA"} CNPJ: {companyConfig?.cnpj || "15.722.292/0001-43"}
+                </div>
               </div>
             </div>
 
-            <h1 className="text-center text-lg font-bold mb-1">
+            <h1 className="border-b border-black py-2 text-center text-lg font-extrabold uppercase text-emerald-800">
               {pdfItem.tipo === "contrato" ? "CONTRATO DE PRESTAÇÃO DE SERVIÇOS" : "PROPOSTA TÉCNICA COMERCIAL"}
             </h1>
-            <p className="text-center text-xs text-muted-foreground mb-6">Nº {pdfItem.numero}</p>
+            <p className="border-b border-black py-1 text-center text-sm font-bold">Nº {pdfItem.numero}</p>
 
-            <div className="rounded border p-4 mb-4 space-y-1 text-xs">
-              <h3 className="font-bold text-sm mb-2">DADOS DO CONTRATANTE</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <p><strong>Razão Social:</strong> {pdfClient?.razaoSocial}</p>
-                <p><strong>CNPJ:</strong> {pdfClient?.cnpj}</p>
-                <p><strong>Endereço:</strong> {pdfClient?.endereco}, {pdfClient?.bairro}</p>
-                <p><strong>Município/UF:</strong> {pdfClient?.municipio}/{pdfClient?.uf}</p>
-              </div>
-            </div>
+            <table className="w-full border-collapse">
+              <tbody>
+                <tr className="bg-[#c6e0b4] text-center text-sm font-extrabold uppercase">
+                  <td colSpan={4} className="border border-black px-2 py-1">DADOS DO CONTRATANTE</td>
+                </tr>
+                <tr>
+                  <td className="w-[15%] border border-black px-2 py-1 font-bold uppercase">Razão Social:</td>
+                  <td className="w-[43%] border border-black px-2 py-1">{pdfClient?.razaoSocial}</td>
+                  <td className="w-[15%] border border-black px-2 py-1 font-bold uppercase">CNPJ:</td>
+                  <td className="border border-black px-2 py-1">{pdfClient?.cnpj}</td>
+                </tr>
+                <tr>
+                  <td className="border border-black px-2 py-1 font-bold uppercase">Endereço:</td>
+                  <td className="border border-black px-2 py-1">{pdfClient?.endereco}, {pdfClient?.bairro}</td>
+                  <td className="border border-black px-2 py-1 font-bold uppercase">Município/UF:</td>
+                  <td className="border border-black px-2 py-1">{pdfClient?.municipio}/{pdfClient?.uf}</td>
+                </tr>
+              </tbody>
+            </table>
 
-            <div className="mb-4">
-              <h3 className="font-bold text-sm mb-2">SERVIÇOS</h3>
-              <table className="w-full text-xs border">
+            <div className="p-4">
+              <p className="mb-3 text-center">
+                Encaminhamos para conferência as condições comerciais e técnicas para execução dos serviços abaixo descritos.
+              </p>
+
+              <table className="mb-4 w-full border-collapse text-[11px]">
                 <thead>
-                  <tr className="bg-muted">
-                    <th className="border p-2 text-left">Serviço</th>
-                    <th className="border p-2 text-center">Qtd</th>
-                    <th className="border p-2 text-center">Frequência</th>
-                    <th className="border p-2 text-right">Valor Unit.</th>
-                    <th className="border p-2 text-right">Subtotal</th>
+                  <tr className="bg-[#c6e0b4]">
+                    <th className="border border-black p-2 text-left uppercase">Descrição de serviços</th>
+                    <th className="border border-black p-2 text-center uppercase">Qtd.</th>
+                    <th className="border border-black p-2 text-center uppercase">Frequência</th>
+                    <th className="border border-black p-2 text-right uppercase">Valor unit.</th>
+                    <th className="border border-black p-2 text-right uppercase">Valor total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -330,41 +343,43 @@ export default function Contratos() {
                     const service = services.find((item) => item.id === servico.servicoId);
                     return (
                       <tr key={`${servico.servicoId}-${index}`}>
-                        <td className="border p-2">{service?.nome || "—"}</td>
-                        <td className="border p-2 text-center">{servico.quantidade}</td>
-                        <td className="border p-2 text-center">{servico.frequencia}</td>
-                        <td className="border p-2 text-right">R$ {servico.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                        <td className="border p-2 text-right font-bold">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                        <td className="border border-black p-2 uppercase">{service?.nome || "—"}</td>
+                        <td className="border border-black p-2 text-center">{servico.quantidade}</td>
+                        <td className="border border-black p-2 text-center">{servico.frequencia}</td>
+                        <td className="border border-black p-2 text-right">R$ {servico.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                        <td className="border border-black p-2 text-right font-bold">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-muted font-bold">
-                    <td className="border p-2" colSpan={4}>VALOR TOTAL</td>
-                    <td className="border p-2 text-right">R$ {calcTotal(pdfItem.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  <tr className="font-bold">
+                    <td className="border border-black p-2" colSpan={4}>VALOR TOTAL</td>
+                    <td className="border border-black bg-[#92d050] p-2 text-right">R$ {calcTotal(pdfItem.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
 
-            <div className="text-xs space-y-2 mb-6">
-              <h3 className="font-bold text-sm">CONDIÇÕES</h3>
-              <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
-              <p><strong>Forma de Pagamento:</strong> {pdfItem.formaPagamento}</p>
-              <p><strong>Prazo de Pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
-              {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-8 mt-16 text-xs text-center">
-              <div className="border-t pt-2">
-                <p className="font-bold">{companyConfig?.razaoSocial}</p>
-                <p>{companyConfig?.responsavelExecucao}</p>
-                <p>{companyConfig?.cargoResponsavel}</p>
+              <div className="mb-8 border border-black">
+                <div className="border-b border-black bg-[#c6e0b4] px-2 py-1 text-center text-sm font-extrabold uppercase">Condições comerciais</div>
+                <div className="space-y-1 px-3 py-2">
+                  <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
+                  <p><strong>Forma de pagamento:</strong> {pdfItem.formaPagamento}</p>
+                  <p><strong>Prazo de pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
+                  {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
+                </div>
               </div>
-              <div className="border-t pt-2">
-                <p className="font-bold">{pdfClient?.razaoSocial}</p>
-                <p>Representante Legal</p>
+
+              <div className="mt-16 grid grid-cols-2 gap-12 text-center text-xs">
+                <div className="border-t border-black pt-2">
+                  <p className="font-bold">{companyConfig?.razaoSocial}</p>
+                  <p>{companyConfig?.responsavelExecucao || companyConfig?.responsavelTecnico}</p>
+                  <p>{companyConfig?.cargoResponsavel}</p>
+                </div>
+                <div className="border-t border-black pt-2">
+                  <p className="font-bold">{pdfClient?.razaoSocial}</p>
+                  <p>Representante Legal</p>
+                </div>
               </div>
             </div>
           </div>

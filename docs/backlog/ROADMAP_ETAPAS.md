@@ -41,9 +41,19 @@ Entregue:
 
 ## Etapa 4 de 8 - Aderencia documental Ciperprag
 
+Status: concluida no escopo visual-base desta release.
+
 - Revisar proposta, contrato, OS, certificado e medicao contra modelos originais.
 - Gerar PNGs de conferencia sempre que houver mudanca visual em documento.
 - Parametrizar textos fixos e campos dinamicos.
+
+Entregue:
+
+- Modelos originais de OS, certificado e medicao renderizados em PNG para comparacao visual.
+- Impressao de medicao ajustada para ficar mais proxima do modelo Ciperprag, com cabecalho, bloco de contratante, tabela de itens, total em destaque e assinatura.
+- Impressao de proposta/contrato ajustada para linguagem documental Ciperprag, com dados do contratante, servicos, condicoes comerciais e assinaturas.
+- Regra global de impressao criada para isolar documento impresso da tela do sistema.
+- Evidencias atuais geradas em `docs/evidencias/etapa4_atual`.
 
 ## Etapa 5 de 8 - Medicao e acompanhamento financeiro operacional
 

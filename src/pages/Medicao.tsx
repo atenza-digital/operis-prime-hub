@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cancelMeasurement, generateMeasurement, getBootstrap, type BootstrapData, type MedicaoApp } from "@/lib/api";
+import logoImg from "@/assets/logo_ciperprag.png";
 
 function fmtDate(date: string) {
   if (!date) return "-";
@@ -19,59 +20,134 @@ function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function MeasurementPrint({ measurement }: { measurement: MedicaoApp }) {
+function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data: BootstrapData | null }) {
+  const company = data?.companyConfig;
+  const today = new Date(measurement.criadoEm || Date.now());
+  const city = company?.endereco?.match(/,\s*([^,-]+)-([A-Z]{2})/i)?.[1] || "Parauapebas";
+
   return (
-    <div className="bg-white text-black print:m-0 print:p-0">
-      <div className="mx-auto max-w-[210mm] space-y-5 border border-gray-300 p-8 text-[11px] print:border-none print:p-6">
-        <div className="flex items-start justify-between border-b-2 border-emerald-700 pb-4">
-          <div>
-            <div className="text-xl font-extrabold tracking-tight text-emerald-700">CIPERPRAG</div>
-            <div className="text-[9px] font-medium tracking-[0.3em] text-gray-500">SERVIÇOS</div>
-          </div>
-          <div className="text-right text-[10px]">
-            <p className="font-bold">Medição {measurement.numero}</p>
-            <p>Gerada em {new Date(measurement.criadoEm).toLocaleDateString("pt-BR")}</p>
+    <div className="document-print-root bg-white text-black print:m-0 print:p-0">
+      <div className="mx-auto max-w-[210mm] border border-black bg-white p-0 text-[11px] leading-tight print:border print:p-0">
+        <div className="relative min-h-[88px] overflow-hidden border-b border-black">
+          <div className="absolute -right-10 -top-16 h-32 w-32 rounded-full bg-emerald-900" />
+          <div className="flex items-center gap-6 px-5 py-3">
+            <img src={company?.logoUrl || logoImg} alt="Ciperprag" className="h-16 w-28 object-contain" />
+            <div className="flex-1 text-center text-[14px] font-bold uppercase">
+              {company?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA"} CNPJ: {company?.cnpj || "15.722.292/0001-43"}
+            </div>
           </div>
         </div>
 
-        <h2 className="text-center text-lg font-bold uppercase underline">Medição</h2>
+        <div className="border-b border-black py-1 text-center text-xl font-extrabold uppercase text-red-600">
+          MEDIÇÃO {measurement.numero}
+        </div>
 
-        <div className="space-y-1 border border-gray-400 p-3 text-[11px]">
-          <p><strong>Contratante:</strong> {measurement.clienteNome}</p>
-          <p><strong>CNPJ:</strong> {measurement.clienteCnpj || "-"}</p>
-          <p><strong>Endereço:</strong> {measurement.clienteEndereco || "-"}</p>
-          <p><strong>Período:</strong> {fmtDate(measurement.periodoInicio)} até {fmtDate(measurement.periodoFim)}</p>
-          <p><strong>Forma de pagamento:</strong> {measurement.formaPagamento || "-"}</p>
-          <p><strong>Local de entrega:</strong> {measurement.localEntrega || "-"}</p>
+        <div className="border-b border-black px-4 py-2 text-center text-[12px]">
+          Prezados, vem através deste, encaminhar a medição referente ao serviço, para conferência e validação da mesma.
         </div>
 
         <table className="w-full border-collapse text-[11px]">
+          <tbody>
+            <tr className="bg-[#c6e0b4] text-center text-base font-extrabold uppercase">
+              <td colSpan={4} className="border border-black px-2 py-0.5">DADOS CONTRATANTES:</td>
+            </tr>
+            <tr>
+              <td className="w-[15%] border border-black px-1 font-bold uppercase">Razão Social:</td>
+              <td className="w-[43%] border border-black px-1">{measurement.clienteNome}</td>
+              <td className="w-[15%] border border-black px-1 font-bold uppercase">Contrato:</td>
+              <td className="border border-black px-1">{measurement.itens[0]?.contratoId || "-"}</td>
+            </tr>
+            <tr>
+              <td className="border border-black px-1 font-bold uppercase">CNPJ:</td>
+              <td className="border border-black px-1">{measurement.clienteCnpj || "-"}</td>
+              <td className="border border-black px-1 font-bold uppercase">CEP:</td>
+              <td className="border border-black px-1">-</td>
+            </tr>
+            <tr>
+              <td className="border border-black px-1 font-bold uppercase">Endereço:</td>
+              <td className="border border-black px-1">{measurement.clienteEndereco || "-"}</td>
+              <td className="border border-black px-1 font-bold uppercase">Município:</td>
+              <td className="border border-black px-1">{city}</td>
+            </tr>
+            <tr>
+              <td className="border border-black px-1 font-bold uppercase">Período:</td>
+              <td className="border border-black px-1">{fmtDate(measurement.periodoInicio)} até {fmtDate(measurement.periodoFim)}</td>
+              <td className="border border-black px-1 font-bold uppercase">Status:</td>
+              <td className="border border-black px-1">{measurement.status}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table className="mt-4 w-full border-collapse text-[11px]">
           <thead>
-            <tr className="bg-gray-100">
-              {["ITEM", "SERVIÇO", "OS", "DATA", "QTD.", "VALOR UNIT.", "VALOR TOTAL"].map((head) => (
-                <th key={head} className="border border-gray-400 px-2 py-1.5 text-center font-bold">{head}</th>
+            <tr className="bg-[#c6e0b4]">
+              {["ITEM", "DESCRIÇÃO DE SERVIÇOS", "ORDEM DE SERVIÇOS", "QNT.", "VALOR UNIT.", "VALOR TOTAL"].map((head) => (
+                <th key={head} className="border border-black px-2 py-1 text-center font-extrabold uppercase">{head}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {measurement.itens.map((item, index) => (
               <tr key={`${item.osId}-${index}`}>
-                <td className="border border-gray-400 px-2 py-1.5 text-center">{index + 1}</td>
-                <td className="border border-gray-400 px-2 py-1.5">{item.servico}</td>
-                <td className="border border-gray-400 px-2 py-1.5 text-center font-mono">{item.osNumero}</td>
-                <td className="border border-gray-400 px-2 py-1.5 text-center">{fmtDate(item.dataExecucao)}</td>
-                <td className="border border-gray-400 px-2 py-1.5 text-center">{item.quantidade} {item.unidade}</td>
-                <td className="border border-gray-400 px-2 py-1.5 text-right">{money(item.valorUnitario)}</td>
-                <td className="border border-gray-400 px-2 py-1.5 text-right font-medium">{money(item.valorTotal)}</td>
+                <td className="border border-black px-2 py-2 text-center">{String(index + 1).padStart(2, "0")}</td>
+                <td className="border border-black px-2 py-2 text-center uppercase">{item.servico}</td>
+                <td className="border border-black px-2 py-2 text-center font-mono">{item.osNumero}</td>
+                <td className="border border-black px-2 py-2 text-center">{item.quantidade}</td>
+                <td className="border border-black px-2 py-2 text-right">{money(item.valorUnitario)}</td>
+                <td className="border border-black px-2 py-2 text-right">{money(item.valorTotal)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-gray-50">
-              <td colSpan={6} className="border border-gray-400 px-2 py-2 text-right font-bold">TOTAL DA MEDIÇÃO</td>
-              <td className="border border-gray-400 px-2 py-2 text-right font-bold text-emerald-700">{money(measurement.total)}</td>
+            <tr>
+              <td colSpan={5} className="border border-black px-2 py-1 text-left text-sm font-extrabold uppercase">TOTAL DA MEDIÇÃO</td>
+              <td className="border border-black bg-[#92d050] px-2 py-1 text-right text-sm font-extrabold">{money(measurement.total)}</td>
+            </tr>
+            <tr>
+              <td className="border border-black px-2 py-1" />
+              <td colSpan={3} className="border border-black px-2 py-1">Forma de Pagamento: {measurement.formaPagamento || "medição - nota fiscal/boleto"}</td>
+              <td colSpan={2} className="border border-black px-2 py-1" />
+            </tr>
+            <tr>
+              <td className="border border-black px-2 py-1" />
+              <td colSpan={3} className="border border-black px-2 py-2">Local de entrega: {measurement.localEntrega || city}</td>
+              <td colSpan={2} className="border border-black px-2 py-2" />
+            </tr>
+            <tr>
+              <td className="border border-black px-2 py-1" />
+              <td colSpan={3} className="border border-black px-2 py-1">Medição referente ao período informado.</td>
+              <td colSpan={2} className="border border-black px-2 py-1 text-right">{city}, {today.toLocaleDateString("pt-BR")}.</td>
             </tr>
           </tfoot>
+        </table>
+
+        <div className="flex min-h-[168px] items-end justify-center px-8 pb-4 pt-5 text-center">
+          <div className="min-w-[260px]">
+            <div className="mx-auto mb-1 h-10 w-24 border-b border-black" />
+            <p className="font-bold">{company?.responsavelExecucao || company?.responsavelTecnico || "Responsável técnico"}</p>
+            <p className="font-bold">Resp. execução</p>
+            <p className="text-[10px]">Cargo: {company?.cargoResponsavel || "diretora/gerente de negócios/resp. técnica"}</p>
+          </div>
+        </div>
+
+        <table className="w-full border-collapse text-[11px]">
+          <thead>
+            <tr>
+              {["NOME SOLICITANTE", "CARGO/FUNÇÃO", "", "ASSINATURA"].map((head, index) => (
+                <th key={`${head}-${index}`} className="border border-black px-2 py-1 text-center font-bold uppercase">{head}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[0, 1, 2, 3, 4].map((row) => (
+              <tr key={row}>
+                <td className="h-6 border border-black px-2">{row === 0 ? " " : ""}</td>
+                <td className="border border-black px-2" />
+                <td className="border border-black px-2" />
+                <td className="border border-black px-2" />
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </div>
@@ -237,7 +313,7 @@ export default function Medicao() {
             </CardContent>
           </Card>
 
-          {selected ? <MeasurementPrint measurement={selected} /> : null}
+          {selected ? <MeasurementPrint measurement={selected} data={data} /> : null}
         </>
       ) : null}
     </div>
