@@ -11,6 +11,7 @@
     "build:dev": "vite build --mode development",
     "start": "node --env-file=.env server/index.mjs",
     "auth:create-admin": "node --env-file=.env scripts/create-admin-user.mjs",
+    "audit:e2e": "node --env-file=.env scripts/audit-homologation-flow.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

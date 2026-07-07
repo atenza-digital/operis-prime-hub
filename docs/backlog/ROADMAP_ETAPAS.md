@@ -123,8 +123,11 @@ Entregue ate agora:
 - Guia de homologacao operacional atualizado para refletir proposta, contrato, OS, medicao e ERP.
 - Pasta de evidencias da Etapa 7 criada em `docs/evidencias/etapa7_homologacao`.
 - Smoke tests ampliados para 11 testes, cobrindo rotas criticas de contratos/propostas, certificados/historico e medicao.
+- Ficha de execucao E2E criada para rodada assistida com usuarios em `docs/evidencias/etapa7_homologacao/EXECUCAO_E2E_2026-07-07.md`.
+- Auditoria tecnica de dados de homologacao criada via `npm run audit:e2e`, gerando `docs/evidencias/etapa7_homologacao/auditoria-e2e-dados.md`.
+- Release note interna criada para a auditoria E2E da Etapa 7.
 
-Backlog da Etapa 7: 11 itens.
+Backlog da Etapa 7: 9 itens.
 
 - Executar E2E manual e documentado: proposta -> contrato -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
 - Evoluir testes automatizados de smoke routes para E2E de fluxo com acoes e validacoes de dados.
@@ -136,7 +139,6 @@ Backlog da Etapa 7: 11 itens.
 - Validar fluxo de recorrencia apos conclusao de agendamento.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
-- Gerar pacote final de evidencias da homologacao em `docs/evidencias/etapa7_homologacao`.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
@@ -185,7 +187,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos fechamento da Etapa 6: 35.
-- Total de itens remanescentes: 34.
-- Etapa 7: 11 itens.
+- Total de itens remanescentes: 32.
+- Etapa 7: 9 itens.
 - Etapa 8: 23 itens.
 - Itens fora de etapa: 0.

@@ -19,9 +19,23 @@ Use nomes curtos e numerados:
 
 `proposta -> contrato -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia`
 
+## Arquivos de controle
+
+- `EXECUCAO_E2E_2026-07-07.md`: ficha de execucao da rodada assistida.
+- `auditoria-e2e-dados.md`: relatorio tecnico gerado pelo comando `npm run audit:e2e`.
+
+## Auditoria tecnica
+
+Execute quando quiser conferir rapidamente a coerencia da base de homologacao:
+
+```bash
+npm run audit:e2e
+```
+
+O comando nao altera dados. Ele gera um resumo com contagens por status e pontos que precisam ser verificados no fluxo.
+
 ## Observacoes
 
 - Prints devem ocultar dados sensiveis se forem enviados fora do ambiente interno.
 - Toda divergencia deve ser registrada tambem no roteiro `docs/cliente/ROTEIRO_HOMOLOGACAO_E2E.md`.
 - Evidencias aprovadas podem ser promovidas depois para `docs/validados`.
-
