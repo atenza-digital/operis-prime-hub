@@ -8,6 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 7 de 8 em andamento.
 - Proxima etapa recomendada: continuar Etapa 7 de 8 - QA, testes E2E e homologacao guiada.
 - Itens de backlog mapeados apos o fechamento da Etapa 6: 35.
+- Itens de backlog remanescentes apos inicio da Etapa 7: 34.
 - Itens fora de etapa: 0.
 
 ## Etapa 1 de 8 - Correcoes P0 de seguranca e consistencia
@@ -118,12 +119,15 @@ Entregue ate agora:
 - Agendamento passou a listar apenas contratos vigentes com saldo operacional positivo para evitar abertura de OS sem saldo.
 - Seletor de contrato no agendamento passou a mostrar saldo operacional por item.
 - Medicao passou a comunicar explicitamente que acompanha NF, cobranca, pagamento e baixa manual no ERP, sem substituir contas a receber do ERP.
+- Roteiro formal de homologacao E2E criado em `docs/cliente/ROTEIRO_HOMOLOGACAO_E2E.md`.
+- Guia de homologacao operacional atualizado para refletir proposta, contrato, OS, medicao e ERP.
+- Pasta de evidencias da Etapa 7 criada em `docs/evidencias/etapa7_homologacao`.
+- Smoke tests ampliados para 11 testes, cobrindo rotas criticas de contratos/propostas, certificados/historico e medicao.
 
-Backlog da Etapa 7: 12 itens.
+Backlog da Etapa 7: 11 itens.
 
-- Criar roteiro formal de homologacao para usuarios, separado por Comercial, Operacional, Medicao e Certificados.
 - Executar E2E manual e documentado: proposta -> contrato -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
-- Criar testes automatizados E2E minimos para rotas e fluxos criticos.
+- Evoluir testes automatizados de smoke routes para E2E de fluxo com acoes e validacoes de dados.
 - Validar multi-tenant com tenant generico e tenant Ciperprag, incluindo documentos sem logo.
 - Validar proposta aprovada gerando contrato com snapshot dos itens aprovados e trilha de aceite.
 - Validar numeração automatica de OS, proposta, contrato, certificado e medicao.
@@ -132,7 +136,7 @@ Backlog da Etapa 7: 12 itens.
 - Validar fluxo de recorrencia apos conclusao de agendamento.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
-- Gerar pacote de evidencias da homologacao em `docs/evidencias/etapa7_homologacao`.
+- Gerar pacote final de evidencias da homologacao em `docs/evidencias/etapa7_homologacao`.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
@@ -181,6 +185,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos fechamento da Etapa 6: 35.
-- Etapa 7: 12 itens.
+- Total de itens remanescentes: 34.
+- Etapa 7: 11 itens.
 - Etapa 8: 23 itens.
 - Itens fora de etapa: 0.

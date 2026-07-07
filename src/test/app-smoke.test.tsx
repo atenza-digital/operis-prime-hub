@@ -109,12 +109,16 @@ describe("app smoke routes", () => {
   it.each([
     ["/agendar", /agendamentos/i],
     ["/ordens", /ordens de serviço/i],
+    ["/certificados", /certificados e histórico/i],
+    ["/medicao", /medição/i],
     ["/auditoria-eventos", /eventos de auditoria/i],
     ["/comercial/clientes", /^clientes$/i],
     ["/comercial/servicos", /^serviços$/i],
+    ["/comercial/contratos", /contratos e propostas/i],
   ])("renderiza rota autenticada %s", async (path, title) => {
     renderAt(path, "token-teste");
 
-    expect(await screen.findByRole("heading", { name: title }, { timeout: 5000 })).toBeInTheDocument();
+    const headings = await screen.findAllByRole("heading", { name: title }, { timeout: 5000 });
+    expect(headings.length).toBeGreaterThan(0);
   }, 12000);
 });
