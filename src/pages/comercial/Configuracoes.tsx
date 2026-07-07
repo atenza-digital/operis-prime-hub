@@ -18,6 +18,9 @@ const defaultEmpresa: EmpresaConfig = {
   telefone: "",
   email: "",
   logoUrl: logoDefault,
+  corPrimaria: "#0b7a53",
+  corSecundaria: "#64748b",
+  corDestaque: "#0f5138",
   alvara: "",
   cr02: "",
   anvisa: "",
@@ -31,6 +34,16 @@ const defaultEmpresa: EmpresaConfig = {
   telefoneEmergencia: "",
   medicaoFormaPagamentoPadrao: "Medição mensal - NF/Boleto",
   medicaoLocalEntregaPadrao: "",
+  certificadoConfig: {
+    templateCodigo: "certificado-garantia",
+    templateVersao: "saas-tenant-v1",
+    titulo: "Certificado de Garantia",
+    subtitulo: "",
+    exibirQrCode: true,
+    exibirFotos: true,
+    limiteFotos: 3,
+    exibirProdutosQuimicos: true,
+  },
 };
 
 const defaultNumeracao: NumeracaoConfig = {
@@ -87,12 +100,15 @@ export default function Configuracoes() {
   const [loading, setLoading] = useState(true);
   const [savingEmpresa, setSavingEmpresa] = useState(false);
   const [savingNumeracao, setSavingNumeracao] = useState(false);
+  const [certificadoConfigText, setCertificadoConfigText] = useState("{}");
 
   async function reload() {
     setLoading(true);
     try {
       const data = await getBootstrap();
-      setEmpresa({ ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || logoDefault });
+      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || logoDefault };
+      setEmpresa(mergedEmpresa);
+      setCertificadoConfigText(JSON.stringify(mergedEmpresa.certificadoConfig || {}, null, 2));
       setNumeracao({ ...defaultNumeracao, ...data.numberingConfig });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar configurações");
@@ -108,7 +124,8 @@ export default function Configuracoes() {
   async function handleSaveEmpresa() {
     setSavingEmpresa(true);
     try {
-      await saveCompanyConfig(empresa);
+      const certificadoConfig = certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
+      await saveCompanyConfig({ ...empresa, certificadoConfig });
       toast.success("Configurações da empresa salvas");
       await reload();
     } catch (error) {
@@ -172,6 +189,44 @@ export default function Configuracoes() {
                   <Label>Alterar logo</Label>
                   <Input type="file" accept="image/*" onChange={handleLogoChange} className="w-full max-w-md text-sm" />
                   <p className="text-xs text-muted-foreground">A logo será usada nos documentos e no topo do sistema.</p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Cor primaria</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={empresa.corPrimaria || "#0b7a53"}
+                      onChange={(event) => setEmpresa({ ...empresa, corPrimaria: event.target.value })}
+                      className="h-10 w-14 p-1"
+                    />
+                    <Input value={empresa.corPrimaria || ""} onChange={(event) => setEmpresa({ ...empresa, corPrimaria: event.target.value })} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cor secundaria</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={empresa.corSecundaria || "#64748b"}
+                      onChange={(event) => setEmpresa({ ...empresa, corSecundaria: event.target.value })}
+                      className="h-10 w-14 p-1"
+                    />
+                    <Input value={empresa.corSecundaria || ""} onChange={(event) => setEmpresa({ ...empresa, corSecundaria: event.target.value })} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cor de destaque</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={empresa.corDestaque || "#0f5138"}
+                      onChange={(event) => setEmpresa({ ...empresa, corDestaque: event.target.value })}
+                      className="h-10 w-14 p-1"
+                    />
+                    <Input value={empresa.corDestaque || ""} onChange={(event) => setEmpresa({ ...empresa, corDestaque: event.target.value })} />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -273,6 +328,19 @@ export default function Configuracoes() {
               <div className="space-y-2">
                 <Label>Texto de fixação</Label>
                 <Input value={empresa.certificadoTextoFixacao || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoFixacao: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Configuração avançada do certificado (JSON)</Label>
+                <Textarea
+                  value={certificadoConfigText}
+                  onChange={(event) => setCertificadoConfigText(event.target.value)}
+                  rows={10}
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use para parametrizar logoPrincipalUrl, arteFundoUrl, seloInstitucionalUrl, assinaturaUrl,
+                  titulo, subtitulo, publicBaseUrl, licencas, rodapeLinhas, cit, limiteFotos e exibições do template.
+                </p>
               </div>
             </CardContent>
           </Card>

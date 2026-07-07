@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   generateContractFromProposal,
   getBootstrap,
@@ -17,7 +17,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSignature, Plus, Pencil, Search, Trash2, FileText, ArrowRight, CheckCircle2, Link2 } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  FileSignature,
+  FileText,
+  Link2,
+  Pencil,
+  Plus,
+  Receipt,
+  Search,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -49,6 +63,29 @@ const emptyTemplate: Omit<ContratoTemplate, "id"> = {
   dataCriacao: new Date().toISOString().split("T")[0],
   observacoes: "",
 };
+
+const commercialFlow = [
+  {
+    title: "1. Gerar proposta",
+    description: "Monte a proposta com cliente, serviços/produtos, quantidades, valores e condições comerciais.",
+    icon: Send,
+  },
+  {
+    title: "2. Aprovar e contratar",
+    description: "Após aceite, gere o contrato pela proposta ou cadastre o contrato no modelo enviado pelo cliente.",
+    icon: FileSignature,
+  },
+  {
+    title: "3. Liberar operação",
+    description: "Contrato vigente sincroniza os itens operacionais para agenda, OS e consulta de saldo.",
+    icon: CalendarDays,
+  },
+  {
+    title: "4. Medir execução",
+    description: "OS encerradas entram na medição; NF e pagamento são acompanhados até a baixa manual no ERP.",
+    icon: Receipt,
+  },
+];
 
 function gerarNumero(formato: string, sequencia: number) {
   return formato
@@ -108,6 +145,7 @@ export default function Contratos() {
       ...emptyTemplate,
       tipo,
       numero: gerarNumero(formato, sequenciaAtual + 1),
+      status: tipo === "contrato" ? "vigente" : "rascunho",
       servicos: [{ ...emptyServico }],
     });
     setDialogOpen(true);
@@ -180,6 +218,30 @@ export default function Contratos() {
   }
 
   const pdfClient = pdfItem ? clients.find((item) => item.id === pdfItem.clienteId) : null;
+  const pdfServicos = pdfItem
+    ? pdfItem.servicos.map((item) => ({
+        ...item,
+        catalogo: services.find((service) => service.id === item.servicoId),
+        total: Number(item.quantidade || 0) * Number(item.valorUnitario || 0),
+      }))
+    : [];
+  const pdfTotal = pdfItem ? calcTotal(pdfItem.servicos) : 0;
+  const companyName = companyConfig?.razaoSocial || companyConfig?.nomeFantasia || "Empresa emissora";
+  const companyDocument = companyConfig?.cnpj || "";
+  const companyContact = [companyConfig?.telefone, companyConfig?.email].filter(Boolean).join(" | ");
+  const clientAddress = pdfClient ? [pdfClient.endereco, pdfClient.bairro, `${pdfClient.municipio}-${pdfClient.uf}`, pdfClient.cep].filter(Boolean).join(", ") : "";
+  const rawDocumentDate = pdfItem?.dataCriacao
+    ? new Date(pdfItem.dataCriacao.includes("T") ? pdfItem.dataCriacao : `${pdfItem.dataCriacao}T12:00:00`)
+    : new Date();
+  const safeDocumentDate = Number.isNaN(rawDocumentDate.getTime()) ? new Date() : rawDocumentDate;
+  const documentDate = safeDocumentDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const commercialPrimary = companyConfig?.corPrimaria || "#0f7f5c";
+  const commercialSecondary = companyConfig?.corSecundaria || "#475569";
+  const documentKindLabel = pdfItem?.tipo === "contrato" ? "Contrato de Prestação de Serviços" : "Proposta Técnica Comercial";
+  const isContractDocument = pdfItem?.tipo === "contrato";
+  const representativeName = companyConfig?.responsavelExecucao || companyConfig?.responsavelTecnico || "Responsável autorizado";
+  const representativeRole = companyConfig?.cargoResponsavel || (isContractDocument ? "Representante da contratada" : "Responsável pela proposta");
+  const serviceFrequencies = Array.from(new Set(pdfServicos.map((item) => item.frequencia).filter(Boolean))).join(", ");
 
   return (
     <div className="space-y-6">
@@ -189,13 +251,34 @@ export default function Contratos() {
             <FileSignature className="h-6 w-6 text-primary" />
             Contratos e Propostas
           </h1>
-          <p className="text-muted-foreground text-sm">Gerencie propostas e contratos persistidos no banco</p>
+          <p className="text-muted-foreground text-sm">Fluxo comercial integrado: proposta aprovada, contrato vigente e operação liberada por item contratado.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => openNew("contrato")}><Plus className="h-4 w-4 mr-2" />Novo Contrato</Button>
+          <Button variant="outline" onClick={() => openNew("contrato")}><ClipboardCheck className="h-4 w-4 mr-2" />Contrato do cliente</Button>
           <Button onClick={() => openNew("proposta")}><Plus className="h-4 w-4 mr-2" />Nova Proposta</Button>
         </div>
       </div>
+
+      <Card className="print:hidden border-primary/20 bg-primary/[0.03]">
+        <CardContent className="pt-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {commercialFlow.map((step) => (
+              <div key={step.title} className="rounded-2xl border bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-xl bg-primary/10 p-2 text-primary">
+                    <step.icon className="h-4 w-4" />
+                  </div>
+                  <p className="font-semibold">{step.title}</p>
+                </div>
+                <p className="mt-2 text-sm leading-5 text-muted-foreground">{step.description}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Caminho recomendado: envie a proposta, marque como aprovada após aceite, gere o contrato e só então agende serviços pelo saldo operacional criado.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card className="print:hidden">
         <CardHeader className="pb-3">
@@ -287,111 +370,286 @@ export default function Contratos() {
 
       {pdfItem && (
         <div className="document-print-root hidden print:block" ref={printRef}>
-          <div className="mx-auto max-w-[210mm] border border-black bg-white p-0 font-sans text-[11px] text-black">
-            <div className="relative min-h-[82px] overflow-hidden border-b border-black">
-              <div className="absolute -right-10 -top-16 h-32 w-32 rounded-full bg-emerald-900" />
-              <div className="flex items-center gap-6 px-5 py-3">
-                <img src={companyConfig?.logoUrl || logoImg} alt="Ciperprag" className="h-14 w-28 object-contain" />
-                <div className="flex-1 text-center text-[13px] font-bold uppercase">
-                  {companyConfig?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA"} CNPJ: {companyConfig?.cnpj || "15.722.292/0001-43"}
+          <section
+            className="mx-auto flex min-h-[297mm] w-[210mm] flex-col bg-white px-[14mm] py-[10mm] font-sans text-[10px] leading-snug text-slate-950"
+            style={{ "--doc-primary": commercialPrimary, "--doc-secondary": commercialSecondary } as CSSProperties}
+          >
+            <header className="border-b-2 pb-2" style={{ borderColor: commercialPrimary }}>
+              <div className="flex items-start justify-between gap-8">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-36 items-center justify-start border border-slate-200 bg-white px-3">
+                    <img src={companyConfig?.logoUrl || logoImg} alt={companyName} className="max-h-10 max-w-full object-contain object-left" />
+                  </div>
+                  <div>
+                    <h1 className="text-[19px] font-black uppercase leading-tight tracking-tight">{documentKindLabel}</h1>
+                    <p className="mt-1 font-mono text-[11px] font-bold" style={{ color: commercialSecondary }}>
+                      Nº {pdfItem.numero} · Emissão {documentDate}
+                    </p>
+                  </div>
+                </div>
+                <div className="max-w-[285px] text-right text-[9px] text-slate-600">
+                  <p className="font-black uppercase leading-tight text-slate-950">{companyName}</p>
+                  {companyDocument ? <p>CNPJ {companyDocument}</p> : null}
+                  {companyConfig?.endereco ? <p>{companyConfig.endereco}</p> : null}
+                  {companyContact ? <p>{companyContact}</p> : null}
                 </div>
               </div>
-            </div>
+            </header>
 
-            <h1 className="border-b border-black py-2 text-center text-lg font-extrabold uppercase text-emerald-800">
-              {pdfItem.tipo === "contrato" ? "CONTRATO DE PRESTAÇÃO DE SERVIÇOS" : "PROPOSTA TÉCNICA COMERCIAL"}
-            </h1>
-            <p className="border-b border-black py-1 text-center text-sm font-bold">Nº {pdfItem.numero}</p>
+            {isContractDocument ? (
+              <div className="mt-4">
+                <h2 className="mb-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: commercialPrimary }}>Partes Contratantes</h2>
+                <table className="w-full border-collapse text-[9.5px]">
+                  <tbody>
+                    <tr>
+                      <td className="w-[18%] border border-slate-300 bg-slate-50 px-2 py-1.5 font-black uppercase">Contratada</td>
+                      <td className="border border-slate-300 px-2 py-1.5">
+                        <strong>{companyName}</strong>
+                        {companyDocument ? <span> · CNPJ {companyDocument}</span> : null}
+                        {companyConfig?.endereco ? <span> · {companyConfig.endereco}</span> : null}
+                        <span> · Representante: {representativeName}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-black uppercase">Contratante</td>
+                      <td className="border border-slate-300 px-2 py-1.5">
+                        <strong>{pdfClient?.razaoSocial || "Cliente não informado"}</strong>
+                        {pdfClient?.cnpj ? <span> · CNPJ/CPF {pdfClient.cnpj}</span> : null}
+                        {clientAddress ? <span> · {clientAddress}</span> : null}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="mt-5 border-b border-slate-200 pb-3">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: commercialPrimary }}>Cliente / Contratante</p>
+                <h2 className="mt-1 text-[20px] font-black leading-tight">{pdfClient?.razaoSocial || "Cliente não informado"}</h2>
+                <p className="mt-1 text-[9.5px] text-slate-600">
+                  CNPJ/CPF {pdfClient?.cnpj || "-"} · {pdfClient ? `${pdfClient.municipio}/${pdfClient.uf}` : "-"} · {clientAddress || "Endereço não informado"}
+                </p>
+              </div>
+            )}
 
-            <table className="w-full border-collapse">
+                <table className="mt-3 w-full border-collapse text-[9.5px]">
               <tbody>
-                <tr className="bg-[#c6e0b4] text-center text-sm font-extrabold uppercase">
-                  <td colSpan={4} className="border border-black px-2 py-1">DADOS DO CONTRATANTE</td>
+                <tr>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">Emissão</td>
+                  <td className="border border-slate-300 px-2 py-1.5">{documentDate}</td>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">{isContractDocument ? "Vigência" : "Validade"}</td>
+                  <td className="border border-slate-300 px-2 py-1.5">{pdfItem.vigenciaMeses} meses</td>
                 </tr>
                 <tr>
-                  <td className="w-[15%] border border-black px-2 py-1 font-bold uppercase">Razão Social:</td>
-                  <td className="w-[43%] border border-black px-2 py-1">{pdfClient?.razaoSocial}</td>
-                  <td className="w-[15%] border border-black px-2 py-1 font-bold uppercase">CNPJ:</td>
-                  <td className="border border-black px-2 py-1">{pdfClient?.cnpj}</td>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">Valor total</td>
+                  <td className="border border-slate-300 px-2 py-1.5 font-black" style={{ color: commercialPrimary }}>{pdfTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">Pagamento</td>
+                  <td className="border border-slate-300 px-2 py-1.5">{pdfItem.formaPagamento || "-"}</td>
                 </tr>
                 <tr>
-                  <td className="border border-black px-2 py-1 font-bold uppercase">Endereço:</td>
-                  <td className="border border-black px-2 py-1">{pdfClient?.endereco}, {pdfClient?.bairro}</td>
-                  <td className="border border-black px-2 py-1 font-bold uppercase">Município/UF:</td>
-                  <td className="border border-black px-2 py-1">{pdfClient?.municipio}/{pdfClient?.uf}</td>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">Local</td>
+                  <td className="border border-slate-300 px-2 py-1.5">{clientAddress || "Conforme cadastro do cliente/contrato."}</td>
+                  <td className="border border-slate-300 bg-slate-50 px-2 py-1.5 font-bold uppercase text-slate-600">Periodicidade</td>
+                  <td className="border border-slate-300 px-2 py-1.5">{serviceFrequencies || "Conforme itens contratados."}</td>
                 </tr>
               </tbody>
             </table>
 
-            <div className="p-4">
-              <p className="mb-3 text-center">
-                Encaminhamos para conferência as condições comerciais e técnicas para execução dos serviços abaixo descritos.
-              </p>
+              {pdfItem.tipo === "proposta" ? (
+                <div className="mt-3 space-y-2">
+                  <section>
+                    <h3 className="border-b border-slate-300 pb-1 text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>1. Apresentação</h3>
+                    <p className="mt-2">
+                      Apresentamos nossa proposta técnica e comercial para execução dos serviços abaixo caracterizados,
+                      com escopo, frequência, valores e condições definidos a partir do cadastro comercial e do catálogo de serviços.
+                    </p>
+                  </section>
 
-              <table className="mb-4 w-full border-collapse text-[11px]">
-                <thead>
-                  <tr className="bg-[#c6e0b4]">
-                    <th className="border border-black p-2 text-left uppercase">Descrição de serviços</th>
-                    <th className="border border-black p-2 text-center uppercase">Qtd.</th>
-                    <th className="border border-black p-2 text-center uppercase">Frequência</th>
-                    <th className="border border-black p-2 text-right uppercase">Valor unit.</th>
-                    <th className="border border-black p-2 text-right uppercase">Valor total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pdfItem.servicos.map((servico, index) => {
-                    const service = services.find((item) => item.id === servico.servicoId);
-                    return (
-                      <tr key={`${servico.servicoId}-${index}`}>
-                        <td className="border border-black p-2 uppercase">{service?.nome || "—"}</td>
-                        <td className="border border-black p-2 text-center">{servico.quantidade}</td>
-                        <td className="border border-black p-2 text-center">{servico.frequencia}</td>
-                        <td className="border border-black p-2 text-right">R$ {servico.valorUnitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                        <td className="border border-black p-2 text-right font-bold">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  <section>
+                    <h3 className="border-b border-slate-300 pb-1 text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>2. Credenciamento / capacidade técnica</h3>
+                    <p className="mt-2 text-[10.5px] text-slate-700">
+                      A contratada declara possuir estrutura técnica, equipe qualificada e registros aplicáveis conforme parametrização do tenant.
+                      {companyConfig?.alvara ? ` Alvará: ${companyConfig.alvara}.` : ""}
+                      {companyConfig?.vigilanciaSanitaria ? ` Vigilância Sanitária: ${companyConfig.vigilanciaSanitaria}.` : ""}
+                      {companyConfig?.anvisa ? ` ANVISA: ${companyConfig.anvisa}.` : ""}
+                    </p>
+                  </section>
+
+                  <section>
+                    <h3 className="border-b border-slate-300 pb-1 text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>3. Natureza dos serviços</h3>
+                    <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1.5">
+                      {pdfServicos.map((item, index) => (
+                        <div key={`${item.servicoId}-${index}`} className="border-b border-slate-200 pb-1">
+                          <p className="font-black">{String(index + 1).padStart(2, "0")} - {item.catalogo?.nome || "Serviço não informado"}</p>
+                          <p className="mt-1 text-[9.5px] text-slate-600">{item.catalogo?.descricao || `Frequência: ${item.frequencia}`}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section>
+                    <h3 className="border-b border-slate-300 pb-1 text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>4. Forma de execução / tratamento</h3>
+                    <div className="mt-1 space-y-1">
+                      {pdfServicos.map((item, index) => (
+                        <div key={`${item.servicoId}-execucao-${index}`} className="pl-2.5" style={{ borderLeft: `2px solid ${commercialPrimary}` }}>
+                          <p className="font-black">{item.catalogo?.nome || "Serviço"}</p>
+                          <p className="mt-0.5 text-[9px] text-slate-700">
+                            {(item.catalogo?.procedimentos && item.catalogo.procedimentos.length > 0)
+                              ? item.catalogo.procedimentos.slice(0, 3).join(" ")
+                              : "Execução conforme procedimento operacional, boas práticas técnicas, requisitos do contrato e orientações do responsável técnico."}
+                          </p>
+                          {item.catalogo?.epis?.length ? <p className="mt-1 text-[9.5px] text-slate-500">EPIs previstos: {item.catalogo.epis.join(", ")}.</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2 text-[10px]">
+                  <section>
+                    <h3 className="text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>Cláusula 1ª - Objeto do contrato</h3>
+                    <p className="mt-2 text-slate-700">
+                      O presente instrumento estabelece as condições para prestação dos serviços técnicos listados neste documento,
+                      incluindo escopo, frequência, valores, vigência e responsabilidades operacionais vinculadas ao contrato.
+                    </p>
+                  </section>
+                  <section>
+                    <h3 className="text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>Cláusula 2ª - Escopo técnico</h3>
+                    <p className="mt-2 text-slate-700">
+                      Os serviços serão executados conforme catálogo técnico, POPs, checklist aplicável, requisitos do cliente e registros de OS.
+                      Cada item contratado poderá alimentar agendamentos, ordens de serviço, certificados e medições.
+                    </p>
+                  </section>
+                  <section>
+                    <h3 className="text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>Cláusula 3ª - Responsabilidades das partes</h3>
+                    <p className="mt-2 text-slate-700"><strong>Contratada:</strong> executar os serviços, registrar evidências, emitir documentos aplicáveis e manter rastreabilidade operacional.</p>
+                    <p className="mt-1 text-slate-700"><strong>Contratante:</strong> disponibilizar acesso aos locais, acompanhar a execução quando necessário e validar medições conforme contrato.</p>
+                  </section>
+                </div>
+              )}
+
+              <section className="mt-3">
+                <div className="mb-2 flex items-end justify-between">
+                  <h3 className="border-b border-slate-300 pb-1 text-[12px] font-black uppercase" style={{ color: commercialPrimary }}>
+                    {pdfItem.tipo === "proposta" ? "5. Valor do serviço" : "Cláusula 4ª - Serviços contratados"}
+                  </h3>
+                  <span className="text-[10px] font-bold text-slate-500">{pdfServicos.length} item(ns)</span>
+                </div>
+                <table className="w-full border-collapse text-[9px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-left text-slate-800">
+                      <th className="border border-slate-300 px-2 py-1.5">Item</th>
+                      <th className="border border-slate-300 px-2 py-1.5">Serviço/produto</th>
+                      <th className="border border-slate-300 px-2 py-1.5 text-center">Qtd.</th>
+                      <th className="border border-slate-300 px-2 py-1.5 text-center">Frequência</th>
+                      <th className="border border-slate-300 px-2 py-1.5 text-right">Unit.</th>
+                      <th className="border border-slate-300 px-2 py-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pdfServicos.map((item, index) => (
+                      <tr key={`${item.servicoId}-valor-${index}`}>
+                        <td className="border border-slate-300 px-2 py-1.5 font-bold">{String(index + 1).padStart(2, "0")}</td>
+                        <td className="border border-slate-300 px-2 py-1.5">
+                          <p className="font-bold">{item.catalogo?.nome || "Serviço não informado"}</p>
+                          <p className="text-[8.5px] text-slate-500">{item.catalogo?.unidade ? `Unidade: ${item.catalogo.unidade}` : "Origem: catálogo de serviços/produtos"}</p>
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1.5 text-center">{item.quantidade}</td>
+                        <td className="border border-slate-300 px-2 py-1.5 text-center">{item.frequencia}</td>
+                        <td className="border border-slate-300 px-2 py-1.5 text-right">{item.valorUnitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                        <td className="border border-slate-300 px-2 py-1.5 text-right font-black">{item.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="font-bold">
-                    <td className="border border-black p-2" colSpan={4}>VALOR TOTAL</td>
-                    <td className="border border-black bg-[#92d050] p-2 text-right">R$ {calcTotal(pdfItem.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-black uppercase" colSpan={5}>Total geral</td>
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-black" style={{ color: commercialPrimary }}>{pdfTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </section>
 
-              <div className="mb-8 border border-black">
-                <div className="border-b border-black bg-[#c6e0b4] px-2 py-1 text-center text-sm font-extrabold uppercase">Condições comerciais</div>
-                <div className="space-y-1 px-3 py-2">
-                  <p><strong>Vigência:</strong> {pdfItem.vigenciaMeses} meses</p>
-                  <p><strong>Forma de pagamento:</strong> {pdfItem.formaPagamento}</p>
-                  <p><strong>Prazo de pagamento:</strong> {pdfItem.prazoPagamentoDias} dias após medição</p>
-                  {pdfItem.observacoes && <p><strong>Observações:</strong> {pdfItem.observacoes}</p>}
+              <section
+                className="mt-3 grid grid-cols-2 gap-5 text-[9.5px]"
+                style={{ breakBefore: pdfServicos.length > 8 ? "page" : "auto" }}
+              >
+                {pdfServicos.length > 8 ? (
+                  <div className="col-span-2 border-b border-slate-300 pb-2">
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em]" style={{ color: commercialPrimary }}>
+                      Fechamento comercial e assinaturas
+                    </p>
+                    <p className="mt-1 text-[9px] text-slate-500">Condições finais do documento, observações e campos de assinatura.</p>
+                  </div>
+                ) : null}
+                <div>
+                  <h3 className="border-b border-slate-300 pb-1 font-black uppercase" style={{ color: commercialPrimary }}>
+                    {isContractDocument ? "Cláusula 5ª - Condições comerciais" : "6. Condições comerciais"}
+                  </h3>
+                  <p className="mt-2"><strong>Pagamento:</strong> {pdfItem.formaPagamento}</p>
+                  <p><strong>Prazo:</strong> {pdfItem.prazoPagamentoDias} dias após medição/aceite.</p>
+                  <p><strong>{pdfItem.tipo === "contrato" ? "Vigência" : "Validade da proposta"}:</strong> {pdfItem.vigenciaMeses} meses.</p>
                 </div>
-              </div>
+                <div>
+                  <h3 className="border-b border-slate-300 pb-1 font-black uppercase" style={{ color: commercialPrimary }}>
+                    {isContractDocument ? "Cláusula 6ª - Local e periodicidade" : "7. Local e periodicidade"}
+                  </h3>
+                  <p className="mt-2"><strong>Local:</strong> {clientAddress || "Locais definidos no cadastro do cliente/contrato."}</p>
+                  <p><strong>Periodicidade:</strong> {serviceFrequencies || "Conforme contrato."}</p>
+                </div>
+              </section>
 
-              <div className="mt-16 grid grid-cols-2 gap-12 text-center text-xs">
-                <div className="border-t border-black pt-2">
-                  <p className="font-bold">{companyConfig?.razaoSocial}</p>
-                  <p>{companyConfig?.responsavelExecucao || companyConfig?.responsavelTecnico}</p>
-                  <p>{companyConfig?.cargoResponsavel}</p>
+              {isContractDocument ? (
+                <section className="mt-3 space-y-2 text-[9.5px]">
+                  <div>
+                    <h3 className="font-black uppercase" style={{ color: commercialPrimary }}>Cláusula 7ª - Reajuste</h3>
+                    <p>Os valores poderão ser reajustados conforme índice e regra comercial definidos no contrato, aditivo ou parametrização vigente do tenant.</p>
+                  </div>
+                  <div>
+                    <h3 className="font-black uppercase" style={{ color: commercialPrimary }}>Cláusula 8ª - Rescisão e disposições gerais</h3>
+                    <p>A rescisão, substituição de escopo, aceite de medições e demais disposições seguirão as condições pactuadas entre as partes e os registros operacionais do sistema.</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {pdfItem.observacoes ? (
+                <section className="mt-3 border-t border-slate-300 pt-2 text-[9.5px]">
+                  <h3 className="font-black uppercase" style={{ color: commercialPrimary }}>{isContractDocument ? "Observações contratuais" : "8. Observações"}</h3>
+                  <p className="mt-1 text-slate-700">{pdfItem.observacoes}</p>
+                </section>
+              ) : null}
+
+              <section className={`${isContractDocument ? "mt-auto" : "mt-4"} border-t border-slate-300 pt-2 text-[9.5px]`}>
+                <p className="mb-3 text-center text-[8.5px] text-slate-500">
+                  {isContractDocument ? "E, por estarem de acordo, as partes assinam o presente instrumento." : "Aceite da proposta e autorização para continuidade do fluxo comercial."}
+                </p>
+                <div className="grid grid-cols-2 gap-14 text-center">
+                <div className="border-t border-slate-900 pt-1.5">
+                  <p className="font-black">{companyName}</p>
+                  <p>{representativeName}</p>
+                  <p>{representativeRole}</p>
                 </div>
-                <div className="border-t border-black pt-2">
-                  <p className="font-bold">{pdfClient?.razaoSocial}</p>
-                  <p>Representante Legal</p>
+                <div className="border-t border-slate-900 pt-1.5">
+                  <p className="font-black">{pdfClient?.razaoSocial || "Contratante"}</p>
+                  <p>Nome / cargo / assinatura</p>
+                  <p>{pdfClient ? `${pdfClient.municipio}/${pdfClient.uf}` : "Local"}, ____/____/______</p>
                 </div>
-              </div>
-            </div>
-          </div>
+                </div>
+              </section>
+          </section>
         </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editId ? "Editar" : "Novo(a)"} {form.tipo === "contrato" ? "Contrato" : "Proposta"}</DialogTitle>
+            <DialogTitle>{editId ? "Editar" : form.tipo === "contrato" ? "Novo contrato do cliente" : "Nova proposta"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-2xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {form.tipo === "contrato"
+                ? "Use este caminho quando o cliente já aprovou o fornecimento por um contrato próprio. Ao salvar como vigente, os itens ficam disponíveis para agenda e controle de saldo operacional."
+                : "Use este caminho para enviar uma proposta. Depois do aceite, altere o status para aprovada e gere o contrato a partir dela."}
+            </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Número *</Label>
@@ -399,7 +657,13 @@ export default function Contratos() {
               </div>
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={(value) => setForm({ ...form, tipo: value as "contrato" | "proposta" })}>
+                <Select
+                  value={form.tipo}
+                  onValueChange={(value) => {
+                    const tipo = value as "contrato" | "proposta";
+                    setForm({ ...form, tipo, status: tipo === "contrato" && form.status === "rascunho" ? "vigente" : form.status });
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="contrato">Contrato</SelectItem>

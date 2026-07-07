@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
+import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { printOsDocument } from "@/lib/osPrint";
@@ -36,6 +36,26 @@ function diasAte(date: string) {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   return Math.ceil((new Date(`${date}T00:00:00`).getTime() - hoje.getTime()) / 86400000);
+}
+
+function formatQuantityUnit(quantity: number, unit?: string | null) {
+  const value = Number(quantity || 0);
+  const normalized = (unit || "").trim().toLowerCase();
+  const compactUnits = new Set(["un", "un.", "unid", "unid."]);
+  const pluralMap: Record<string, string> = {
+    servico: "serviços",
+    serviço: "serviços",
+    ponto: "pontos",
+    visita: "visitas",
+    hora: "horas",
+  };
+
+  if (!normalized) return value.toLocaleString("pt-BR");
+  if (Math.abs(value) === 1 || compactUnits.has(normalized) || normalized.endsWith("s")) {
+    return `${value.toLocaleString("pt-BR")} ${unit}`;
+  }
+
+  return `${value.toLocaleString("pt-BR")} ${pluralMap[normalized] || `${unit}s`}`;
 }
 
 const STATUS_CFG = {
@@ -91,7 +111,11 @@ export default function Agendamento() {
   const clienteNomeSel = useMemo(() => clientesAtivos.find((item) => item.id === clienteId)?.razaoSocial ?? clienteId, [clienteId, clientesAtivos]);
   const clienteAtivo = useMemo(() => clientesAtivos.find((item) => item.id === clienteId), [clienteId, clientesAtivos]);
   const contratosCliente = useMemo(
-    () => contratos.filter((item) => item.cliente === clienteNomeSel && item.status === "ativo"),
+    () =>
+      contratos.filter((item) => {
+        const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0;
+      }),
     [clienteNomeSel, contratos],
   );
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
@@ -224,6 +248,32 @@ export default function Agendamento() {
         ]}
       />
 
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-3">
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              Origem correta
+            </p>
+            <p className="mt-2 text-muted-foreground">Só entram aqui contratos vigentes e com saldo operacional criado pelo contrato/proposta.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Users className="h-4 w-4 text-primary" />
+              Planejamento de campo
+            </p>
+            <p className="mt-2 text-muted-foreground">Agende data, local, equipe, veículo e tags/equipamentos antes de gerar a OS.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <FileText className="h-4 w-4 text-primary" />
+              Próximo passo
+            </p>
+            <p className="mt-2 text-muted-foreground">Após agendar, gere e imprima a OS para a equipe executar e devolver com evidências.</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {error ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="pt-4 text-sm text-muted-foreground">{error}</CardContent>
@@ -273,8 +323,25 @@ export default function Agendamento() {
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
                 <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); setTagsSelecionadas([]); }}>
                   <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                  <SelectContent>{contratosCliente.map((item) => <SelectItem key={item.id} value={item.id}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id})</span></SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {contratosCliente.map((item) => {
+                      const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+                      return (
+                        <SelectItem key={item.id} value={item.id}>
+                          <span>{item.servico}</span>
+                          <span className="text-muted-foreground text-xs ml-1.5">
+                            ({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
                 </Select>
+                {clienteId && contratosCliente.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum contrato vigente com saldo operacional para este cliente. Gere/aprove um contrato antes de agendar.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
@@ -349,7 +416,7 @@ export default function Agendamento() {
                   <p className="text-xs font-bold text-foreground mb-2">Resumo do Contrato</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                     <span className="text-muted-foreground">Tipo</span><Badge variant={contratoAtivo.tipo === "sanitario" ? "default" : "secondary"} className="text-[10px] w-fit">{contratoAtivo.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</Badge>
-                    <span className="text-muted-foreground">Saldo</span><span className="font-bold">{contratoAtivo.contratado - contratoAtivo.executado} {contratoAtivo.unidade}</span>
+                    <span className="text-muted-foreground">Saldo operacional</span><span className="font-bold">{formatQuantityUnit(contratoAtivo.contratado - contratoAtivo.executado, contratoAtivo.unidade)}</span>
                     {contratoAtivo.validadeDias > 0 && <><span className="text-muted-foreground">Recorrência</span><span>a cada {contratoAtivo.validadeDias} dias</span></>}
                     <span className="text-muted-foreground">Status</span><Badge variant={contratoAtivo.status === "vencido" ? "destructive" : "default"} className="text-[10px] w-fit">{contratoAtivo.status}</Badge>
                   </div>

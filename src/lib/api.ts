@@ -61,6 +61,15 @@ export interface ServicoCatalogo {
   geraCertificado: boolean;
   validadeCertificadoDias: number;
   produtosQuimicos: string[];
+  produtosDetalhados?: Array<{
+    nome?: string;
+    grupoQuimico?: string;
+    qtUso?: string;
+    diluente?: string;
+    volAplicado?: string;
+    combate?: string;
+    antidoto?: string;
+  }>;
   epis: string[];
   riscos: string[];
   normasAplicaveis: string[];
@@ -145,6 +154,9 @@ export interface EvidenciaAnexoApp {
   url?: string;
   metadados?: Record<string, unknown>;
   hashSha256?: string;
+  snapshotHashSha256?: string;
+  templateCodigo?: string;
+  templateVersao?: string;
   imutavel?: boolean;
   criadoEm: string;
 }
@@ -210,6 +222,7 @@ export interface CertificadoApp {
   status?: "emitido" | "revogado";
   revogadoEm?: string | null;
   motivoRevogacao?: string | null;
+  fotos?: string[];
 }
 
 export interface CertificateVerification {
@@ -242,6 +255,14 @@ export interface CertificateVerification {
   quantidade?: number;
   unidade?: string;
   fotos?: string[];
+  documento?: {
+    nomeArquivo?: string;
+    hashSha256?: string;
+    snapshotHashSha256?: string;
+    templateCodigo?: string;
+    templateVersao?: string;
+    criadoEm?: string;
+  } | null;
 }
 
 export interface Tecnico {
@@ -300,6 +321,8 @@ export interface ContratoTemplate {
 }
 
 export interface EmpresaConfig {
+  tenantSlug?: string;
+  tenantNome?: string;
   razaoSocial: string;
   nomeFantasia: string;
   cnpj: string;
@@ -307,6 +330,9 @@ export interface EmpresaConfig {
   telefone: string;
   email: string;
   logoUrl?: string;
+  corPrimaria?: string;
+  corSecundaria?: string;
+  corDestaque?: string;
   alvara: string;
   cr02: string;
   anvisa: string;
@@ -320,6 +346,33 @@ export interface EmpresaConfig {
   telefoneEmergencia?: string;
   medicaoFormaPagamentoPadrao?: string;
   medicaoLocalEntregaPadrao?: string;
+  certificadoConfig?: {
+    templateCodigo?: string;
+    templateVersao?: string;
+    titulo?: string;
+    subtitulo?: string;
+    tipo?: string;
+    logoPrincipalUrl?: string;
+    arteFundoUrl?: string;
+    seloInstitucionalUrl?: string;
+    assinaturaUrl?: string;
+    corPrimaria?: string;
+    corSecundaria?: string;
+    corDestaque?: string;
+    publicBaseUrl?: string;
+    exibirQrCode?: boolean;
+    exibirFotos?: boolean;
+    limiteFotos?: number;
+    exibirProdutosQuimicos?: boolean;
+    responsavelTecnico?: string;
+    cargoResponsavel?: string;
+    registroProfissional?: string;
+    cit?: string;
+    rodapeLinhas?: string[];
+    licencas?: Array<{ titulo?: string; valor?: string }>;
+    textoLegalPadrao?: string;
+    textoTecnicoPorServico?: Record<string, string>;
+  };
 }
 
 export interface NumeracaoConfig {
@@ -370,6 +423,15 @@ export interface MedicaoItemApp {
   valorTotal: number;
 }
 
+export type MedicaoFinanceiroStatus =
+  | "em_conferencia"
+  | "aguardando_nf"
+  | "nf_enviada"
+  | "aguardando_pagamento"
+  | "pago_no_erp"
+  | "pendente_cliente"
+  | "cancelada";
+
 export interface MedicaoApp {
   id: string;
   numero: string;
@@ -380,6 +442,13 @@ export interface MedicaoApp {
   periodoInicio: string;
   periodoFim: string;
   status: "emitida" | "cancelada";
+  financeiroStatus?: MedicaoFinanceiroStatus;
+  nfNumero?: string | null;
+  nfEnviadaEm?: string | null;
+  pagamentoPrevistoEm?: string | null;
+  pagoNoErpEm?: string | null;
+  financeiroObservacao?: string | null;
+  financeiroAtualizadoEm?: string | null;
   total: number;
   formaPagamento?: string;
   localEntrega?: string;
@@ -609,5 +678,14 @@ export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dism
   api(`/recurrence-suggestions/${id}`, { method: "PATCH", body: JSON.stringify({ action }) });
 export const generateMeasurement = (payload: { clienteNome: string; dataInicio: string; dataFim: string }) =>
   api<{ ok: boolean; measurement: MedicaoApp }>("/measurements/generate", { method: "POST", body: JSON.stringify(payload) });
+export const updateMeasurementFinancial = (id: string, payload: {
+  financeiroStatus: MedicaoFinanceiroStatus;
+  nfNumero?: string | null;
+  nfEnviadaEm?: string | null;
+  pagamentoPrevistoEm?: string | null;
+  pagoNoErpEm?: string | null;
+  financeiroObservacao?: string | null;
+}) =>
+  api<{ ok: boolean; financeiroStatus: MedicaoFinanceiroStatus }>(`/measurements/${id}/financial`, { method: "PATCH", body: JSON.stringify(payload) });
 export const cancelMeasurement = (id: string) =>
   api<{ ok: boolean }>(`/measurements/${id}/cancel`, { method: "PATCH" });

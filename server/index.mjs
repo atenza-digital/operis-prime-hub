@@ -10,6 +10,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+const MEASUREMENT_FINANCIAL_STATUSES = new Set([
+  "em_conferencia",
+  "aguardando_nf",
+  "nf_enviada",
+  "aguardando_pagamento",
+  "pago_no_erp",
+  "pendente_cliente",
+  "cancelada",
+]);
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
@@ -17,6 +26,14 @@ app.use(express.json({ limit: "15mb" }));
 function getRequestIp(req) {
   const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   return forwarded || req.socket.remoteAddress || null;
+}
+
+function getPublicBaseUrl(req) {
+  const configured = process.env.PUBLIC_APP_URL || process.env.APP_PUBLIC_URL || process.env.APP_URL;
+  if (configured) return String(configured).replace(/\/+$/, "");
+  const proto = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "http").split(",")[0].trim();
+  const host = String(req?.headers?.["x-forwarded-host"] || req?.headers?.host || "").split(",")[0].trim();
+  return host ? `${proto}://${host}` : "http://localhost:3001";
 }
 
 function getBearerToken(req) {
@@ -91,6 +108,23 @@ function assertTenantWrite(rowCount, entityName) {
   throw error;
 }
 
+function normalizeOptionalText(value, maxLength = 500) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function normalizeOptionalDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const error = new Error("Data invalida. Use o formato AAAA-MM-DD.");
+    error.status = 400;
+    throw error;
+  }
+  return text;
+}
+
 function parseDataUrl(dataUrl) {
   const value = String(dataUrl || "");
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
@@ -131,6 +165,235 @@ function decodeStoredAttachmentContent(content) {
     return { mimeType: match[1], buffer: Buffer.from(match[2], "base64") };
   }
   return { mimeType: null, buffer: Buffer.from(value, "utf8") };
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map((item) => canonicalJson(item));
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = canonicalJson(value[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+function sha256Hex(input) {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function snapshotHash(snapshot) {
+  return sha256Hex(JSON.stringify(canonicalJson(snapshot || {})));
+}
+
+function encodeBinaryDocument(buffer, mimeType) {
+  return {
+    dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`,
+    bytes: buffer.length,
+    hash: sha256Hex(buffer),
+  };
+}
+
+function createPdfBuffer() {
+  throw new Error("PDF server-side por desenho manual desativado. Usar template visual aprovado.");
+}
+
+function drawLabelValue(doc, label, value, x, y, width = 240) {
+  doc.fontSize(7).fillColor("#64748b").text(label.toUpperCase(), x, y, { width });
+  doc.fontSize(9).fillColor("#0f172a").text(String(value || "-"), x, y + 10, { width });
+}
+
+function formatDateBr(value) {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(`${String(value).split("T")[0]}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("pt-BR");
+}
+
+function formatCurrencyBr(value) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function safeFileNamePart(value) {
+  return String(value || "documento").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 80);
+}
+
+function imageBufferFromDataUrl(value) {
+  const match = String(value || "").match(/^data:image\/(?:png|jpe?g);base64,(.+)$/i);
+  return match ? Buffer.from(match[1], "base64") : null;
+}
+
+function drawCompanyHeader(doc, company, { x, y, width, logoWidth = 92 }) {
+  const logoBuffer = imageBufferFromDataUrl(company.logoUrl);
+  let textX = x;
+  let textWidth = width;
+  if (logoBuffer) {
+    doc.image(logoBuffer, x, y, { fit: [logoWidth, 42], align: "left", valign: "center" });
+    textX = x + logoWidth + 16;
+    textWidth = Math.max(160, width - logoWidth - 16);
+  }
+  doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(12).text(company.razaoSocial || company.nomeFantasia || "Empresa emissora", textX, y, { width: textWidth, lineGap: 1 });
+  doc.font("Helvetica").fontSize(8).fillColor("#475569").text([company.cnpj ? `CNPJ ${company.cnpj}` : null, company.endereco].filter(Boolean).join(" | "), textX, y + 38, { width: textWidth });
+}
+
+async function saveImmutablePdfAttachment(client, { tenantId, userId, entityType, entityId, fileName, pdfBuffer, snapshot, template, metadata = {} }) {
+  const encoded = encodeBinaryDocument(pdfBuffer, "application/pdf");
+  const snapHash = snapshotHash(snapshot);
+  await client.query(
+    `INSERT INTO ciperprag_hub.evidencias_anexos
+     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, imutavel, criado_por)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,TRUE,$13)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      makeId("PDF"),
+      tenantId,
+      entityType,
+      entityId,
+      fileName,
+      encoded.bytes,
+      encoded.dataUrl,
+      JSON.stringify({
+        ...metadata,
+        formato: "pdf_server_side",
+        hashSha256: encoded.hash,
+        snapshotHashSha256: snapHash,
+        templateCodigo: template.code,
+        templateVersao: template.version,
+      }),
+      encoded.hash,
+      snapHash,
+      template.code,
+      template.version,
+      userId || null,
+    ],
+  );
+  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes };
+}
+
+async function buildMeasurementPdfBuffer(snapshot, measurement) {
+  throw new Error("PDF server-side da medicao deve reproduzir o layout aprovado antes de ser habilitado.");
+  return createPdfBuffer((doc) => {
+    const company = snapshot.empresa || {};
+    const client = snapshot.cliente || {};
+    const itens = snapshot.itens || [];
+    const primary = "#065f46";
+    const pageWidth = doc.page.width;
+    const left = 36;
+    const right = pageWidth - 36;
+    let y = 36;
+
+    doc.rect(0, 0, pageWidth, 108).fill("#f8fafc");
+    doc.rect(0, 0, 12, doc.page.height).fill(primary);
+    drawCompanyHeader(doc, company, { x: left, y, width: 360 });
+    doc.font("Helvetica-Bold").fontSize(22).fillColor(primary).text("Medição", right - 190, y, { width: 190, align: "right" });
+    doc.font("Helvetica-Bold").fontSize(22).fillColor(primary).text("de Serviços", right - 190, y + 26, { width: 190, align: "right" });
+    doc.font("Helvetica").fontSize(9).fillColor("#475569").text(measurement.numero || snapshot.numero || "-", right - 190, y + 56, { width: 190, align: "right" });
+
+    y = 132;
+    doc.roundedRect(left, y, right - left, 88, 12).strokeColor("#d9e2e7").lineWidth(1).stroke();
+    drawLabelValue(doc, "Cliente", client.nome || measurement.cliente_nome, left + 16, y + 16, 245);
+    drawLabelValue(doc, "CNPJ", client.cnpj || measurement.cliente_cnpj, left + 280, y + 16, 130);
+    drawLabelValue(doc, "Período", `${formatDateBr(snapshot.periodo?.inicio || measurement.periodo_inicio)} a ${formatDateBr(snapshot.periodo?.fim || measurement.periodo_fim)}`, left + 425, y + 16, 110);
+    drawLabelValue(doc, "Endereço", client.endereco || measurement.cliente_endereco, left + 16, y + 52, 360);
+    drawLabelValue(doc, "Forma de pagamento", snapshot.formaPagamento || measurement.forma_pagamento, left + 390, y + 52, 145);
+
+    y += 118;
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#0f172a").text("Serviços executados", left, y);
+    y += 22;
+    const cols = { item: left, servico: left + 36, os: left + 258, data: left + 335, qtd: left + 400, total: left + 468 };
+    doc.rect(left, y, right - left, 22).fill("#e7f5ee");
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#064e3b");
+    doc.text("Item", cols.item + 6, y + 7, { width: 28 });
+    doc.text("Descrição", cols.servico, y + 7, { width: 210 });
+    doc.text("OS", cols.os, y + 7, { width: 70 });
+    doc.text("Data", cols.data, y + 7, { width: 60 });
+    doc.text("Qtd.", cols.qtd, y + 7, { width: 55, align: "right" });
+    doc.text("Total", cols.total, y + 7, { width: 60, align: "right" });
+    y += 22;
+
+    itens.forEach((item, index) => {
+      const rowHeight = 36;
+      if (y + rowHeight > 700) {
+        doc.addPage();
+        y = 42;
+      }
+      doc.rect(left, y, right - left, rowHeight).fill(index % 2 ? "#ffffff" : "#fbfdff");
+      doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+      doc.text(String(index + 1).padStart(2, "0"), cols.item + 6, y + 10, { width: 28 });
+      doc.text(item.servico || "-", cols.servico, y + 8, { width: 210, height: 24 });
+      doc.text(item.osNumero || "-", cols.os, y + 10, { width: 70 });
+      doc.text(formatDateBr(item.dataExecucao), cols.data, y + 10, { width: 60 });
+      doc.text(`${Number(item.quantidade || 0).toLocaleString("pt-BR")} ${item.unidade || ""}`.trim(), cols.qtd, y + 10, { width: 55, align: "right" });
+      doc.font("Helvetica-Bold").text(formatCurrencyBr(item.valorTotal), cols.total, y + 10, { width: 60, align: "right" });
+      doc.moveTo(left, y + rowHeight).lineTo(right, y + rowHeight).strokeColor("#e2e8f0").stroke();
+      y += rowHeight;
+    });
+
+    y += 18;
+    doc.roundedRect(right - 200, y, 200, 48, 10).fill(primary);
+    doc.font("Helvetica").fontSize(9).fillColor("#d1fae5").text("Total da medição", right - 184, y + 10, { width: 168 });
+    doc.font("Helvetica-Bold").fontSize(18).fillColor("#ffffff").text(formatCurrencyBr(snapshot.total || measurement.total), right - 184, y + 24, { width: 168, align: "right" });
+
+    const footerY = 760;
+    const snapHash = snapshotHash(snapshot);
+    doc.font("Helvetica").fontSize(7).fillColor("#64748b").text(`Template ${DOCUMENT_TEMPLATE_VERSIONS.measurementPdf.code} v${DOCUMENT_TEMPLATE_VERSIONS.measurementPdf.version} | Snapshot ${snapHash.slice(0, 16)}...`, left, footerY, { width: 360 });
+    doc.text(`Emitido em ${new Date().toLocaleString("pt-BR")}`, right - 180, footerY, { width: 180, align: "right" });
+  });
+}
+
+async function buildCertificatePdfBuffer(snapshot, certificate, { validationUrl }) {
+  throw new Error("PDF server-side do certificado deve usar o modelo Ciperprag aprovado antes de ser habilitado.");
+  const qrDataUrl = await QRCode.toDataURL(validationUrl, { width: 180, margin: 1 });
+  const qrBuffer = Buffer.from(qrDataUrl.split(",")[1], "base64");
+  return createPdfBuffer((doc) => {
+    const company = snapshot.empresa || {};
+    const client = snapshot.cliente || {};
+    const service = snapshot.servico || {};
+    const os = snapshot.os || {};
+    const cert = snapshot.certificado || {};
+    const primary = "#065f46";
+    const pageWidth = doc.page.width;
+    const left = 42;
+    const right = pageWidth - 42;
+
+    doc.rect(0, 0, pageWidth, doc.page.height).fill("#ffffff");
+    doc.rect(0, 0, pageWidth, 92).fill("#f4fbf7");
+    doc.circle(pageWidth - 28, 28, 72).fill("#0f6b4f");
+    drawCompanyHeader(doc, company, { x: left, y: 32, width: 390 });
+
+    doc.font("Helvetica-Bold").fontSize(27).fillColor(primary).text("Certificado de Execução", left, 128, { width: right - left, align: "center" });
+    doc.font("Helvetica").fontSize(10).fillColor("#64748b").text(`Nº ${certificate.numero || cert.numero || "-"} | Código ${certificate.hash || cert.hash || "-"}`, left, 164, { width: right - left, align: "center" });
+
+    doc.roundedRect(left, 205, right - left, 150, 14).strokeColor("#d9e2e7").lineWidth(1).stroke();
+    doc.font("Helvetica").fontSize(12).fillColor("#0f172a").text("Certificamos que o cliente abaixo recebeu o serviço técnico descrito neste documento, conforme dados registrados no sistema.", left + 22, 226, { width: right - left - 44, align: "center" });
+    drawLabelValue(doc, "Cliente", client.nome || certificate.cliente_nome, left + 24, 276, 260);
+    drawLabelValue(doc, "CNPJ", client.cnpj || certificate.cliente_cnpj, left + 304, 276, 130);
+    drawLabelValue(doc, "Data de execução", formatDateBr(os.dataExecucao || certificate.data_execucao), left + 448, 276, 80);
+    drawLabelValue(doc, "Endereço", client.endereco || certificate.cliente_endereco, left + 24, 314, 320);
+    drawLabelValue(doc, "Validade", cert.validadeAte ? formatDateBr(cert.validadeAte) : "Indeterminada", left + 360, 314, 170);
+
+    doc.roundedRect(left, 382, right - left, 120, 14).fill("#f8fafc").strokeColor("#e2e8f0").stroke();
+    drawLabelValue(doc, "Serviço", service.nome || certificate.servico, left + 24, 404, 280);
+    drawLabelValue(doc, "Ordem de serviço", os.numero || certificate.os_numero, left + 324, 404, 110);
+    drawLabelValue(doc, "Local de execução", os.localExecucao || certificate.local_execucao, left + 24, 442, 225);
+    drawLabelValue(doc, "Técnico responsável", os.tecnicoNome || certificate.tecnico_nome, left + 270, 442, 150);
+    drawLabelValue(doc, "Tag/equipamento", os.tagEquipamentoServico || "-", left + 438, 442, 90);
+
+    doc.image(qrBuffer, left, 542, { width: 92, height: 92 });
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a").text("Validação pública", left + 112, 548, { width: 260 });
+    doc.font("Helvetica").fontSize(8).fillColor("#475569").text("Leia o QR Code ou confira o código na rota pública de validação. O certificado só deve ser aceito quando os dados desta consulta coincidirem com o documento apresentado.", left + 112, 566, { width: 300 });
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(primary).text(validationUrl, left + 112, 612, { width: 360 });
+
+    doc.moveTo(left + 270, 700).lineTo(right - 40, 700).strokeColor("#0f172a").stroke();
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a").text(company.responsavelExecucao || company.responsavelTecnico || "Responsável técnico", left + 270, 708, { width: right - left - 230, align: "center" });
+    doc.font("Helvetica").fontSize(8).fillColor("#475569").text(company.cargoResponsavel || "Responsável pela execução", left + 270, 722, { width: right - left - 230, align: "center" });
+
+    const snapHash = snapshotHash(snapshot);
+    doc.font("Helvetica").fontSize(7).fillColor("#64748b").text(`Template ${DOCUMENT_TEMPLATE_VERSIONS.certificatePdf.code} v${DOCUMENT_TEMPLATE_VERSIONS.certificatePdf.version} | Snapshot ${snapHash.slice(0, 16)}...`, left, 772, { width: 360 });
+    doc.text(`Hash do certificado: ${certificate.hash || cert.hash || "-"}`, right - 230, 772, { width: 230, align: "right" });
+  });
 }
 
 function attachmentPermissionFor(entityType) {
@@ -249,6 +512,7 @@ function buildServiceSnapshot(service) {
     geraCertificado: Boolean(service.gera_certificado),
     validadeCertificadoDias: Number(service.validade_certificado_dias || 0),
     produtosQuimicos: service.produtos_quimicos || [],
+    produtosDetalhados: service.produtos_detalhados || [],
     epis: service.epis || [],
     riscos: service.riscos || [],
     normasAplicaveis: service.normas_aplicaveis || [],
@@ -353,7 +617,7 @@ function buildOrderOperationalSnapshot({ order, customer, contract, service, com
   return { ...(existing || {}), [phase]: phaseSnapshot };
 }
 
-async function getServiceForTenantSnapshot(client, serviceName, tenantId) {
+async function getServiceForTenantSnapshot(client, serviceName, tenantId, serviceId = null) {
   const { rows } = await client.query(
     `SELECT
       s.*,
@@ -372,15 +636,25 @@ async function getServiceForTenantSnapshot(client, serviceName, tenantId) {
       p.aprovado_em AS pop_aprovado_em
     FROM ciperprag_hub.servicos_catalogo s
     LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id AND p.tenant_id = $2
-    WHERE s.nome = $1
-      AND s.tenant_id = $2
+    WHERE s.tenant_id = $2
+      AND (
+        ($3::text IS NOT NULL AND s.id = $3)
+        OR s.nome = $1
+        OR s.nome ILIKE $4
+      )
+    ORDER BY
+      CASE
+        WHEN $3::text IS NOT NULL AND s.id = $3 THEN 0
+        WHEN s.nome = $1 THEN 1
+        ELSE 2
+      END
     LIMIT 1`,
-    [serviceName, tenantId],
+    [serviceName, tenantId, serviceId, `${serviceName || ""}%`],
   );
   return rows[0];
 }
 
-function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias }) {
+function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias, publicBaseUrl = null, userId = null }) {
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
   const tag = order.tag_equipamento_servico || order.tags || null;
@@ -390,6 +664,10 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       numero: number,
       status: "emitido",
       emitidoEm: new Date().toISOString(),
+      emitidoPorUsuarioId: userId,
+      publicBaseUrl,
+      templateCodigo: company?.certificado_config?.templateCodigo || "certificado-garantia",
+      templateVersao: company?.certificado_config?.templateVersao || "saas-tenant-v1",
       validadeDias: Number(validadeDias || 0),
       validadeAte,
     },
@@ -430,6 +708,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       endereco: company?.endereco || null,
       telefone: company?.telefone || null,
       email: company?.email || null,
+      logoUrl: company?.logo_url || null,
       alvara: company?.alvara || null,
       cr02: company?.cr02 || null,
       anvisa: company?.anvisa || null,
@@ -440,6 +719,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       certificadoTextoLegal: company?.certificado_texto_legal || null,
       certificadoTextoFixacao: company?.certificado_texto_fixacao || null,
       telefoneEmergencia: company?.telefone_emergencia || null,
+      certificadoConfig: company?.certificado_config || {},
     },
   };
 }
@@ -580,6 +860,7 @@ async function getServices(tenantId) {
     geraCertificado: row.gera_certificado,
     validadeCertificadoDias: row.validade_certificado_dias,
     produtosQuimicos: row.produtos_quimicos ?? [],
+    produtosDetalhados: row.produtos_detalhados ?? [],
     epis: row.epis ?? [],
     riscos: row.riscos ?? [],
     normasAplicaveis: row.normas_aplicaveis ?? [],
@@ -673,6 +954,9 @@ function mapAttachment(row, options = {}) {
     url: row.url,
     metadados: row.metadados ?? {},
     hashSha256: row.hash_sha256,
+    snapshotHashSha256: row.snapshot_hash_sha256,
+    templateCodigo: row.template_codigo,
+    templateVersao: row.template_versao,
     imutavel: row.imutavel,
     criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
   };
@@ -680,7 +964,7 @@ function mapAttachment(row, options = {}) {
 
 async function getAttachments(tenantId) {
   const { rows } = await query(
-    `SELECT id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, imutavel, criado_em
+    `SELECT id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, imutavel, criado_em
      FROM ciperprag_hub.evidencias_anexos
      WHERE tenant_id = $1
      ORDER BY criado_em DESC, id DESC`,
@@ -796,6 +1080,19 @@ async function getCertificateByHash(hash) {
   );
   const row = rows[0];
   if (!row) return null;
+  const { rows: documentRows } = await query(
+    `SELECT nome_arquivo, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, criado_em
+     FROM ciperprag_hub.evidencias_anexos
+     WHERE tenant_id = $1
+       AND entidade_tipo = 'certificado'
+       AND entidade_id = $2
+       AND mime_type = 'application/pdf'
+       AND imutavel = TRUE
+     ORDER BY criado_em DESC
+     LIMIT 1`,
+    [row.tenant_id, row.id],
+  );
+  const document = documentRows[0] || null;
   const validadeAte = Number(row.validade_dias || 0) > 0 ? addDays(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias)) : null;
   return {
     id: row.id,
@@ -827,13 +1124,22 @@ async function getCertificateByHash(hash) {
     quantidade: Number(row.quantidade || 0),
     unidade: row.unidade,
     fotos: row.fotos ?? [],
+    documento: document ? {
+      nomeArquivo: document.nome_arquivo,
+      hashSha256: document.hash_sha256,
+      snapshotHashSha256: document.snapshot_hash_sha256,
+      templateCodigo: document.template_codigo,
+      templateVersao: document.template_versao,
+      criadoEm: document.criado_em?.toISOString?.() ?? document.criado_em,
+    } : null,
   };
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, userId = null, publicBaseUrl = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
-  const { rows: serviceRows } = await client.query("SELECT * FROM ciperprag_hub.servicos_catalogo WHERE nome = $1 AND tenant_id = $2", [order.servico, scopedTenantId]);
-  const service = serviceRows[0];
+  const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
+  const contract = contractRows[0];
+  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, contract?.servico_catalogo_id || null);
   const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, scopedTenantId]);
   const customer = customerRows[0];
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
@@ -852,7 +1158,18 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId 
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
   const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
-  const snapshot = buildCertificateSnapshot({ order, customer, service, company, hash, number: certNumber, dataExecucao: executionDate, validadeDias });
+  const snapshot = buildCertificateSnapshot({
+    order,
+    customer,
+    service,
+    company,
+    hash,
+    number: certNumber,
+    dataExecucao: executionDate,
+    validadeDias,
+    publicBaseUrl,
+    userId,
+  });
 
   const insertResult = await client.query(
     `INSERT INTO ciperprag_hub.certificados
@@ -868,7 +1185,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId 
       order.numero,
       order.cliente_id,
       order.cliente,
-      order.cnpj,
+      customer?.cnpj || order.cnpj,
       clienteEndereco,
       customer?.logo_url || order.cliente_logo_url || null,
       order.contrato_id,
@@ -883,13 +1200,14 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId 
     ],
   );
   if (insertResult.rowCount > 0) {
+    const certificate = { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero };
     await saveImmutableDocumentAttachment(client, {
       tenantId: scopedTenantId,
-      userId: null,
+      userId,
       entityType: "certificado",
       entityId: certId,
       fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
-      html: buildHistoricalCertificateHtml(snapshot, { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero }),
+      html: buildHistoricalCertificateHtml(snapshot, certificate),
       metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id },
     });
   }
@@ -898,10 +1216,20 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId 
 }
 
 async function getCompanyConfig(tenantId) {
-  const { rows } = await query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const { rows } = await query(
+    `SELECT e.*, t.slug AS tenant_slug, t.nome AS tenant_nome
+     FROM ciperprag_hub.empresa_config e
+     LEFT JOIN ciperprag_hub.tenants t ON t.id = e.tenant_id
+     WHERE e.tenant_id = $1
+     ORDER BY e.id
+     LIMIT 1`,
+    [tenantId],
+  );
   const row = rows[0];
   if (!row) return null;
   return {
+    tenantSlug: row.tenant_slug,
+    tenantNome: row.tenant_nome,
     razaoSocial: row.razao_social,
     nomeFantasia: row.nome_fantasia,
     cnpj: row.cnpj,
@@ -909,6 +1237,9 @@ async function getCompanyConfig(tenantId) {
     telefone: row.telefone,
     email: row.email,
     logoUrl: row.logo_url,
+    corPrimaria: row.cor_primaria,
+    corSecundaria: row.cor_secundaria,
+    corDestaque: row.cor_destaque,
     alvara: row.alvara,
     cr02: row.cr02,
     anvisa: row.anvisa,
@@ -922,6 +1253,7 @@ async function getCompanyConfig(tenantId) {
     telefoneEmergencia: row.telefone_emergencia,
     medicaoFormaPagamentoPadrao: row.medicao_forma_pagamento_padrao,
     medicaoLocalEntregaPadrao: row.medicao_local_entrega_padrao,
+    certificadoConfig: row.certificado_config || {},
   };
 }
 
@@ -1318,6 +1650,13 @@ async function getMeasurements(tenantId) {
     periodoInicio: row.periodo_inicio?.toISOString?.().split("T")[0] ?? row.periodo_inicio,
     periodoFim: row.periodo_fim?.toISOString?.().split("T")[0] ?? row.periodo_fim,
     status: row.status,
+    financeiroStatus: row.financeiro_status || "em_conferencia",
+    nfNumero: row.nf_numero,
+    nfEnviadaEm: row.nf_enviada_em?.toISOString?.().split("T")[0] ?? row.nf_enviada_em,
+    pagamentoPrevistoEm: row.pagamento_previsto_em?.toISOString?.().split("T")[0] ?? row.pagamento_previsto_em,
+    pagoNoErpEm: row.pago_no_erp_em?.toISOString?.().split("T")[0] ?? row.pago_no_erp_em,
+    financeiroObservacao: row.financeiro_observacao,
+    financeiroAtualizadoEm: row.financeiro_atualizado_em?.toISOString?.() ?? row.financeiro_atualizado_em,
     total: Number(row.total || 0),
     formaPagamento: row.forma_pagamento,
     localEntrega: row.local_entrega,
@@ -1949,9 +2288,9 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     const { rowCount: serviceRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.servicos_catalogo (
         id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado, validade_certificado_dias,
-        produtos_quimicos, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
+        produtos_quimicos, produtos_detalhados, epis, riscos, normas_aplicaveis, procedimentos, checklist_itens,
         exige_foto, exige_assinatura, permite_nao_execucao, pop_codigo, pop_titulo, pop_versao, ativo
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
       ON CONFLICT (id) DO UPDATE SET
         nome = EXCLUDED.nome,
         tipo = EXCLUDED.tipo,
@@ -1961,6 +2300,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
         gera_certificado = EXCLUDED.gera_certificado,
         validade_certificado_dias = EXCLUDED.validade_certificado_dias,
         produtos_quimicos = EXCLUDED.produtos_quimicos,
+        produtos_detalhados = EXCLUDED.produtos_detalhados,
         epis = EXCLUDED.epis,
         riscos = EXCLUDED.riscos,
         normas_aplicaveis = EXCLUDED.normas_aplicaveis,
@@ -1986,6 +2326,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
         body.geraCertificado,
         body.validadeCertificadoDias,
         body.produtosQuimicos || [],
+        JSON.stringify(body.produtosDetalhados || []),
         body.epis || [],
         body.riscos || [],
         body.normasAplicaveis || [],
@@ -2188,8 +2529,9 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       razao_social=$1, nome_fantasia=$2, cnpj=$3, endereco=$4, telefone=$5, email=$6, logo_url=$7,
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
-      medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $21 ORDER BY id LIMIT 1)`,
+      medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $25 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -2211,6 +2553,10 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.telefoneEmergencia || null,
       body.medicaoFormaPagamentoPadrao || null,
       body.medicaoLocalEntregaPadrao || null,
+      body.corPrimaria || null,
+      body.corSecundaria || null,
+      body.corDestaque || null,
+      JSON.stringify(body.certificadoConfig || {}),
       tenantId,
     ],
   );
@@ -2228,6 +2574,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       responsavelTecnico: body.responsavelTecnico,
       certificadoValidadePadraoDias: body.certificadoValidadePadraoDias ?? 30,
       medicaoFormaPagamentoPadrao: body.medicaoFormaPagamentoPadrao || null,
+      corPrimaria: body.corPrimaria || null,
+      certificadoConfig: body.certificadoConfig || {},
     },
   });
   res.json({ ok: true });
@@ -2454,6 +2802,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
         nomeFantasia: company?.nome_fantasia || null,
         cnpj: company?.cnpj || null,
         endereco: company?.endereco || null,
+        logoUrl: company?.logo_url || null,
       },
       formaPagamento: company?.medicao_forma_pagamento_padrao || null,
       localEntrega: company?.medicao_local_entrega_padrao || null,
@@ -2503,6 +2852,13 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       periodoInicio: dataInicio,
       periodoFim: dataFim,
       status: "emitida",
+      financeiroStatus: "em_conferencia",
+      nfNumero: null,
+      nfEnviadaEm: null,
+      pagamentoPrevistoEm: null,
+      pagoNoErpEm: null,
+      financeiroObservacao: null,
+      financeiroAtualizadoEm: null,
       total,
       formaPagamento: company?.medicao_forma_pagamento_padrao || null,
       localEntrega: company?.medicao_local_entrega_padrao || null,
@@ -2515,8 +2871,74 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
   res.json({ ok: true, measurement });
 });
 
+app.patch("/api/measurements/:id/financial", requirePermission("medicoes.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const status = String(req.body.financeiroStatus || "").trim();
+  if (!MEASUREMENT_FINANCIAL_STATUSES.has(status) || status === "cancelada") {
+    return res.status(400).json({ error: "Status financeiro invalido." });
+  }
+
+  const nfNumero = normalizeOptionalText(req.body.nfNumero, 80);
+  const nfEnviadaEm = normalizeOptionalDate(req.body.nfEnviadaEm);
+  const pagamentoPrevistoEm = normalizeOptionalDate(req.body.pagamentoPrevistoEm);
+  const pagoNoErpEm = normalizeOptionalDate(req.body.pagoNoErpEm);
+  const financeiroObservacao = normalizeOptionalText(req.body.financeiroObservacao, 1200);
+
+  const updated = await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query(
+      `SELECT id, numero, status, financeiro_status, nf_numero, nf_enviada_em, pagamento_previsto_em, pago_no_erp_em, financeiro_observacao
+       FROM ciperprag_hub.medicoes
+       WHERE id = $1 AND tenant_id = $2
+       LIMIT 1`,
+      [req.params.id, tenantId],
+    );
+    const before = beforeRows[0];
+    if (!before) {
+      const error = new Error("Medicao nao encontrada.");
+      error.status = 404;
+      throw error;
+    }
+    if (before.status === "cancelada") {
+      const error = new Error("Medicao cancelada nao pode ter acompanhamento financeiro alterado.");
+      error.status = 400;
+      throw error;
+    }
+
+    const { rows } = await client.query(
+      `UPDATE ciperprag_hub.medicoes
+       SET financeiro_status = $3,
+           nf_numero = $4,
+           nf_enviada_em = $5,
+           pagamento_previsto_em = $6,
+           pago_no_erp_em = $7,
+           financeiro_observacao = $8,
+           financeiro_atualizado_em = NOW(),
+           atualizado_em = NOW()
+       WHERE id = $1 AND tenant_id = $2
+       RETURNING *`,
+      [req.params.id, tenantId, status, nfNumero, nfEnviadaEm, pagamentoPrevistoEm, pagoNoErpEm, financeiroObservacao],
+    );
+
+    await logAuditEvent(client, req, {
+      entityType: "medicao",
+      entityId: req.params.id,
+      action: "measurement_financial_updated",
+      summary: `Acompanhamento financeiro da medicao ${before.numero || req.params.id} atualizado`,
+      before,
+      after: rows[0],
+    });
+
+    return rows[0];
+  });
+
+  res.json({ ok: true, financeiroStatus: updated.financeiro_status });
+});
+
 app.patch("/api/measurements/:id/cancel", requirePermission("medicoes.manage"), async (req, res) => {
-  const { rowCount } = await query("UPDATE ciperprag_hub.medicoes SET status = 'cancelada', atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2", [req.params.id, req.auth.user.tenant.id]);
+  const { rowCount } = await query(
+    "UPDATE ciperprag_hub.medicoes SET status = 'cancelada', financeiro_status = 'cancelada', financeiro_atualizado_em = NOW(), atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2",
+    [req.params.id, req.auth.user.tenant.id],
+  );
   if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
   await logAuditEvent(null, req, {
     entityType: "medicao",
@@ -2568,22 +2990,22 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const customer = clientRows[0];
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
     const tech = techRows[0];
-    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId);
+    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, contract?.servico_catalogo_id || null);
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: numRows } = await client.query(
       `UPDATE ciperprag_hub.numeracao_config SET os_ultimo = os_ultimo + 1, atualizado_em = NOW()
        WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
-       RETURNING os_ultimo`,
+       RETURNING os_formato, os_ultimo`,
       [tenantId],
     );
-    const number = `OS-${numRows[0].os_ultimo}`;
+    const number = formatSequential(numRows[0]?.os_formato || "OS-{SEQ}", numRows[0]?.os_ultimo || 1);
     const orderId = makeId("OSDB");
     await client.query(
       `INSERT INTO ciperprag_hub.ordens_servico
       (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,CURRENT_DATE,1,$23,'aberta',$24)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -2659,7 +3081,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, tenantId]);
     const contract = contractRows[0];
-    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId);
+    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, contract?.servico_catalogo_id || null);
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, tenantId]);
@@ -2770,7 +3192,11 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     let certificateHash = null;
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
-      certificateHash = await issueCertificateForOrder(client, { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] }, { dataExecucao, tenantId });
+      certificateHash = await issueCertificateForOrder(
+        client,
+        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] },
+        { dataExecucao, tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+      );
       await logAuditEvent(client, req, {
         entityType: "certificado",
         entityId: certificateHash,
@@ -2819,7 +3245,7 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   if (!order) return res.status(404).json({ error: "OS nao encontrada" });
   if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
   const hash = await withTransaction(async (client) => {
-    const certificateHash = await issueCertificateForOrder(client, order, { tenantId });
+    const certificateHash = await issueCertificateForOrder(client, order, { tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
     await logAuditEvent(client, req, {
       entityType: "certificado",
       entityId: certificateHash,

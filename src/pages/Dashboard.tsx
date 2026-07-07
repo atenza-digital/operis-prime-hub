@@ -154,6 +154,34 @@ export default function Dashboard() {
             ))}
       </div>
 
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardHeader>
+          <CardTitle className="section-title">Fluxo recomendado de uso</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            A plataforma foi organizada para sair do comercial, passar pelo campo e terminar na medição, sem misturar financeiro formal do ERP.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {[
+            { title: "1. Proposta", description: "Gerar e enviar proposta comercial ao cliente.", icon: FileText },
+            { title: "2. Contrato", description: "Após aceite, gerar contrato ou registrar contrato do cliente.", icon: CheckCircle2 },
+            { title: "3. Agendamento", description: "Usar contrato vigente com saldo para planejar equipe, veículo e local.", icon: CalendarClock },
+            { title: "4. OS e certificado", description: "Executar, encerrar com evidências e emitir certificado quando aplicável.", icon: ShieldCheck },
+            { title: "5. Medição", description: "Consolidar OS por período e acompanhar NF/pagamento até baixa no ERP.", icon: Receipt },
+          ].map((step) => (
+            <div key={step.title} className="rounded-2xl border bg-card p-4">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-primary/10 p-2">
+                  <step.icon className="h-4 w-4 text-primary" />
+                </div>
+                <p className="font-semibold">{step.title}</p>
+              </div>
+              <p className="mt-2 text-sm leading-5 text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <Card className="panel-soft">
           <CardHeader className="flex flex-row items-center justify-between">

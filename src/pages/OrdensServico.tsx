@@ -218,6 +218,39 @@ export default function OrdensServico() {
         ]}
       />
 
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-4">
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Printer className="h-4 w-4 text-primary" />
+              1. Via de campo
+            </p>
+            <p className="mt-2 text-muted-foreground">Imprima a OS gerada para a equipe executar e registrar as informações no atendimento.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Tag className="h-4 w-4 text-primary" />
+              2. Serviço executado
+            </p>
+            <p className="mt-2 text-muted-foreground">No retorno, informe data, quantidade, tag/equipamento e checklist quando houver.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <FileCheck2 className="h-4 w-4 text-primary" />
+              3. Evidências
+            </p>
+            <p className="mt-2 text-muted-foreground">Anexe até 3 fotos da execução para compor histórico, certificado e auditoria.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Award className="h-4 w-4 text-primary" />
+              4. Próximo fluxo
+            </p>
+            <p className="mt-2 text-muted-foreground">Ao encerrar, o sistema libera certificado quando aplicável e a OS entra na medição.</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {error ? <Card className="border-destructive/30 bg-destructive/5"><CardContent className="pt-4 text-sm text-muted-foreground">{error}</CardContent></Card> : null}
       {loading ? <Card><CardContent className="py-14 text-center text-sm text-muted-foreground">Carregando ordens de serviço...</CardContent></Card> : null}
 

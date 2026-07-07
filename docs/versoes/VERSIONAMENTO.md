@@ -4,8 +4,8 @@
 
 - Produto: Atenza FieldOps
 - Ambiente: Homologacao
-- Versao: 0.4.0
-- Data: 2026-07-06
+- Versao: 0.6.0
+- Data: 2026-07-07
 
 ## Regra de versao
 
@@ -15,6 +15,8 @@
 
 ## Historico resumido
 
+- `0.6.0` - Inicio da Etapa 7: fluxo guiado por orientacoes contextuais, selecao de agendamento por saldo operacional e clareza entre medicao operacional e ERP.
+- `0.5.0` - Fechamento da Etapa 6: documentos historicos, hashes, anexos imutaveis, auditoria de anexos e backlog consolidado por etapas.
 - `0.4.0` - Aderencia documental Ciperprag: medicao, proposta/contrato e isolamento de impressao com evidencias PNG.
 - `0.3.0` - Integracao comercial para operacional.
 - `0.2.0` - Documentacao Atenza, rebranding base, versao e ambiente visiveis.

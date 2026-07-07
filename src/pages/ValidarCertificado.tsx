@@ -182,6 +182,30 @@ export default function ValidarCertificado() {
               ))}
             </div>
 
+            {certificate.documento ? (
+              <Card className="border-emerald-200 bg-emerald-50/70 shadow-sm">
+                <CardContent className="space-y-3 p-5 text-sm text-emerald-950">
+                  <div className="flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                    Integridade do PDF server-side
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Hash SHA-256 do PDF</p>
+                      <p className="mt-1 break-all font-mono text-xs">{certificate.documento.hashSha256 || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Hash do snapshot</p>
+                      <p className="mt-1 break-all font-mono text-xs">{certificate.documento.snapshotHashSha256 || "-"}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-emerald-800">
+                    Template {certificate.documento.templateCodigo || "-"} v{certificate.documento.templateVersao || "-"}.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
+
             <Card className="border-slate-200 shadow-sm">
               <CardContent className="flex flex-col gap-3 p-5 text-sm text-slate-700">
                 <div className="flex items-center gap-2 font-semibold text-slate-950">

@@ -2403,10 +2403,13 @@ O roadmap atual da homologação está organizado em 8 etapas.
 - Pendências operacionais por cliente/contrato.
 - Sem contas a pagar/receber dentro do sistema.
 
-### Etapa 6 de 8 - PDFs server-side e anexos imutáveis
+### Etapa 6 de 8 - Documentos historicos, hashes e anexos imutaveis
 
-- PDF histórico de OS, certificado, medição, proposta e contrato.
-- Hash e versionamento de documentos.
+- Anexos centralizados por entidade operacional.
+- Hash SHA-256, imutabilidade, snapshot e versao de template.
+- Auditoria de anexos, download seguro e documentos historicos em HTML.
+- QR Code e rota publica de validacao de certificado.
+- PDF binario server-side definitivo realocado para a Etapa 8.
 
 ### Etapa 7 de 8 - QA, testes E2E e homologação guiada
 
@@ -2417,6 +2420,8 @@ O roadmap atual da homologação está organizado em 8 etapas.
 ### Etapa 8 de 8 - Preparação para produção e governança SaaS
 
 - Separação homologação/produção.
+- PDF server-side binario final de OS, certificado, medicao, proposta e contrato.
+- Templates versionados, historico de versoes e snapshots finais imutaveis.
 - Backup e restauração testada.
 - Monitoramento.
 - Painel Atenza para tenants, planos, pagamentos do SaaS e bloqueios.

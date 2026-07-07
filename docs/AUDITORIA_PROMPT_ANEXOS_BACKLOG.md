@@ -4,6 +4,13 @@ Data: 2026-06-28
 
 Ambiente analisado: homologacao
 
+Nota de governanca em 2026-07-07:
+
+- Este arquivo permanece como historico de auditoria e decisoes tomadas ao longo da evolucao.
+- A fonte canonica do backlog ativo passou a ser `docs/backlog/ROADMAP_ETAPAS.md`.
+- Todo item remanescente foi consolidado na Etapa 7 ou na Etapa 8 do roadmap canonico.
+- Nao usar as listas antigas deste documento como backlog operacional sem antes confrontar com o roadmap canonico.
+
 ## Objetivo
 
 Consolidar o que ja foi implementado, o que esta parcial e o que ainda precisa entrar no backlog para evoluir o Atenza FieldOps como plataforma SaaS operacional, usando como base:
@@ -818,7 +825,16 @@ Escopo:
 - Revisar medicao conforme modelo original.
 - Parametrizar textos e evitar conteudo fixo espalhado.
 
-Status: parcial; OS e certificado estao mais avancados, proposta/contrato/medicao ainda precisam evoluir.
+Status: concluida no escopo visual-base atual; OS, certificado, proposta/contrato e medicao possuem base visual para homologacao, com a medicao aprovada em A4 retrato moderno.
+
+Registro de fechamento da medicao:
+
+- Layout da medicao em A4 retrato aprovado para homologacao.
+- Mantidos logo dinamica, cor primaria dinamica, fundo branco, cabecalho simples, tabela limpa, total geral, assinaturas e rastreabilidade.
+- Corrigida pluralizacao visual de unidades como `servico/servicos`, `ponto/pontos` e `un.`.
+- Corrigido comportamento de quebra de pagina para evitar rastreabilidade orfa em pagina quase vazia.
+- Responsavel pela emissao passou a priorizar usuario logado, depois snapshot da medicao e depois configuracao da empresa.
+- Gerados PDFs/PNGs de evidencia para Ciperprag, fallback sem logo e nomes/servicos longos.
 
 ### Etapa 5 de 8 - Medicao e acompanhamento financeiro operacional
 
@@ -835,7 +851,24 @@ Escopo:
 - Manter historico de alteracoes e auditoria.
 - Nao criar contas a pagar/receber.
 
-Status: pendente.
+Status: concluida no escopo base desta release.
+
+Entregue:
+
+- Banco recebeu campos de acompanhamento financeiro operacional na tabela `medicoes`.
+- Criada migracao `015_measurement_financial_tracking.sql`.
+- Status financeiros controlados: `em_conferencia`, `aguardando_nf`, `nf_enviada`, `aguardando_pagamento`, `pago_no_erp`, `pendente_cliente` e `cancelada`.
+- API recebeu endpoint autenticado para atualizacao financeira da medicao, com validacao de status, datas e auditoria.
+- Cancelamento da medicao tambem atualiza o status financeiro para `cancelada`.
+- Tela de Medicao recebeu kanban com totais por status financeiro.
+- Historico de medicoes recebeu filtro por status financeiro e formulario compacto para numero de NF, envio da NF, previsao de pagamento, baixa no ERP e observacoes.
+- Escopo financeiro permaneceu limitado ao acompanhamento operacional da medicao; sem contas a pagar, contas a receber, cobranca, fiscal ou substituicao do ERP.
+
+Nao incluído nesta etapa:
+
+- Anexos financeiros da medicao e comprovantes historicos imutaveis, mantidos para a Etapa 6.
+- PDF server-side da medicao, mantido para a Etapa 6.
+- Automacao E2E completa com validacao comercial -> operacional -> medicao, mantida para a Etapa 7.
 
 ### Etapa 6 de 8 - PDFs server-side e anexos imutaveis
 
@@ -849,8 +882,34 @@ Escopo:
 - Armazenar PDF como anexo imutavel com hash.
 - Permitir download/visualizacao segura.
 - Versionar templates de documentos.
+- Implementar hash real com snapshot imutavel para documentos gerados.
+- Implementar QR Code com rota publica de validacao para documentos aplicaveis.
+- Implementar PDF server-side da medicao, substituindo a dependencia de impressao client-side.
+- Versionar templates de medicao, OS, certificado, proposta e contrato.
+- Criar historico de versoes da medicao com vinculo a snapshot, template e documento emitido.
 
-Status: parcial; anexos historicos HTML ja existem, PDF server-side ainda pendente.
+Status: parcial; PDF server-side visual replanejado apos revisao do cliente.
+
+Entregue nesta atualizacao:
+
+- Criada migracao `016_document_pdf_snapshot_metadata.sql` para metadados de template e hash de snapshot em anexos.
+- `ensureDatabaseShape()` passou a garantir `template_codigo`, `template_versao` e `snapshot_hash_sha256` em `evidencias_anexos`.
+- Rota publica de validacao de certificado passou a retornar metadados do PDF server-side quando existir.
+- Tela publica de validacao passou a exibir integridade do PDF/snapshot quando disponivel.
+- Certificados originais enviados pelo cliente foram renderizados como referencia em `docs/evidencias/referencias_cliente_certificado`.
+
+Correcao de rota:
+
+- A tentativa de PDF server-side desenhado manualmente foi rejeitada por divergencia visual.
+- A medicao aprovada pelo cliente permanece como referencia visual obrigatoria e nao deve ser substituida por novo layout.
+- O certificado server-side deve partir do modelo Ciperprag real em A4 paisagem, com arte lateral, validade no topo, logo central, evidencias, licencas, texto legal, assinatura e rodape institucional.
+- A dependencia `pdfkit` foi removida porque a estrategia correta exige renderizacao fiel do template HTML aprovado ou motor HTML-to-PDF equivalente.
+
+Nao publicado nesta atualizacao:
+
+- A publicacao na VPS foi segurada porque o visual do PDF server-side nao foi aprovado.
+- OS, proposta e contrato ainda nao receberam PDF server-side nesta fatia; devem vir com prints de aprovacao.
+- Backfill de documentos antigos ainda nao foi executado.
 
 ### Etapa 7 de 8 - QA, testes E2E e homologacao guiada
 

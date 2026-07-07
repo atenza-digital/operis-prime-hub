@@ -15,8 +15,11 @@ function fmtDate(date?: string) {
 }
 
 function osNumeroLegivel(numero: string, dataEmissao?: string) {
-  const seq = numero.replace(/^OS-?/i, "");
+  const seq = numero
+    .replace(/^OS[-\s]*/i, "")
+    .replace(/\s*\/\s*/g, " / ");
   const year = (dataEmissao || new Date().toISOString().slice(0, 10)).slice(0, 4);
+  if (seq.includes("/")) return seq;
   return `${seq} / ${year}`;
 }
 
@@ -32,7 +35,7 @@ function renderPopDetails(service?: ServicoCatalogo) {
   if (!service) return "";
   const details = [
     service.popObjetivo ? `<div><strong>Objetivo:</strong> ${escapeHtml(service.popObjetivo)}</div>` : "",
-    service.popAplicacao ? `<div><strong>Aplicacao:</strong> ${escapeHtml(service.popAplicacao)}</div>` : "",
+    service.popAplicacao ? `<div><strong>Aplicação:</strong> ${escapeHtml(service.popAplicacao)}</div>` : "",
     service.popMateriais?.length ? `<div><strong>Materiais/registros:</strong> ${escapeHtml(service.popMateriais.join(", "))}</div>` : "",
     service.popResponsabilidades?.length ? `<div><strong>Responsabilidades:</strong> ${escapeHtml(service.popResponsabilidades.join(", "))}</div>` : "",
   ].filter(Boolean);
@@ -99,7 +102,7 @@ function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCata
 
 function inferActivityLine(os: OSApp, contract?: Contrato, service?: ServicoCatalogo) {
   const labels = [os.servico, ...(contract?.tags ?? [])].filter(Boolean);
-  if (!labels.length) return "( X ) EXECUCAO DE SERVICO CONFORME CONTRATO";
+  if (!labels.length) return "( X ) EXECUÇÃO DE SERVIÇO CONFORME CONTRATO";
   return labels
     .map((item, index) => `${index === 0 ? "( X ) " : ", ( X ) "}${String(item).toUpperCase()}`)
     .join("");
@@ -109,40 +112,40 @@ function inferRiskLines(service?: ServicoCatalogo, contract?: Contrato) {
   const riskList = service?.riscos?.length ? service.riscos : contract?.riscos ?? [];
   const descriptions = new Map<string, string>([
     ["Risco de Acidente", "Queda, batida ou tropeço durante a atividade."],
-    ["Risco Fisico", "Ruido, calor e exposicao ao ambiente operacional."],
-    ["Risco Quimico", "Contato com nevoa, vapores, poeiras e agentes quimicos."],
-    ["Risco Ergonomico", "Esforco repetitivo e postura inadequada."],
-    ["Risco Biologico", "Contato indireto com agentes contaminantes do ambiente."],
-    ["Risco de Queda", "Diferenca de nivel e acesso a pontos elevados."],
-    ["Risco Eletrico", "Contato acidental com circuitos e equipamentos energizados."],
+    ["Risco Físico", "Ruído, calor e exposição ao ambiente operacional."],
+    ["Risco Químico", "Contato com névoa, vapores, poeiras e agentes químicos."],
+    ["Risco Ergonômico", "Esforço repetitivo e postura inadequada."],
+    ["Risco Biológico", "Contato indireto com agentes contaminantes do ambiente."],
+    ["Risco de Queda", "Diferença de nível e acesso a pontos elevados."],
+    ["Risco Elétrico", "Contato acidental com circuitos e equipamentos energizados."],
   ]);
 
   const normalized = riskList.length
     ? riskList.map((item) => {
-        if (/qu[ií]mico/i.test(item)) return "Risco Quimico";
-        if (/biol/i.test(item)) return "Risco Biologico";
-        if (/ergon/i.test(item)) return "Risco Ergonomico";
+        if (/qu[ií]mico/i.test(item)) return "Risco Químico";
+        if (/biol/i.test(item)) return "Risco Biológico";
+        if (/ergon/i.test(item)) return "Risco Ergonômico";
         if (/acidente/i.test(item)) return "Risco de Acidente";
         if (/queda/i.test(item)) return "Risco de Queda";
-        if (/el[ée]tric/i.test(item)) return "Risco Eletrico";
-        return "Risco Fisico";
+        if (/el[ée]tric/i.test(item)) return "Risco Elétrico";
+        return "Risco Físico";
       })
-    : ["Risco de Acidente", "Risco Fisico", "Risco Quimico", "Risco Ergonomico", "Risco Biologico"];
+    : ["Risco de Acidente", "Risco Físico", "Risco Químico", "Risco Ergonômico", "Risco Biológico"];
 
-  const labels = ["Risco de Acidente", "Risco Fisico", "Risco Quimico", "Risco Ergonomico", "Risco Biologico", "Risco de Queda", "Risco Eletrico"];
+  const labels = ["Risco de Acidente", "Risco Físico", "Risco Químico", "Risco Ergonômico", "Risco Biológico", "Risco de Queda", "Risco Elétrico"];
   return labels
     .filter((label) => normalized.includes(label))
-    .map((label) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(descriptions.get(label) || "Conforme analise preliminar da atividade.")}</div>`)
+    .map((label) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(descriptions.get(label) || "Conforme análise preliminar da atividade.")}</div>`)
     .join("");
 }
 
 function inferProcedures(service?: ServicoCatalogo) {
   if (service?.procedimentos?.length) return service.procedimentos;
   return [
-    "Treinamento operacional para uso e higienizacao dos EPIs.",
-    "Avaliar a area antes do inicio do servico e manter isolamento quando necessario.",
+    "Treinamento operacional para uso e higienização dos EPIs.",
+    "Avaliar a área antes do início do serviço e manter isolamento quando necessário.",
     "Executar a atividade somente por profissional treinado e identificado.",
-    "Em caso de duvidas, interromper a atividade e acionar o responsavel tecnico.",
+    "Em caso de dúvidas, interromper a atividade e acionar o responsável técnico.",
   ];
 }
 
@@ -154,25 +157,25 @@ function inferChecklist(service?: ServicoCatalogo, os?: OSApp) {
 
 function inferPreventiveMeasures(service?: ServicoCatalogo) {
   const items = [
-    "O transporte manual de peso deve respeitar a capacidade fisica do colaborador, evitando sobrecarga e lombalgias.",
-    "A movimentacao de materiais deve manter maos e pes fora de pontos de prensagem e queda de objetos.",
-    "Manter o local limpo, organizado e sinalizado durante toda a execucao do servico.",
+    "O transporte manual de peso deve respeitar a capacidade física do colaborador, evitando sobrecarga e lombalgias.",
+    "A movimentação de materiais deve manter mãos e pés fora de pontos de prensagem e queda de objetos.",
+    "Manter o local limpo, organizado e sinalizado durante toda a execução do serviço.",
   ];
   if (service?.tipo === "manutencao") {
-    items.push("Avaliar riscos de energia, altura e ferramentas antes da liberacao do servico.");
+    items.push("Avaliar riscos de energia, altura e ferramentas antes da liberação do serviço.");
   } else {
-    items.push("Seguir as orientacoes da FISPQ e evitar contato indevido com produtos quimicos.");
+    items.push("Seguir as orientações da FISPQ e evitar contato indevido com produtos químicos.");
   }
   return items;
 }
 
 function inferEmployeeDuties() {
   return [
-    "Cumprir as disposicoes legais e regulamentares sobre seguranca e medicina do trabalho.",
-    "Usar os EPIs fornecidos pelo empregador e zelar por sua conservacao.",
-    "Submeter-se aos exames medicos previstos nas Normas Regulamentadoras.",
-    "Comunicar imediatamente qualquer irregularidade, incidente ou condicao insegura.",
-    "Nao executar atividade para a qual nao tenha sido orientado e autorizado.",
+    "Cumprir as disposições legais e regulamentares sobre segurança e medicina do trabalho.",
+    "Usar os EPIs fornecidos pelo empregador e zelar por sua conservação.",
+    "Submeter-se aos exames médicos previstos nas Normas Regulamentadoras.",
+    "Comunicar imediatamente qualquer irregularidade, incidente ou condição insegura.",
+    "Não executar atividade para a qual não tenha sido orientado e autorizado.",
   ];
 }
 
@@ -185,6 +188,7 @@ export function buildOsPrintHtml(
 ) {
   const bootstrap = options.bootstrap;
   const company = bootstrap?.companyConfig ?? null;
+  const customer = bootstrap?.clients.find((item) => item.id === os.clienteId);
   const contract = bootstrap?.contracts.find((item) => item.id === os.contratoId);
   const service = serviceFromSnapshot(os, bootstrap?.services.find((item) => item.nome === os.servico));
   const leadTech = bootstrap?.technicians.find((item) => item.nome === os.tecnicoNome);
@@ -195,10 +199,15 @@ export function buildOsPrintHtml(
   const epiList = service?.epis?.length ? service.epis : contract?.epis ?? [];
   const epcList =
     service?.tipo === "manutencao"
-      ? ["Cones e correntes", "Sinalizacao de area", "Bloqueio e etiquetagem quando aplicavel"]
-      : ["Cones e correntes", "Sinalizacao de area", "Kit de emergencia e lavagem quando aplicavel"];
+      ? ["Cones e correntes", "Sinalização de área", "Bloqueio e etiquetagem quando aplicável"]
+      : ["Cones e correntes", "Sinalização de área", "Kit de emergência e lavagem quando aplicável"];
 
   const logoSrc = options.logoSrc ?? logoCiperprag;
+  const clienteNome = customer?.razaoSocial || os.clienteNome || contract?.cliente || "";
+  const clienteCnpj = customer?.cnpj || os.clienteCnpj || contract?.cnpj || "";
+  const clienteEndereco = customer
+    ? [customer.endereco, customer.bairro, `${customer.municipio}-${customer.uf}`].filter(Boolean).join(", ")
+    : os.clienteEndereco || "";
   const emissao = fmtDate(os.dataEmissao);
   const execucao = fmtDate(os.dataExecucao || os.dataEmissao);
   const companyLine = [company?.endereco, company?.telefone ? `Tel.: ${company.telefone}` : "", company?.email ? `e-mail: ${company.email}` : ""]
@@ -211,9 +220,10 @@ export function buildOsPrintHtml(
   <meta charset="utf-8" />
   <title>${escapeHtml(os.numero)}</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
     * { box-sizing: border-box; }
     @page { size: A4; margin: 6mm; }
-    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111; background: #fff; }
+    body { margin: 0; font-family: Inter, Arial, Helvetica, sans-serif; color: #111; background: #fff; }
     .page { width: 100%; height: 284mm; border: 1.2px solid #222; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
@@ -222,8 +232,8 @@ export function buildOsPrintHtml(
     .os-meta { padding: 16px 18px 0 0; font-size: 20px; font-weight: 700; white-space: nowrap; }
     .title { text-align: center; font-size: 22px; font-weight: 700; padding: 6px 0 10px; border-bottom: 1.2px solid #222; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    td, th { border: 1px solid #222; padding: 4px 6px; vertical-align: top; font-size: 13px; }
-    .label { font-weight: 700; background: #fafafa; }
+    td, th { border: 1px solid #222; padding: 4px 6px; vertical-align: top; font-size: 13px; overflow-wrap: anywhere; word-break: normal; hyphens: auto; line-height: 1.18; }
+    .label { font-weight: 800; background: #fafafa; font-size: 12px; line-height: 1.1; }
     .compact td { padding: 3px 6px; }
     .section-title { font-size: 15px; font-weight: 700; padding: 4px 7px; border-left: 1px solid #222; border-right: 1px solid #222; border-bottom: 1px solid #222; }
     .box { border-left: 1px solid #222; border-right: 1px solid #222; border-bottom: 1px solid #222; padding: 6px 8px; font-size: 13px; }
@@ -249,43 +259,43 @@ export function buildOsPrintHtml(
 <body>
   <div class="page">
     <div class="top-brand">
-      <div class="brand-center"><img src="${escapeHtml(logoSrc)}" alt="Ciperprag" /></div>
+      <div class="brand-center"><img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(company?.nomeFantasia || company?.razaoSocial || "Logo")}" /></div>
       <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
     </div>
-    <div class="title">REGISTRO DE ORDEM DE SERVICO</div>
+    <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>
 
     <table class="compact">
       <colgroup>
-        <col style="width: 13%">
-        <col style="width: 53%">
-        <col style="width: 14%">
+        <col style="width: 16%">
+        <col style="width: 48%">
+        <col style="width: 16%">
         <col style="width: 20%">
       </colgroup>
       <tr><td class="label">SETOR:</td><td>OPERACIONAL</td><td class="label"></td><td></td></tr>
-      <tr><td class="label">FUNCAO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Tecnico de Manutencao" : "Tecnico Sanitario"))}</td><td class="label">Data de Admissao</td><td>${escapeHtml(fmtDate(os.tecnicoDataAdmissao))}</td></tr>
+      <tr><td class="label">FUNÇÃO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Técnico de Manutenção" : "Técnico Sanitário"))}</td><td class="label">Data de Admissão</td><td>${escapeHtml(fmtDate(os.tecnicoDataAdmissao))}</td></tr>
       <tr><td class="label">COLABORADOR:</td><td>${escapeHtml(os.tecnicoNome)}</td><td class="label">CPF</td><td>${escapeHtml(os.tecnicoCpf || "")}</td></tr>
-      <tr><td class="label">CLIENTE:</td><td>${escapeHtml(os.clienteNome)}</td><td class="label">CNPJ</td><td><strong>${escapeHtml(os.clienteCnpj)}</strong></td></tr>
-      <tr><td class="label">Local de execucao:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Contrato</td><td>${escapeHtml(os.contratoId)}</td></tr>
+      <tr><td class="label">CLIENTE:</td><td>${escapeHtml(clienteNome)}</td><td class="label">CNPJ</td><td><strong>${escapeHtml(clienteCnpj)}</strong></td></tr>
+      <tr><td class="label">Local de execução:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Contrato</td><td>${escapeHtml(os.contratoId)}</td></tr>
     </table>
 
-    <div class="section-title">Descricao das Atividades:</div>
+    <div class="section-title">Descrição das Atividades:</div>
     <div class="box tall-box">
       ${escapeHtml(inferActivityLine(os, contract, service))}
-      ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versao ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
+      ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versão ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
       ${renderPopDetails(service)}
     </div>
 
-    <div class="section-title">Observacao</div>
+    <div class="section-title">Observação</div>
     <div class="box large-box">
       <div>${escapeHtml(os.observacao || service?.descricao || os.servico)}</div>
-      <div style="margin-top: 10px;">${escapeHtml(os.localExecucao || "")}</div>
+      <div style="margin-top: 10px;">${escapeHtml(os.localExecucao || clienteEndereco || "")}</div>
       <table style="margin-top: 6px;">
         <colgroup><col style="width: 11%"><col style="width: 89%"></colgroup>
-        <tr><td style="border:0;padding:0;">Quantidade</td><td style="border:0;padding:0 0 0 10px;">Descricao/servicos</td></tr>
+        <tr><td style="border:0;padding:0;">Quantidade</td><td style="border:0;padding:0 0 0 10px;">Descrição/serviços</td></tr>
         <tr><td style="border:0;padding:0;">${escapeHtml(os.quantidade)}</td><td style="border:0;padding:0 0 0 10px;">${escapeHtml(os.servico)}</td></tr>
       </table>
       <div style="margin-top: 4px;">TAGs: ${escapeHtml(os.tagEquipamentoServico || os.tags || "")}<span style="display:inline-block;border-bottom:1px solid #222;min-width:180px;height:12px;"></span></div>
-      ${os.naoExecutada ? `<div style="margin-top:8px;"><strong>NAO EXECUTADA:</strong> ${escapeHtml(os.motivoNaoExecucao || "")}</div>` : ""}
+      ${os.naoExecutada ? `<div style="margin-top:8px;"><strong>NÃO EXECUTADA:</strong> ${escapeHtml(os.motivoNaoExecucao || "")}</div>` : ""}
     </div>
 
     <div class="section-title">Riscos da Atividade:</div>
@@ -293,24 +303,24 @@ export function buildOsPrintHtml(
 
     <table class="compact">
       <colgroup><col style="width: 20%"><col style="width: 80%"></colgroup>
-      <tr><td class="label">Relacao de EPIs:</td><td>${escapeHtml(joinList(epiList, "Conforme analise preliminar da atividade."))}</td></tr>
-      <tr><td class="label">EPC / Protecao Coletiva:</td><td>${escapeHtml(joinList(epcList, "Sinalizacao e isolamento da area."))}</td></tr>
+      <tr><td class="label">Relação de EPIs:</td><td>${escapeHtml(joinList(epiList, "Conforme análise preliminar da atividade."))}</td></tr>
+      <tr><td class="label">EPC / Proteção Coletiva:</td><td>${escapeHtml(joinList(epcList, "Sinalização e isolamento da área."))}</td></tr>
     </table>
 
-    <div class="section-title">Procedimentos Especificos:</div>
+    <div class="section-title">Procedimentos Específicos:</div>
     <div class="box">
       <ul class="bullets">${renderBulletList(procedimentos)}</ul>
     </div>
 
     ${checklist.length > 0 ? `<div class="section-title">Checklist Operacional:</div><div class="box"><ul class="bullets">${renderBulletList(checklist)}</ul></div>` : ""}
 
-    <div class="section-title">Em caso de emergencia:</div>
-    <div class="box small">Caso o alarme de emergencia seja acionado, os profissionais deverao evacuar a area seguindo a rota de fuga ao ponto de encontro mais proximo.</div>
+    <div class="section-title">Em caso de emergência:</div>
+    <div class="box small">Caso o alarme de emergência seja acionado, os profissionais deverão evacuar a área seguindo a rota de fuga ao ponto de encontro mais próximo.</div>
 
     <div class="footer-wrap">
       <div class="footer-line"></div>
       <div class="footer">
-        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVICOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
+        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
         <div>${escapeHtml(companyLine)}</div>
       </div>
     </div>
@@ -321,28 +331,28 @@ export function buildOsPrintHtml(
     <div class="box" style="min-height: 270px;">
       <div style="font-size: 15px; font-weight: 700; margin: 4px 0 6px;">Ergonomia:</div>
       <ul class="bullets">${renderBulletList(medidas)}</ul>
-      <div style="font-size: 15px; font-weight: 700; margin: 10px 0 6px;">Disposicoes Gerais:</div>
+      <div style="font-size: 15px; font-weight: 700; margin: 10px 0 6px;">Disposições Gerais:</div>
       <ul class="bullets">
-        <li>O local deve permanecer limpo e organizado, eliminando causadores de acidentes como agua, oleos ou graxas.</li>
-        <li>Os colaboradores devem utilizar uniforme adequado, oculos de seguranca e ingerir liquidos durante a jornada.</li>
-        <li>Somente o pessoal envolvido na atividade deve permanecer na frente de servico, respeitando o isolamento da area.</li>
+        <li>O local deve permanecer limpo e organizado, eliminando causadores de acidentes como água, óleos ou graxas.</li>
+        <li>Os colaboradores devem utilizar uniforme adequado, óculos de segurança e ingerir líquidos durante a jornada.</li>
+        <li>Somente o pessoal envolvido na atividade deve permanecer na frente de serviço, respeitando o isolamento da área.</li>
       </ul>
     </div>
 
-    <div class="section-title">Obrigacoes dos Empregados:</div>
+    <div class="section-title">Obrigações dos Empregados:</div>
     <div class="box" style="min-height: 138px;">
       <div style="font-size: 15px; font-weight: 700; margin: 4px 0 6px;">Cabe ao empregado:</div>
       <ul class="bullets">${renderBulletList(obrigacoes)}</ul>
     </div>
 
     <div class="box" style="min-height: 150px;">
-      <p class="small" style="margin-top: 0;"><strong>Constitui ato faltoso</strong> a recusa injustificada ao cumprimento desta Ordem de Servico e demais determinacoes do empregador.</p>
+      <p class="small" style="margin-top: 0;"><strong>Constitui ato faltoso</strong> a recusa injustificada ao cumprimento desta Ordem de Serviço e demais determinações do empregador.</p>
       <ul class="bullets">
-        <li>Todo acidente no local de trabalho ou no trajeto deve ser comunicado imediatamente ao superior responsavel.</li>
-        <li>Caso alguma irregularidade ou risco seja constatado, a atividade deve ser suspensa e comunicada ao responsavel do servico.</li>
-        <li>E proibido executar qualquer trabalho para o qual o colaborador nao tenha sido orientado e autorizado.</li>
+        <li>Todo acidente no local de trabalho ou no trajeto deve ser comunicado imediatamente ao superior responsável.</li>
+        <li>Caso alguma irregularidade ou risco seja constatado, a atividade deve ser suspensa e comunicada ao responsável do serviço.</li>
+        <li>É proibido executar qualquer trabalho para o qual o colaborador não tenha sido orientado e autorizado.</li>
       </ul>
-      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || "Ciperprag")} o treinamento de seguranca, saude e meio ambiente para o desenvolvimento da minha atividade, juntamente com a copia desta Ordem de Servico, comprometendo-me a cumprir as acoes preventivas aqui descritas.</p>
+      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || "Ciperprag")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
     </div>
 
     <div class="sign-grid">
@@ -353,21 +363,21 @@ export function buildOsPrintHtml(
 
     <div class="bottom-grid">
       <div class="responsavel-bloco">
-        <div style="font-size: 15px; font-weight: 700;">Data de Emissao: ${escapeHtml(emissao || execucao)}</div>
-        <div style="margin-top: 10px;"><strong>${escapeHtml(company?.responsavelExecucao || company?.responsavelTecnico || "Responsavel tecnica")}</strong></div>
+        <div style="font-size: 15px; font-weight: 700;">Data de Emissão: ${escapeHtml(emissao || execucao)}</div>
+        <div style="margin-top: 10px;"><strong>${escapeHtml(company?.responsavelExecucao || company?.responsavelTecnico || "Responsável técnico")}</strong></div>
         <div>CRT02: ${escapeHtml(company?.cr02 || "")}</div>
       </div>
       <div class="guarita-bloco">
         <p style="font-size: 15px; font-weight: 700;">Guarita: <span class="inline-line" style="min-width: 260px;"></span></p>
         <p style="font-size: 15px;">Acompanhante <span class="inline-line" style="min-width: 190px;"></span></p>
-        <p style="font-size: 15px;">Matricula: <span class="inline-line" style="min-width: 190px;"></span></p>
+        <p style="font-size: 15px;">Matrícula: <span class="inline-line" style="min-width: 190px;"></span></p>
       </div>
     </div>
 
     <div class="footer-wrap">
       <div class="footer-line"></div>
       <div class="footer">
-        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVICOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
+        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
         <div>${escapeHtml(companyLine)}</div>
       </div>
     </div>

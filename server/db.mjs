@@ -52,7 +52,11 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS certificado_texto_fixacao TEXT DEFAULT 'FIXAR OBRIGATORIAMENTE EM LOCAL VISIVEL',
     ADD COLUMN IF NOT EXISTS telefone_emergencia VARCHAR(30),
     ADD COLUMN IF NOT EXISTS medicao_forma_pagamento_padrao TEXT,
-    ADD COLUMN IF NOT EXISTS medicao_local_entrega_padrao TEXT
+    ADD COLUMN IF NOT EXISTS medicao_local_entrega_padrao TEXT,
+    ADD COLUMN IF NOT EXISTS cor_primaria VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS cor_secundaria VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS cor_destaque VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS certificado_config JSONB NOT NULL DEFAULT '{}'::jsonb
   `);
 
   await query(`
@@ -72,6 +76,7 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.servicos_catalogo
     ADD COLUMN IF NOT EXISTS checklist_itens TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS produtos_detalhados JSONB DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS exige_foto BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS exige_assinatura BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS permite_nao_execucao BOOLEAN NOT NULL DEFAULT TRUE,
@@ -462,6 +467,13 @@ export async function ensureDatabaseShape() {
       periodo_inicio DATE NOT NULL,
       periodo_fim DATE NOT NULL,
       status VARCHAR(20) NOT NULL DEFAULT 'emitida',
+      financeiro_status VARCHAR(40) NOT NULL DEFAULT 'em_conferencia',
+      nf_numero VARCHAR(80),
+      nf_enviada_em DATE,
+      pagamento_previsto_em DATE,
+      pago_no_erp_em DATE,
+      financeiro_observacao TEXT,
+      financeiro_atualizado_em TIMESTAMPTZ,
       total NUMERIC(12,2) NOT NULL DEFAULT 0,
       forma_pagamento TEXT,
       local_entrega TEXT,
@@ -475,6 +487,33 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.medicoes
     ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id)
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.medicoes
+    ADD COLUMN IF NOT EXISTS financeiro_status VARCHAR(40) NOT NULL DEFAULT 'em_conferencia',
+    ADD COLUMN IF NOT EXISTS nf_numero VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS nf_enviada_em DATE,
+    ADD COLUMN IF NOT EXISTS pagamento_previsto_em DATE,
+    ADD COLUMN IF NOT EXISTS pago_no_erp_em DATE,
+    ADD COLUMN IF NOT EXISTS financeiro_observacao TEXT,
+    ADD COLUMN IF NOT EXISTS financeiro_atualizado_em TIMESTAMPTZ
+  `);
+
+  await query(`
+    UPDATE ciperprag_hub.medicoes
+    SET financeiro_status = CASE
+      WHEN status = 'cancelada' THEN 'cancelada'
+      ELSE COALESCE(NULLIF(financeiro_status, ''), 'em_conferencia')
+    END
+    WHERE financeiro_status IS NULL OR financeiro_status = '' OR status = 'cancelada'
+  `);
+
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.medicoes DROP CONSTRAINT IF EXISTS medicoes_financeiro_status_check");
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.medicoes
+    ADD CONSTRAINT medicoes_financeiro_status_check
+    CHECK (financeiro_status IN ('em_conferencia','aguardando_nf','nf_enviada','aguardando_pagamento','pago_no_erp','pendente_cliente','cancelada'))
   `);
 
   await query(`
@@ -504,6 +543,7 @@ export async function ensureDatabaseShape() {
 
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_cliente_periodo ON ciperprag_hub.medicoes(cliente_nome, periodo_inicio, periodo_fim)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_status ON ciperprag_hub.medicoes(status)");
+  await query("CREATE INDEX IF NOT EXISTS idx_medicoes_financeiro_status ON ciperprag_hub.medicoes(financeiro_status)");
   await query("CREATE INDEX IF NOT EXISTS idx_certificados_tenant ON ciperprag_hub.certificados(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_recorrencia_sugestoes_tenant ON ciperprag_hub.recorrencia_sugestoes(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_tenant ON ciperprag_hub.medicoes(tenant_id)");
@@ -535,13 +575,18 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos
     ADD COLUMN IF NOT EXISTS hash_sha256 VARCHAR(64),
-    ADD COLUMN IF NOT EXISTS imutavel BOOLEAN NOT NULL DEFAULT FALSE
+    ADD COLUMN IF NOT EXISTS imutavel BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS template_codigo VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS template_versao VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS snapshot_hash_sha256 VARCHAR(64)
   `);
 
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_entidade ON ciperprag_hub.evidencias_anexos(entidade_tipo, entidade_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_tenant ON ciperprag_hub.evidencias_anexos(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_categoria ON ciperprag_hub.evidencias_anexos(categoria)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_hash_sha256 ON ciperprag_hub.evidencias_anexos(hash_sha256)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_snapshot_hash_sha256 ON ciperprag_hub.evidencias_anexos(snapshot_hash_sha256)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_template ON ciperprag_hub.evidencias_anexos(template_codigo, template_versao)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_imutavel ON ciperprag_hub.evidencias_anexos(imutavel)");
 
   await query(`

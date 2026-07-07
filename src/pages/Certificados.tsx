@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { imprimirCertificado } from "@/components/CertificadoImpressao";
-import { Award, CalendarDays, Clock, Hash, MapPin, Printer, Search, Share2, User } from "lucide-react";
+import { Award, CalendarDays, Clock, FileCheck2, Hash, History, MapPin, Printer, QrCode, Search, Share2, User } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +120,39 @@ export default function Certificados() {
           { label: "Ver ordens", to: "/ordens", variant: "default" },
         ]}
       />
+
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-4">
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <FileCheck2 className="h-4 w-4 text-primary" />
+              1. OS encerrada
+            </p>
+            <p className="mt-2 text-muted-foreground">O certificado só nasce depois da OS encerrada com os dados de execução e evidências.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Award className="h-4 w-4 text-primary" />
+              2. Serviço permitido
+            </p>
+            <p className="mt-2 text-muted-foreground">Se o serviço do contrato permite certificado, a OS aparece como pendente de emissão.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <QrCode className="h-4 w-4 text-primary" />
+              3. Validação pública
+            </p>
+            <p className="mt-2 text-muted-foreground">O QR Code leva à rota pública para conferir se os dados batem com o certificado.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <History className="h-4 w-4 text-primary" />
+              4. Histórico completo
+            </p>
+            <p className="mt-2 text-muted-foreground">Serviços com ou sem certificado permanecem consultáveis no histórico do cliente.</p>
+          </div>
+        </CardContent>
+      </Card>
 
       {error ? <Card className="border-destructive/30 bg-destructive/5"><CardContent className="pt-4 text-sm text-muted-foreground">{error}</CardContent></Card> : null}
       {loading ? <Card><CardContent className="py-14 text-center text-sm text-muted-foreground">Carregando certificados e histórico...</CardContent></Card> : null}

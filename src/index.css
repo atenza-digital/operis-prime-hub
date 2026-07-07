@@ -109,6 +109,11 @@
   }
 }
 
+@page measurement-portrait {
+  size: A4 portrait;
+  margin: 0;
+}
+
 @media print {
   body {
     background: white !important;
@@ -118,7 +123,8 @@
   .print\:hidden {
     display: none !important;
   }
-  header, nav {
+  body:not(:has(.document-print-root)) header,
+  body:not(:has(.document-print-root)) nav {
     display: none !important;
   }
   main {
@@ -143,5 +149,79 @@
     margin: 0 !important;
     padding: 0 !important;
     background: white !important;
+  }
+
+  .measurement-print-root {
+    page: measurement-portrait;
+  }
+
+  .measurement-table thead {
+    display: table-header-group;
+  }
+
+  .measurement-table tfoot {
+    display: table-footer-group;
+  }
+
+  .measurement-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .measurement-document {
+    padding: 8mm 13mm 7mm !important;
+  }
+
+  .measurement-header {
+    margin-top: 3mm !important;
+    padding-bottom: 3mm !important;
+    gap: 7mm !important;
+  }
+
+  .measurement-summary {
+    margin-top: 3mm !important;
+  }
+
+  .measurement-summary > div {
+    padding-top: 2mm !important;
+    padding-bottom: 2mm !important;
+  }
+
+  .measurement-block {
+    margin-top: 3.2mm !important;
+  }
+
+  .measurement-services {
+    margin-top: 4mm !important;
+  }
+
+  .measurement-table {
+    font-size: 8.5px !important;
+  }
+
+  .measurement-table th {
+    padding-top: 1.5mm !important;
+    padding-bottom: 1.5mm !important;
+  }
+
+  .measurement-table td {
+    padding-top: 1.45mm !important;
+    padding-bottom: 1.45mm !important;
+  }
+
+  .measurement-table tfoot td {
+    padding-top: 2mm !important;
+    padding-bottom: 1.5mm !important;
+  }
+
+  .measurement-signatures {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 2.5mm !important;
+  }
+
+  .measurement-signature-box {
+    min-height: 20mm !important;
+    padding: 3mm !important;
   }
 }

@@ -20,6 +20,7 @@ const emptyServico: Omit<ServicoCatalogo, "id"> = {
   geraCertificado: true,
   validadeCertificadoDias: 30,
   produtosQuimicos: [],
+  produtosDetalhados: [],
   epis: [],
   riscos: [],
   normasAplicaveis: [],
@@ -39,6 +40,8 @@ const emptyServico: Omit<ServicoCatalogo, "id"> = {
   popAprovadoEm: "",
   ativo: true,
 };
+
+type ProdutoDetalhado = NonNullable<ServicoCatalogo["produtosDetalhados"]>[number];
 
 function TagEditor({
   label,
@@ -92,6 +95,73 @@ function TagEditor({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ProductDetailsEditor({
+  values,
+  onChange,
+}: {
+  values: ProdutoDetalhado[];
+  onChange: (values: ProdutoDetalhado[]) => void;
+}) {
+  const fields: Array<{ key: keyof ProdutoDetalhado; label: string; placeholder: string }> = [
+    { key: "nome", label: "Produto", placeholder: "Ex.: Hipoclorito de Sodio 2,5%" },
+    { key: "grupoQuimico", label: "Grupo", placeholder: "Ex.: Desinfetante" },
+    { key: "qtUso", label: "Qt. uso", placeholder: "Ex.: 10 ml/L" },
+    { key: "diluente", label: "Diluente", placeholder: "Ex.: Agua" },
+    { key: "volAplicado", label: "Vol. aplicado", placeholder: "Ex.: Conforme area" },
+    { key: "combate", label: "Combate", placeholder: "Ex.: Bacterias" },
+    { key: "antidoto", label: "Antidoto", placeholder: "Ex.: Tratamento sintomatico" },
+  ];
+
+  function update(index: number, patch: Partial<ProdutoDetalhado>) {
+    onChange(values.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-semibold"><FlaskConical className="h-4 w-4 text-primary" /> Produtos detalhados do certificado</p>
+          <p className="text-xs text-muted-foreground">Esses dados alimentam a tabela do certificado quando a OS for encerrada.</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...values, {}])}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Produto
+        </Button>
+      </div>
+
+      {values.length === 0 ? (
+        <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          Se não houver produto detalhado, o certificado usa a lista simples de produtos químicos ou exibe não aplicável.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {values.map((produto, index) => (
+            <div key={index} className="rounded-md border bg-background/80 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs font-bold text-muted-foreground">Produto {index + 1}</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => onChange(values.filter((_, itemIndex) => itemIndex !== index))}>
+                  Remover
+                </Button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {fields.map((field) => (
+                  <div key={field.key} className="space-y-1.5">
+                    <Label className="text-xs">{field.label}</Label>
+                    <Input
+                      value={produto[field.key] || ""}
+                      onChange={(event) => update(index, { [field.key]: event.target.value })}
+                      placeholder={field.placeholder}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -386,6 +456,7 @@ export default function Servicos() {
 
             <TagEditor label="Produtos químicos" icon={FlaskConical} values={form.produtosQuimicos} onChange={(values) => setForm({ ...form, produtosQuimicos: values })} />
             <TagEditor label="EPIs obrigatórios" icon={HardHat} values={form.epis} onChange={(values) => setForm({ ...form, epis: values })} />
+            <ProductDetailsEditor values={form.produtosDetalhados || []} onChange={(values) => setForm({ ...form, produtosDetalhados: values })} />
             <TagEditor label="Riscos" icon={AlertTriangle} values={form.riscos} onChange={(values) => setForm({ ...form, riscos: values })} />
             <TagEditor label="Normas aplicáveis" icon={BookOpen} values={form.normasAplicaveis} onChange={(values) => setForm({ ...form, normasAplicaveis: values })} />
             <TagEditor label="Procedimentos da OS" icon={Briefcase} values={form.procedimentos} onChange={(values) => setForm({ ...form, procedimentos: values })} />

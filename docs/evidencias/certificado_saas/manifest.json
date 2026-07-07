@@ -1,0 +1,47 @@
+[
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\01-ciperprag-produtos.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\01-ciperprag-produtos.png",
+    "validationUrl": "http://89.116.214.65:3010/validar-certificado/HSH-2026-01-CIPERPRAG-PRODUTOS"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\02-ciperprag-sem-produtos.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\02-ciperprag-sem-produtos.png",
+    "validationUrl": "http://89.116.214.65:3010/validar-certificado/HSH-2026-02-CIPERPRAG-SEM-PRODUTOS"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\03-ciperprag-tres-fotos.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\03-ciperprag-tres-fotos.png",
+    "validationUrl": "http://89.116.214.65:3010/validar-certificado/HSH-2026-03-CIPERPRAG-TRES-FOTOS"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\04-ciperprag-sem-fotos.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\04-ciperprag-sem-fotos.png",
+    "validationUrl": "http://89.116.214.65:3010/validar-certificado/HSH-2026-04-CIPERPRAG-SEM-FOTOS"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\05-ciperprag-nomes-longos.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\05-ciperprag-nomes-longos.png",
+    "validationUrl": "http://89.116.214.65:3010/validar-certificado/HSH-2026-05-CIPERPRAG-NOMES-LONGOS"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\06-outro-tenant-com-logo.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\06-outro-tenant-com-logo.png",
+    "validationUrl": "https://validar.atenza.digital/validar-certificado/HSH-2026-06-OUTRO-TENANT-COM-LOGO"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\07-outro-tenant-sem-logo.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\07-outro-tenant-sem-logo.png",
+    "validationUrl": "https://validar.atenza.digital/validar-certificado/HSH-2026-07-OUTRO-TENANT-SEM-LOGO"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\08-outro-tenant-sem-assinatura.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\08-outro-tenant-sem-assinatura.png",
+    "validationUrl": "https://validar.atenza.digital/validar-certificado/HSH-2026-08-OUTRO-TENANT-SEM-ASSINATURA"
+  },
+  {
+    "pdfPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\09-qrcode-url-publica.pdf",
+    "pngPath": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\certificado_saas\\09-qrcode-url-publica.png",
+    "validationUrl": "https://validar.atenza.digital/validar-certificado/HSH-2026-09-QRCODE-URL-PUBLICA"
+  }
+]

@@ -102,6 +102,7 @@ export default function AuditoriaAnexos() {
       all: attachments.length,
       immutable: attachments.filter((item) => item.imutavel).length,
       historical: attachments.filter((item) => item.categoria === "pdf_historico").length,
+      serverPdf: attachments.filter((item) => item.mimeType === "application/pdf" && item.templateCodigo).length,
       images: attachments.filter((item) => item.mimeType?.startsWith("image/")).length,
     }),
     [attachments],
@@ -155,6 +156,7 @@ export default function AuditoriaAnexos() {
             <div>
               <p className="text-sm text-muted-foreground">Históricos</p>
               <p className="text-3xl font-bold">{totals.historical}</p>
+              <p className="text-xs text-muted-foreground">{totals.serverPdf} PDF server-side</p>
             </div>
           </CardContent>
         </Card>
