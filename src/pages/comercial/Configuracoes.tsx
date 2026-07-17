@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getBootstrap, saveCompanyConfig, saveNumberingConfig, type EmpresaConfig, type NumeracaoConfig } from "@/lib/api";
 import logoDefault from "@/assets/logo_ciperprag.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings, Building2, Hash, ShieldCheck, Save, Image, FileCheck2, ReceiptText } from "lucide-react";
+import { Settings, Building2, Hash, ShieldCheck, Save, Image, FileCheck2, ReceiptText, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 const defaultEmpresa: EmpresaConfig = {
@@ -94,6 +94,54 @@ function NumberingCard({
   );
 }
 
+function readImageFile(file: File, onLoad: (value: string) => void) {
+  const reader = new FileReader();
+  reader.onload = (loadEvent) => onLoad(String(loadEvent.target?.result || ""));
+  reader.readAsDataURL(file);
+}
+
+function AssetUploadCard({
+  title,
+  description,
+  value,
+  previewClassName = "bg-muted",
+  onChange,
+}: {
+  title: string;
+  description: string;
+  value?: string;
+  previewClassName?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className={`mb-4 flex h-24 items-center justify-center overflow-hidden rounded-xl ${previewClassName}`}>
+        {value ? (
+          <img src={value} alt={title} className="max-h-full max-w-full object-contain" />
+        ) : (
+          <span className="text-xs text-muted-foreground">Nao configurado</span>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>{title}</Label>
+        <Input
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            readImageFile(file, onChange);
+            event.target.value = "";
+          }}
+          className="text-sm"
+        />
+        <Input value={value || ""} onChange={(event) => onChange(event.target.value)} placeholder="URL ou Data URL/base64" />
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Configuracoes() {
   const [empresa, setEmpresa] = useState<EmpresaConfig>(defaultEmpresa);
   const [numeracao, setNumeracao] = useState<NumeracaoConfig>(defaultNumeracao);
@@ -152,12 +200,12 @@ export default function Configuracoes() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => {
-      setEmpresa((prev) => ({ ...prev, logoUrl: String(loadEvent.target?.result || "") }));
+    readImageFile(file, (value) => {
+      setEmpresa((prev) => ({ ...prev, logoUrl: value }));
+      updateCertificadoConfig("logoPrincipalUrl", value);
       toast.success("Logo atualizada na tela. Salve para gravar no banco.");
-    };
-    reader.readAsDataURL(file);
+    });
+    event.target.value = "";
   }
 
   function readCertificadoConfig() {
@@ -168,20 +216,30 @@ export default function Configuracoes() {
     }
   }
 
+  function updateCertificadoConfig(key: string, value: unknown) {
+    const currentConfig = readCertificadoConfig();
+    setCertificadoConfigText(JSON.stringify({ ...currentConfig, [key]: value }, null, 2));
+  }
+
   function handleInterfaceLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (loadEvent) => {
-      const currentConfig = readCertificadoConfig();
-      setCertificadoConfigText(JSON.stringify({ ...currentConfig, logoInterfaceUrl: String(loadEvent.target?.result || "") }, null, 2));
+    readImageFile(file, (value) => {
+      updateCertificadoConfig("logoInterfaceUrl", value);
       toast.success("Logo da interface atualizada na tela. Salve para gravar no banco.");
-    };
-    reader.readAsDataURL(file);
+    });
+    event.target.value = "";
   }
 
-  const interfaceLogoUrl = readCertificadoConfig().logoInterfaceUrl as string | undefined;
+  const certificadoConfig = useMemo(() => {
+    try {
+      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
+    } catch {
+      return {};
+    }
+  }, [certificadoConfigText]);
+  const interfaceLogoUrl = certificadoConfig.logoInterfaceUrl as string | undefined;
 
   return (
     <div className="space-y-6">
@@ -344,6 +402,67 @@ export default function Configuracoes() {
               <CardTitle className="flex items-center gap-2 text-lg"><FileCheck2 className="h-5 w-5" />Certificados</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
+                <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+                  <Upload className="h-4 w-4 text-primary" />
+                  Assets documentais do tenant
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Configure os elementos visuais que podem aparecer no certificado e nos documentos do cliente SaaS. Para cada cliente,
+                  a logo, a assinatura, o selo e a arte de fundo devem vir da configuração do próprio tenant.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <AssetUploadCard
+                  title="Logo principal"
+                  description="Logo usada no cabeçalho dos certificados e documentos."
+                  value={(certificadoConfig.logoPrincipalUrl as string) || empresa.logoUrl}
+                  onChange={(value) => {
+                    setEmpresa((prev) => ({ ...prev, logoUrl: value }));
+                    updateCertificadoConfig("logoPrincipalUrl", value);
+                  }}
+                />
+                <AssetUploadCard
+                  title="Arte de fundo"
+                  description="Marca d'agua, icone lateral ou elemento visual do certificado."
+                  value={certificadoConfig.arteFundoUrl as string}
+                  previewClassName="bg-slate-100"
+                  onChange={(value) => updateCertificadoConfig("arteFundoUrl", value)}
+                />
+                <AssetUploadCard
+                  title="Selo institucional"
+                  description="Selo, brasao, certificacao ou marca complementar do tenant."
+                  value={certificadoConfig.seloInstitucionalUrl as string}
+                  onChange={(value) => updateCertificadoConfig("seloInstitucionalUrl", value)}
+                />
+                <AssetUploadCard
+                  title="Assinatura"
+                  description="Imagem da assinatura do responsavel configurado para sair no documento."
+                  value={certificadoConfig.assinaturaUrl as string}
+                  onChange={(value) => updateCertificadoConfig("assinaturaUrl", value)}
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Título do certificado</Label>
+                  <Input
+                    value={(certificadoConfig.titulo as string) || ""}
+                    onChange={(event) => updateCertificadoConfig("titulo", event.target.value)}
+                    placeholder="Certificado de Garantia"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Subtítulo</Label>
+                  <Input
+                    value={(certificadoConfig.subtitulo as string) || ""}
+                    onChange={(event) => updateCertificadoConfig("subtitulo", event.target.value)}
+                    placeholder="Texto complementar opcional"
+                  />
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Validade padrão (dias)</Label>

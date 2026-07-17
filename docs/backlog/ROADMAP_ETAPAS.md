@@ -174,6 +174,8 @@ Entregue inicialmente em homologacao:
 - Deploy de producao permanece bloqueado/nao configurado ate existirem ambiente, secrets, politica de release e rotina de rollback aprovados.
 - Login publico passou a resolver contexto de tenant por URL/subdominio/query string, mantendo login padrao neutro e exibindo discretamente o ambiente do cliente quando aplicavel.
 - Login autenticado passou a aceitar `tenantSlug` para evitar ambiguidade de e-mails iguais em tenants diferentes.
+- Configuracoes passou a expor assets documentais por tenant em campos visuais: logo principal/documental, logo da interface, arte de fundo, selo institucional, assinatura, titulo e subtitulo do certificado, mantendo persistencia em `empresa_config.certificado_config`.
+- Checagem visual automatizada passou a capturar tambem a tela de Configuracoes > assets documentais do tenant.
 
 Backlog da Etapa 8: 31 itens.
 
@@ -186,7 +188,7 @@ Backlog da Etapa 8: 31 itens.
 - Implementar storage externo ou filesystem controlado para anexos/documentos, reduzindo base64 no banco.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
-- Persistir imagens documentais por tenant e por usuario responsavel: logo, arte de fundo, selo, assinatura e rodape. A assinatura deve ser parametrizavel por usuario/perfil/tenant, permitindo upload de imagem de assinatura, vinculacao a papeis documentais (ex.: responsavel comercial, responsavel tecnico, emissor da medicao) e uso automatico em proposta, contrato, OS, certificado e medicao quando o documento exigir assinatura.
+- Evoluir assets documentais para armazenamento externo/filesystem controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar logo principal, logo da interface, arte de fundo, selo institucional e assinatura em `certificado_config`, mas ainda falta vincular assinatura a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao.
 - Parametrizar clausulas comerciais/juridicas por tenant.
 - Criar biblioteca de condicoes comerciais padrao por tenant.
 - Parametrizar textos executivos da proposta por tenant e por tipo de servico.

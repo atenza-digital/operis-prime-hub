@@ -69,7 +69,7 @@ async function main() {
   await page.getByRole("button", { name: /^entrar$/i }).click();
   await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 20000 });
   await page.waitForLoadState("networkidle");
-  await page.getByRole("heading", { name: /Painel de Operação/i }).waitFor({ timeout: 20000 });
+  await page.getByRole("heading", { name: /Painel de Opera/i }).waitFor({ timeout: 20000 });
   await page.getByText(/Contratos ativos/i).first().waitFor({ timeout: 20000 });
 
   const dashboardPath = path.join(outputDir, "dashboard-checagem-visual.png");
@@ -85,11 +85,17 @@ async function main() {
   const medicaoPath = path.join(outputDir, "medicao-checagem-visual.png");
   await page.screenshot({ path: medicaoPath, fullPage: true });
 
+  await page.goto(`${baseUrl}/comercial/configuracoes`, { waitUntil: "networkidle" });
+  await page.getByText(/Assets documentais do tenant/i).first().waitFor({ timeout: 20000 });
+
+  const configuracoesPath = path.join(outputDir, "configuracoes-assets-tenant.png");
+  await page.screenshot({ path: configuracoesPath, fullPage: true });
   const result = {
     baseUrl,
     email,
-    selectedMeasurementPanel: (await page.locator("text=Medição selecionada").count()) > 0,
-    screenshots: [dashboardPath, medicaoPath],
+    selectedMeasurementPanel: (await page.locator("text=/Medi.*selecionada/i").count()) > 0,
+    tenantAssetsPanel: (await page.getByText(/Assets documentais do tenant/i).count()) > 0,
+    screenshots: [dashboardPath, medicaoPath, configuracoesPath],
   };
 
   await browser.close();
@@ -104,3 +110,4 @@ main()
   .finally(async () => {
     await pool.end();
   });
+
