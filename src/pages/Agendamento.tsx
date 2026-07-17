@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect } from "react";
-import { contratos } from "@/data/mockData";
-import { clientes as clientesCad, servicosCatalogo } from "@/data/comercialData";
-import { tecnicos as tecnicosList } from "@/data/equipesData";
+import { useEffect, useMemo, useState } from "react";
 import {
-  AgendamentoApp, OSApp,
-  getAgendamentos, addAgendamento, updateAgendamento,
-  getOrdens, addOrdem, nextOSNumber,
-} from "@/lib/appStore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  generateOrderFromSchedule,
+  getBootstrap,
+  saveSchedule,
+  type AgendamentoApp,
+  type BootstrapData,
+  type OSApp,
+  updateRecurrenceSuggestion,
+} from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -15,94 +16,151 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import {
-  CalendarPlus, ShieldAlert, FileText, Printer, Trash2,
-  CheckCircle2, Clock, XCircle, Plus, FileCheck2, User,
-  MapPin, Tag, MessageSquare, ChevronDown, ChevronUp,
-  AlertTriangle, Building2,
-} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { printOsDocument } from "@/lib/osPrint";
+import { PageHeader } from "@/components/PageHeader";
 
-// ── helpers ──────────────────────────────────────────────────
-function fmtDate(d: string) {
-  if (!d) return "—";
-  return new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+function fmtDate(date: string) {
+  if (!date) return "—";
+  return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
 }
+
 function newId() {
-  return "AG-" + Date.now().toString(36).toUpperCase();
-}
-function diasAte(d: string) {
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const data = new Date(d + "T00:00:00");
-  return Math.ceil((data.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  return `AG-${Date.now().toString(36).toUpperCase()}`;
 }
 
-const STATUS_CFG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  agendado:  { label: "Agendado",  color: "bg-blue-100 text-blue-700 border-blue-200",    icon: Clock },
-  os_gerada: { label: "OS Gerada", color: "bg-green-100 text-green-700 border-green-200", icon: FileCheck2 },
-  encerrado: { label: "Encerrado", color: "bg-gray-100 text-gray-600 border-gray-200",    icon: CheckCircle2 },
-  cancelado: { label: "Cancelado", color: "bg-red-100 text-red-600 border-red-200",       icon: XCircle },
-};
+function diasAte(date: string) {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.ceil((new Date(`${date}T00:00:00`).getTime() - hoje.getTime()) / 86400000);
+}
 
-// ═══════════════════════════════════════════════════════════════
+function formatQuantityUnit(quantity: number, unit?: string | null) {
+  const value = Number(quantity || 0);
+  const normalized = (unit || "").trim().toLowerCase();
+  const compactUnits = new Set(["un", "un.", "unid", "unid."]);
+  const pluralMap: Record<string, string> = {
+    servico: "serviços",
+    serviço: "serviços",
+    ponto: "pontos",
+    visita: "visitas",
+    hora: "horas",
+  };
+
+  if (!normalized) return value.toLocaleString("pt-BR");
+  if (Math.abs(value) === 1 || compactUnits.has(normalized) || normalized.endsWith("s")) {
+    return `${value.toLocaleString("pt-BR")} ${unit}`;
+  }
+
+  return `${value.toLocaleString("pt-BR")} ${pluralMap[normalized] || `${unit}s`}`;
+}
+
+const STATUS_CFG = {
+  agendado: { label: "Agendado", icon: Clock, cls: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20" },
+  os_gerada: { label: "OS Gerada", icon: FileCheck2, cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20" },
+  encerrado: { label: "Encerrado", icon: CheckCircle2, cls: "bg-muted text-muted-foreground border-border" },
+  cancelado: { label: "Cancelado", icon: XCircle, cls: "bg-destructive/5 text-destructive border-destructive/20" },
+} as const;
+
 export default function Agendamento() {
-  // ── form ────────────────────────────────────────────────
+  const [data, setData] = useState<BootstrapData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(true);
   const [clienteId, setClienteId] = useState("");
   const [contratoId, setContratoId] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
-  const [tags, setTags] = useState("");
+  const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
-  const [formOpen, setFormOpen] = useState(true);
-
-  // ── lista ────────────────────────────────────────────────
-  const [agendamentos, setAgendamentos] = useState<AgendamentoApp[]>([]);
+  const [tecnicosSelecionados, setTecnicosSelecionados] = useState<string[]>([]);
+  const [veiculoId, setVeiculoId] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroCliente, setFiltroCliente] = useState("");
-
-  // ── OS dialog ────────────────────────────────────────────
   const [osDialog, setOsDialog] = useState(false);
   const [osAgId, setOsAgId] = useState<string | null>(null);
   const [osTecnico, setOsTecnico] = useState("");
   const [osGerada, setOsGerada] = useState<OSApp | null>(null);
 
-  useEffect(() => { setAgendamentos(getAgendamentos()); }, []);
-  function reload() { setAgendamentos(getAgendamentos()); }
+  async function reload() {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await getBootstrap());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao carregar agendamentos.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  // ── Clientes do cadastro ─────────────────────────────────
-  const clientesAtivos = useMemo(() => clientesCad.filter(c => c.ativo), []);
+  useEffect(() => {
+    reload();
+  }, []);
 
-  // ── Contratos do cliente selecionado ─────────────────────
+  const clientesAtivos = (data?.clients ?? []).filter((item) => item.ativo);
+  const contratos = data?.contracts ?? [];
+  const tecnicos = data?.technicians ?? [];
+  const veiculos = data?.vehicles ?? [];
+  const agendamentos = data?.schedules ?? [];
+  const recorrencias = (data?.recurrenceSuggestions ?? []).filter((item) => item.status === "pendente");
+
+  const clienteNomeSel = useMemo(() => clientesAtivos.find((item) => item.id === clienteId)?.razaoSocial ?? clienteId, [clienteId, clientesAtivos]);
+  const clienteAtivo = useMemo(() => clientesAtivos.find((item) => item.id === clienteId), [clienteId, clientesAtivos]);
   const contratosCliente = useMemo(
-    () => contratos.filter((c: any) => c.cliente === clienteId),
-    [clienteId]
+    () =>
+      contratos.filter((item) => {
+        const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0;
+      }),
+    [clienteNomeSel, contratos],
   );
-  const contratoAtivo = useMemo(() => contratos.find((c: any) => c.id === contratoId), [contratoId]);
-  const clienteObj = useMemo(() => clientesCad.find(c => c.id === clienteId || c.razaoSocial === clienteId), [clienteId]);
+  const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
+  const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
+  const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
+  const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
+  const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
   const agFiltrados = useMemo(() => {
     let list = [...agendamentos].reverse();
-    if (filtroStatus !== "todos") list = list.filter(a => a.status === filtroStatus);
-    if (filtroCliente) list = list.filter(a => a.clienteNome.toLowerCase().includes(filtroCliente.toLowerCase()));
+    if (filtroStatus !== "todos") list = list.filter((item) => item.status === filtroStatus);
+    if (filtroCliente) list = list.filter((item) => item.clienteNome.toLowerCase().includes(filtroCliente.toLowerCase()));
     return list;
   }, [agendamentos, filtroStatus, filtroCliente]);
 
-  // ── contadores ────────────────────────────────────────────
   const counts = useMemo(() => {
-    const r: Record<string, number> = { todos: agendamentos.length };
-    for (const s of Object.keys(STATUS_CFG)) r[s] = agendamentos.filter(a => a.status === s).length;
-    return r;
+    const result: Record<string, number> = { todos: agendamentos.length };
+    for (const status of Object.keys(STATUS_CFG)) result[status] = agendamentos.filter((item) => item.status === status).length;
+    return result;
   }, [agendamentos]);
 
-  // ── criar agendamento ─────────────────────────────────────
-  function handleAgendar() {
-    if (!clienteId || !contratoId || !dataAgendada || !localExecucao) {
+  const agDaOs = agendamentos.find((item) => item.id === osAgId);
+  const contratoDaOs = contratos.find((item) => item.id === agDaOs?.contratoId);
+
+  function resetFormulario() {
+    setContratoId("");
+    setDataAgendada("");
+    setLocalExecucao("");
+    setTagsSelecionadas([]);
+    setObservacao("");
+    setTecnicosSelecionados([]);
+    setVeiculoId("");
+  }
+
+  function toggleTecnico(tecnicoId: string) {
+    setTecnicosSelecionados((prev) => (prev.includes(tecnicoId) ? prev.filter((item) => item !== tecnicoId) : [...prev, tecnicoId]));
+  }
+
+  async function handleAgendar() {
+    if (!clienteId || !contratoId || !dataAgendada || !localExecucao || !contratoAtivo) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
-    const clienteFinal = clientesCad.find(c => c.id === clienteId)?.razaoSocial || clienteId;
-    const ag: AgendamentoApp = {
+    const equipe = tecnicos.filter((item) => tecnicosSelecionados.includes(item.id));
+    await saveSchedule({
       id: newId(),
       clienteId,
       clienteNome: contratoAtivo.cliente,
@@ -112,194 +170,271 @@ export default function Agendamento() {
       tipo: contratoAtivo.tipo,
       dataAgendada,
       localExecucao,
-      tags,
+      tags: tagsSelecionadas.join(", "),
       observacao,
+      tecnicosIds: equipe.map((item) => item.id),
+      tecnicosNomes: equipe.map((item) => item.nome),
+      veiculoId: veiculoSelecionado?.id,
+      veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
       status: "agendado",
-      createdAt: new Date().toISOString(),
-    };
-    addAgendamento(ag);
-    toast.success("Agendamento criado!", { description: `${ag.servico} — ${fmtDate(dataAgendada)}` });
-    setContratoId(""); setDataAgendada(""); setLocalExecucao(""); setTags(""); setObservacao("");
+    });
+    toast.success("Agendamento criado!");
+    resetFormulario();
     reload();
   }
 
-  function handleCancelar(id: string) {
-    if (!confirm("Cancelar este agendamento?")) return;
-    updateAgendamento(id, { status: "cancelado" });
+  async function confirmRecurring(id: string) {
+    await updateRecurrenceSuggestion(id, "confirm");
+    toast.success("Novo agendamento recorrente criado na agenda");
     reload();
-    toast.info("Agendamento cancelado");
   }
 
-  // ── OS dialog ─────────────────────────────────────────────
+  async function dismissRecurring(id: string) {
+    await updateRecurrenceSuggestion(id, "dismiss");
+    toast.info("Sugestão de recorrência dispensada");
+    reload();
+  }
+
   function openOsDialog(agId: string) {
-    setOsAgId(agId); setOsTecnico(""); setOsGerada(null); setOsDialog(true);
+    const agendamento = agendamentos.find((item) => item.id === agId);
+    setOsAgId(agId);
+    setOsTecnico(agendamento?.tecnicosNomes?.[0] ?? "");
+    setOsGerada(null);
+    setOsDialog(true);
   }
 
-  const agDaOs = useMemo(() => agendamentos.find(a => a.id === osAgId), [osAgId, agendamentos]);
-  const contratoDaOs = useMemo(() => agDaOs ? contratos.find((c: any) => c.id === agDaOs.contratoId) : null, [agDaOs]);
-  const tecnicoSel = useMemo(() => tecnicosList.find(t => t.nome === osTecnico), [osTecnico]);
-
-  function handleGerarOS() {
-    if (!osAgId || !osTecnico) { toast.error("Selecione o técnico"); return; }
-    const ag = agendamentos.find(a => a.id === osAgId)!;
-    const contrato = contratos.find((c: any) => c.id === ag.contratoId)!;
-    const clienteCad = clientesCad.find(c => c.razaoSocial === ag.clienteNome);
-    const tecnico = tecnicosList.find(t => t.nome === osTecnico);
-
-    const os: OSApp = {
-      id: Date.now().toString(),
-      numero: nextOSNumber(),
-      agendamentoId: ag.id,
-      clienteId: ag.clienteId,
-      clienteNome: ag.clienteNome,
-      clienteCnpj: ag.clienteCnpj,
-      clienteEndereco: clienteCad?.endereco,
-      clienteLogoUrl: clienteCad?.logoUrl,
-      contratoId: ag.contratoId,
-      servico: ag.servico,
-      tipo: ag.tipo,
-      tecnicoNome: osTecnico,
-      tecnicoCpf: tecnico?.cpf,
-      tecnicoDataAdmissao: tecnico?.dataAdmissao,
-      localExecucao: ag.localExecucao,
-      tags: ag.tags,
-      dataEmissao: new Date().toISOString().split("T")[0],
-      quantidade: 1,
-      unidade: contrato.unidade,
-      status: "aberta",
-      fotos: [],
-    };
-
-    addOrdem(os);
-    updateAgendamento(ag.id, { status: "os_gerada", osId: os.id });
-    setOsGerada(os);
-    reload();
-    toast.success(`${os.numero} gerada com sucesso!`);
+  async function handleGerarOS() {
+    if (!osAgId) return;
+    await generateOrderFromSchedule(osAgId, osTecnico);
+    const bootstrap = await getBootstrap();
+    setData(bootstrap);
+    const criada = bootstrap.orders.find((item) => item.agendamentoId === osAgId);
+    if (criada) {
+      setOsGerada(criada);
+      toast.success(`${criada.numero} gerada!`);
+    }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  function imprimirOS() {
+    if (!osGerada) return;
+    printOsDocument(osGerada, data);
+    return;
+    const equipe = osGerada.equipeTecnicosNomes?.length ? osGerada.equipeTecnicosNomes.join(" • ") : osGerada.tecnicoNome;
+    const janela = window.open("", "_blank", "width=960,height=720");
+    if (!janela) return;
+    janela.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${osGerada.numero}</title>
+      <style>*{box-sizing:border-box}body{font-family:Inter,sans-serif;font-size:11px;padding:10mm;color:#000}table{width:100%;border-collapse:collapse;margin-bottom:8px}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:700}h2{text-align:center;margin-bottom:12px;font-size:14px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:10px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;border-radius:6px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:16px}</style></head><body>
+      <div class="header"><div style="display:flex;align-items:center;gap:10px"><div class="logo-box">CP</div><div><div style="font-size:16px;font-weight:800;color:#166534">CIPERPRAG</div><div style="font-size:9px;letter-spacing:3px;color:#888">SERVIÇOS</div></div></div><div style="text-align:right"><div style="font-size:13px;font-weight:bold">${osGerada.numero}</div><div style="font-size:10px;color:#666">Emitida em ${new Date().toLocaleDateString("pt-BR")}</div></div></div>
+      <h2>ORDEM DE SERVIÇO</h2>
+      <table><tr><td style="background:#f5f5f5;font-weight:bold;width:130px">CLIENTE</td><td>${osGerada.clienteNome}</td><td style="background:#f5f5f5;font-weight:bold;width:130px">CNPJ</td><td>${osGerada.clienteCnpj}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">SERVIÇO</td><td>${osGerada.servico}</td><td style="background:#f5f5f5;font-weight:bold">CONTRATO</td><td>${osGerada.contratoId}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">LOCAL</td><td>${osGerada.localExecucao}</td><td style="background:#f5f5f5;font-weight:bold">VEÍCULO</td><td>${osGerada.veiculoDescricao ?? "A definir"}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">TÉCNICO LÍDER</td><td>${osGerada.tecnicoNome}</td><td style="background:#f5f5f5;font-weight:bold">EQUIPE</td><td>${equipe}</td></tr></table>
+      <div class="footer">CIPERPRAG Controle de Pragas e Serviços LTDA • CNPJ 15.722.292/0001-43</div><script>window.onload=function(){window.print();}</script></body></html>`);
+    janela.document.close();
+  }
+
   return (
     <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <CalendarPlus className="h-6 w-6 text-primary" />
-            Agendamentos
-          </h1>
-          <p className="text-muted-foreground text-sm">Crie agendamentos e gerencie a fila de serviços</p>
-        </div>
-        <Button onClick={() => setFormOpen(v => !v)} variant="outline" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Agendamento
-          {formOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Operacional"
+        title="Agendamentos"
+        description="Planeje visitas, designe equipe e leve o fluxo adiante até a geração da ordem de serviço."
+        crumbs={[{ label: "Operacional" }, { label: "Agendamentos" }]}
+        actions={[
+          { label: "Atualizar agenda", onClick: reload, variant: "outline" },
+          {
+            label: formOpen ? "Recolher formulário" : "Novo agendamento",
+            onClick: () => setFormOpen((value) => !value),
+            variant: "default",
+          },
+        ]}
+      />
 
-      {/* ── Formulário colapsável ── */}
-      {formOpen && (
-        <Card className="border-primary/20 bg-primary/3">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="h-4 w-4 text-primary" /> Novo Agendamento
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {/* Cliente */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" /> Cliente <span className="text-destructive">*</span></Label>
-                <Select value={clienteId} onValueChange={(v) => { setClienteId(v); setContratoId(""); }}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-                  <SelectContent>
-                    {clientesAtivos.map(c => (
-                      <SelectItem key={c.id} value={c.razaoSocial}>{c.nomeFantasia} — {c.razaoSocial}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-3">
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              Origem correta
+            </p>
+            <p className="mt-2 text-muted-foreground">Só entram aqui contratos vigentes e com saldo operacional criado pelo contrato/proposta.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <Users className="h-4 w-4 text-primary" />
+              Planejamento de campo
+            </p>
+            <p className="mt-2 text-muted-foreground">Agende data, local, equipe, veículo e tags/equipamentos antes de gerar a OS.</p>
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="flex items-center gap-2 font-semibold">
+              <FileText className="h-4 w-4 text-primary" />
+              Próximo passo
+            </p>
+            <p className="mt-2 text-muted-foreground">Após agendar, gere e imprima a OS para a equipe executar e devolver com evidências.</p>
+          </div>
+        </CardContent>
+      </Card>
 
-              {/* Contrato */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
-                <Select value={contratoId} onValueChange={setContratoId} disabled={!clienteId}>
-                  <SelectTrigger><SelectValue placeholder={clienteId ? "Selecione o serviço" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                  <SelectContent>
-                    {contratosCliente.map((c: any) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          {c.servico}
-                          <span className="text-muted-foreground text-xs">({c.id})</span>
-                          {c.status === "vencido" && <span className="text-amber-500">⚠️</span>}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      {error ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="pt-4 text-sm text-muted-foreground">{error}</CardContent>
+        </Card>
+      ) : null}
 
-              {/* Data */}
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
-                <Input type="date" value={dataAgendada} onChange={e => setDataAgendada(e.target.value)} disabled={!contratoId} />
-              </div>
+      {loading ? (
+        <Card>
+          <CardContent className="py-14 text-center text-sm text-muted-foreground">Carregando agenda operacional...</CardContent>
+        </Card>
+      ) : null}
 
-              {/* Local */}
-              <div className="space-y-1.5 md:col-span-2">
-                <Label className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-                <Input placeholder="Ex: República Administrativa 01, Bloco A..." value={localExecucao} onChange={e => setLocalExecucao(e.target.value)} disabled={!contratoId} />
-              </div>
-
-              {/* Tags */}
-              {contratoAtivo?.tags && (
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> TAGs dos equipamentos</Label>
-                  <Input placeholder="Ex: BEB-01, BEB-02" value={tags} onChange={e => setTags(e.target.value)} />
-                  <div className="flex flex-wrap gap-1">
-                    {contratoAtivo.tags.map((t: string) => (
-                      <button key={t} type="button" onClick={() => setTags(p => p ? p + ", " + t : t)}
-                        className="text-[10px] px-2 py-0.5 rounded-full border hover:bg-primary/10 hover:border-primary/40 transition-colors">
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+      {!loading && recorrencias.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/70 dark:bg-amber-950/10">
+          <CardContent className="pt-4 space-y-3">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-2"><Clock className="h-4 w-4" /> Recorrências sugeridas após serviços concluídos</p>
+            {recorrencias.map((item) => (
+              <div key={item.id} className="rounded-lg border border-amber-200 bg-white dark:bg-card p-3 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{item.clienteNome}</p>
+                  <p className="text-xs text-muted-foreground">{item.servico}</p>
+                  <p className="text-xs text-muted-foreground">Sugestão: {fmtDate(item.suggestedDate)} • {item.localExecucao}</p>
                 </div>
-              )}
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => dismissRecurring(item.id)}>Dispensar</Button>
+                  <Button size="sm" onClick={() => confirmRecurring(item.id)}>Confirmar</Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-              {/* Observação */}
-              <div className="space-y-1.5 md:col-span-2">
-                <Label className="flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Observação</Label>
-                <Textarea placeholder="Informações adicionais para a equipe..." value={observacao} onChange={e => setObservacao(e.target.value)} rows={2} />
+      {!loading && formOpen && (
+        <Card className="border-primary/20">
+          <CardContent className="pt-5 space-y-5">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-2"><CalendarPlus className="h-4 w-4 text-primary" /> Novo Agendamento</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs"><Building2 className="h-3.5 w-3.5" /> Cliente <span className="text-destructive">*</span></Label>
+                <Select value={clienteId} onValueChange={(value) => { setClienteId(value); resetFormulario(); }}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
+                  <SelectContent>{clientesAtivos.map((item) => <SelectItem key={item.id} value={item.id}><span className="font-medium">{item.nomeFantasia}</span><span className="text-muted-foreground text-xs ml-1.5">— {item.razaoSocial}</span></SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
+                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                  <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
+                  <SelectContent>
+                    {contratosCliente.map((item) => {
+                      const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+                      return (
+                        <SelectItem key={item.id} value={item.id}>
+                          <span>{item.servico}</span>
+                          <span className="text-muted-foreground text-xs ml-1.5">
+                            ({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {clienteId && contratosCliente.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhum contrato vigente com saldo operacional para este cliente. Gere/aprove um contrato antes de agendar.
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
+                <Input type="date" value={dataAgendada} onChange={(event) => setDataAgendada(event.target.value)} disabled={!contratoId} />
               </div>
             </div>
 
-            {/* Info do contrato + EPIs */}
-            {contratoAtivo && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-lg bg-muted/40 border p-3 text-xs space-y-1">
-                  <p className="font-semibold text-foreground mb-1.5">Resumo do Contrato</p>
-                  <p className="text-muted-foreground">Tipo: <span className="font-medium text-foreground">{contratoAtivo.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></p>
-                  <p className="text-muted-foreground">Saldo: <span className="font-bold text-foreground">{contratoAtivo.contratado - contratoAtivo.executado} {contratoAtivo.unidade}</span></p>
-                  {contratoAtivo.validadeDias > 0 && <p className="text-muted-foreground">Recorrência: <span className="font-medium text-foreground">a cada {contratoAtivo.validadeDias} dias</span></p>}
-                  <p className="text-muted-foreground">Valor unitário: <span className="font-medium text-foreground">R$ {contratoAtivo.valorUnitario?.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></p>
-                </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
+              {locaisContrato.length > 0 ? (
+                <Select value={localExecucao} onValueChange={setLocalExecucao} disabled={!contratoId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
+                  <SelectContent>{locaisContrato.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="Ex: República Administrativa 01, Bloco A" value={localExecucao} onChange={(event) => setLocalExecucao(event.target.value)} disabled={!contratoId} />
+              )}
+            </div>
 
-                {contratoAtivo.tipo === "sanitario" && (contratoAtivo.epis?.length || contratoAtivo.riscos?.length) && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs space-y-2">
-                    <p className="font-semibold flex items-center gap-1 text-amber-700 dark:text-amber-400">
-                      <ShieldAlert className="h-3.5 w-3.5" /> EPIs e Riscos
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {contratoAtivo.epis?.map((e: string) => <Badge key={e} variant="secondary" className="text-[10px]">{e}</Badge>)}
-                      {contratoAtivo.riscos?.map((r: string) => <Badge key={r} variant="destructive" className="text-[10px]">{r}</Badge>)}
-                    </div>
-                  </div>
-                )}
+            {equipamentosCliente.length > 0 && (
+              <div className="rounded-xl border p-4 space-y-3">
+                <Label className="flex items-center gap-1.5 text-xs"><Tag className="h-3.5 w-3.5" /> Equipamentos/tags previstos</Label>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {equipamentosCliente.map((equipamento) => (
+                    <label key={equipamento.id || equipamento.tag} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                      <Checkbox
+                        checked={tagsSelecionadas.includes(equipamento.tag)}
+                        onCheckedChange={() => {
+                          setTagsSelecionadas((prev) => (prev.includes(equipamento.tag) ? prev.filter((item) => item !== equipamento.tag) : [...prev, equipamento.tag]));
+                        }}
+                      />
+                      <span>
+                        <strong>{equipamento.tag}</strong>
+                        <span className="block text-muted-foreground">{equipamento.descricao || equipamento.tipo || equipamento.setor || "Equipamento cadastrado"}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="mt-4 flex justify-end">
-              <Button onClick={handleAgendar} size="lg" className="gap-2" disabled={!clienteId || !contratoId || !dataAgendada || !localExecucao}>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="rounded-xl border p-4 space-y-3">
+                <Label className="flex items-center gap-1.5 text-xs"><Users className="h-3.5 w-3.5" /> Equipe designada</Label>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {tecnicos.filter((item) => item.ativo).map((item) => (
+                    <label key={item.id} className="flex items-center gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                      <Checkbox checked={tecnicosSelecionados.includes(item.id)} onCheckedChange={() => toggleTecnico(item.id)} />
+                      <span><strong>{item.nome}</strong><span className="block text-muted-foreground">{item.cargo}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border p-4 space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5 text-xs"><Car className="h-3.5 w-3.5" /> Veículo designado</Label>
+                  <Select value={veiculoId || "none"} onValueChange={(value) => setVeiculoId(value === "none" ? "" : value)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um veículo" /></SelectTrigger>
+                    <SelectContent><SelectItem value="none">Sem veículo definido</SelectItem>{veiculos.filter((item) => item.ativo).map((item) => <SelectItem key={item.id} value={item.id}>{item.modelo} • {item.placa}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5 text-xs"><MessageSquare className="h-3.5 w-3.5" /> Observação</Label>
+                  <Textarea placeholder="Instruções para a equipe de campo..." value={observacao} onChange={(event) => setObservacao(event.target.value)} rows={3} disabled={!contratoId} />
+                </div>
+              </div>
+            </div>
+
+            {contratoAtivo && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/40 border p-4 space-y-1.5">
+                  <p className="text-xs font-bold text-foreground mb-2">Resumo do Contrato</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">Tipo</span><Badge variant={contratoAtivo.tipo === "sanitario" ? "default" : "secondary"} className="text-[10px] w-fit">{contratoAtivo.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</Badge>
+                    <span className="text-muted-foreground">Saldo operacional</span><span className="font-bold">{formatQuantityUnit(contratoAtivo.contratado - contratoAtivo.executado, contratoAtivo.unidade)}</span>
+                    {contratoAtivo.validadeDias > 0 && <><span className="text-muted-foreground">Recorrência</span><span>a cada {contratoAtivo.validadeDias} dias</span></>}
+                    <span className="text-muted-foreground">Status</span><Badge variant={contratoAtivo.status === "vencido" ? "destructive" : "default"} className="text-[10px] w-fit">{contratoAtivo.status}</Badge>
+                  </div>
+                </div>
+                {contratoAtivo.tipo === "sanitario" && (contratoAtivo.epis?.length || contratoAtivo.riscos?.length) ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-2">
+                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5"><ShieldAlert className="h-3.5 w-3.5" /> EPIs e Riscos</p>
+                    <div className="flex flex-wrap gap-1">
+                      {contratoAtivo.epis?.map((item) => <Badge key={item} variant="secondary" className="text-[10px]">{item}</Badge>)}
+                      {contratoAtivo.riscos?.map((item) => <Badge key={item} variant="destructive" className="text-[10px]">{item}</Badge>)}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-1">
+              <Button onClick={handleAgendar} size="lg" className="gap-2 px-8" disabled={!clienteId || !contratoId || !dataAgendada || !localExecucao}>
                 <CalendarPlus className="h-4 w-4" /> Criar Agendamento
               </Button>
             </div>
@@ -307,202 +442,75 @@ export default function Agendamento() {
         </Card>
       )}
 
-      {/* ── Filtros e lista ── */}
-      <div className="space-y-4">
-        {/* Status tabs */}
-        <div className="flex items-center gap-2 flex-wrap border-b pb-3">
-          {[["todos", "Todos"], ...Object.entries(STATUS_CFG).map(([k, v]) => [k, v.label])].map(([s, label]) => (
-            <button key={s} onClick={() => setFiltroStatus(s)}
-              className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${filtroStatus === s ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted"}`}>
-              {label}
-              {counts[s] > 0 && (
-                <span className={`ml-1.5 text-[10px] rounded-full px-1.5 py-0.5 ${filtroStatus === s ? "bg-white/20" : "bg-muted-foreground/10"}`}>
-                  {counts[s]}
-                </span>
-              )}
-            </button>
-          ))}
-          <div className="ml-auto">
-            <Input placeholder="Filtrar por cliente..." className="h-8 text-xs w-44" value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} />
-          </div>
-        </div>
-
-        {/* Cards */}
-        {agFiltrados.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Clock className="h-10 w-10 mb-3 opacity-30" />
-              <p className="text-sm">Nenhum agendamento encontrado</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {agFiltrados.map(ag => {
-              const st = STATUS_CFG[ag.status];
-              const dias = diasAte(ag.dataAgendada);
-              const vencido = dias < 0 && ag.status === "agendado";
-              const Icon = st.icon;
-              return (
-                <Card key={ag.id} className={`hover:shadow-md transition-all ${vencido ? "border-destructive/40" : ""}`}>
-                  <CardContent className="p-4 space-y-3">
-                    {/* Status + tipo */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${st.color}`}>
-                        <Icon className="h-3 w-3" /> {st.label}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Badge variant={ag.tipo === "sanitario" ? "default" : "secondary"} className="text-[10px]">
-                          {ag.tipo === "sanitario" ? "Sanitário" : "Manutenção"}
-                        </Badge>
-                        {vencido && <Badge variant="destructive" className="text-[10px]">Vencido</Badge>}
-                      </div>
-                    </div>
-
-                    {/* Info */}
-                    <div>
-                      <p className="font-semibold text-sm leading-tight">{ag.clienteNome}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{ag.servico}</p>
-                    </div>
-
-                    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <CalendarPlus className="h-3 w-3 shrink-0" />
-                        {fmtDate(ag.dataAgendada)}
-                        {ag.status === "agendado" && (
-                          <span className={`ml-1 font-medium ${vencido ? "text-destructive" : dias <= 7 ? "text-amber-600" : "text-primary"}`}>
-                            ({vencido ? `${Math.abs(dias)}d atrás` : `em ${dias}d`})
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3 w-3 shrink-0" /> {ag.localExecucao}
-                      </span>
-                      {ag.tags && (
-                        <span className="flex items-center gap-1.5">
-                          <Tag className="h-3 w-3 shrink-0" /> {ag.tags}
-                        </span>
-                      )}
-                      {ag.osId && (
-                        <span className="flex items-center gap-1.5 text-primary font-medium">
-                          <FileCheck2 className="h-3 w-3" /> OS vinculada
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    {ag.status === "agendado" && (
-                      <div className="flex gap-2 pt-1 border-t">
-                        <Button size="sm" className="flex-1 gap-1.5" onClick={() => openOsDialog(ag.id)}>
-                          <FileText className="h-3.5 w-3.5" /> Gerar OS
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5 px-2"
-                          onClick={() => handleCancelar(ag.id)} title="Cancelar">
-                          <XCircle className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+      <div className="flex items-center gap-2 flex-wrap border-b pb-3">
+        {[["todos", "Todos"], ...Object.entries(STATUS_CFG).map(([key, value]) => [key, value.label])].map(([status, label]) => (
+          <button key={status} onClick={() => setFiltroStatus(status)} className={cn("relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all", filtroStatus === status ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted")}>
+            {label}
+            {(counts[status] ?? agendamentos.length) > 0 && <span className={cn("ml-1.5 text-[10px] rounded-full px-1.5 py-0.5", filtroStatus === status ? "bg-white/20" : "bg-muted-foreground/10")}>{counts[status] ?? agendamentos.length}</span>}
+          </button>
+        ))}
+        <div className="ml-auto"><Input placeholder="Filtrar por cliente..." className="h-8 text-xs w-44" value={filtroCliente} onChange={(event) => setFiltroCliente(event.target.value)} /></div>
       </div>
 
-      {/* ═══ Dialog — Gerar OS ═══ */}
-      <Dialog open={osDialog} onOpenChange={v => { setOsDialog(v); if (!v) { setOsGerada(null); setOsTecnico(""); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              {osGerada ? "OS Gerada com Sucesso" : "Gerar Ordem de Serviço"}
-            </DialogTitle>
-          </DialogHeader>
+      {!loading && agFiltrados.length === 0 ? (
+        <Card><CardContent className="flex flex-col items-center justify-center py-14 text-muted-foreground"><Clock className="h-10 w-10 mb-3 opacity-20" /><p className="text-sm font-medium">Nenhum agendamento encontrado</p></CardContent></Card>
+      ) : !loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {agFiltrados.map((agendamento) => {
+            const status = STATUS_CFG[agendamento.status];
+            const dias = diasAte(agendamento.dataAgendada);
+            const vencido = dias < 0 && agendamento.status === "agendado";
+            const Icon = status.icon;
+            return (
+              <Card key={agendamento.id} className={cn("hover:shadow-md transition-all", vencido && "border-destructive/40")}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border", status.cls)}><Icon className="h-3 w-3" /> {status.label}</span>
+                    <div className="flex items-center gap-1">
+                      <Badge variant={agendamento.tipo === "sanitario" ? "default" : "secondary"} className="text-[10px]">{agendamento.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</Badge>
+                      {vencido && <Badge variant="destructive" className="text-[10px]">Vencido</Badge>}
+                    </div>
+                  </div>
+                  <div><p className="font-semibold text-sm">{agendamento.clienteNome}</p><p className="text-xs text-muted-foreground mt-0.5">{agendamento.servico}</p></div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div className="flex items-center gap-1.5"><CalendarPlus className="h-3 w-3" /> {fmtDate(agendamento.dataAgendada)} {agendamento.status === "agendado" && <span className={cn("ml-1 font-medium", vencido ? "text-destructive" : dias <= 7 ? "text-amber-600" : "text-primary")}>({vencido ? `${Math.abs(dias)}d atrás` : `em ${dias}d`})</span>}</div>
+                    <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {agendamento.localExecucao}</div>
+                    {agendamento.tecnicosNomes?.length ? <div className="flex items-center gap-1.5"><Users className="h-3 w-3" /> {agendamento.tecnicosNomes.join(" • ")}</div> : null}
+                    {agendamento.veiculoDescricao ? <div className="flex items-center gap-1.5"><Car className="h-3 w-3" /> {agendamento.veiculoDescricao}</div> : null}
+                  </div>
+                  {agendamento.status === "agendado" ? (
+                    <div className="flex gap-2 pt-1 border-t">
+                      <Button size="sm" className="flex-1 gap-1.5 h-7 text-xs" onClick={() => openOsDialog(agendamento.id)}><FileText className="h-3.5 w-3.5" /> Gerar OS</Button>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : null}
 
+      <Dialog open={osDialog} onOpenChange={(value) => { setOsDialog(value); if (!value) setOsGerada(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />{osGerada ? "OS Gerada com Sucesso" : "Gerar Ordem de Serviço"}</DialogTitle></DialogHeader>
           {!osGerada ? (
             <div className="space-y-4">
-              {/* Resumo do agendamento */}
-              {agDaOs && (
-                <div className="rounded-lg bg-muted/40 border p-3 text-xs space-y-1.5">
-                  <p className="font-semibold text-sm mb-2">Dados do Agendamento</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    <span className="text-muted-foreground">Cliente</span>
-                    <span className="font-medium">{agDaOs.clienteNome}</span>
-                    <span className="text-muted-foreground">Serviço</span>
-                    <span>{agDaOs.servico}</span>
-                    <span className="text-muted-foreground">Local</span>
-                    <span>{agDaOs.localExecucao}</span>
-                    <span className="text-muted-foreground">Data</span>
-                    <span>{fmtDate(agDaOs.dataAgendada)}</span>
-                    {agDaOs.tags && (<><span className="text-muted-foreground">TAGs</span><span>{agDaOs.tags}</span></>)}
-                  </div>
-                </div>
-              )}
-
-              {/* Técnico */}
+              {agDaOs ? <div className="rounded-xl bg-muted/40 border p-3 text-xs grid grid-cols-2 gap-1.5"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{agDaOs.clienteNome}</span><span className="text-muted-foreground">Serviço</span><span>{agDaOs.servico}</span><span className="text-muted-foreground">Local</span><span>{agDaOs.localExecucao}</span><span className="text-muted-foreground">Equipe</span><span>{agDaOs.tecnicosNomes?.join(" • ") || "Não definida"}</span></div> : null}
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Técnico Responsável <span className="text-destructive">*</span></Label>
+                <Label className="flex items-center gap-1.5 text-xs"><User className="h-3.5 w-3.5" /> Técnico líder <span className="text-destructive">*</span></Label>
                 <Select value={osTecnico} onValueChange={setOsTecnico}>
                   <SelectTrigger><SelectValue placeholder="Selecione o técnico" /></SelectTrigger>
-                  <SelectContent>
-                    {tecnicosList.filter(t => t.ativo).map(t => (
-                      <SelectItem key={t.id} value={t.nome}>
-                        <div>
-                          <span className="font-medium">{t.nome}</span>
-                          <span className="text-muted-foreground text-xs ml-2">— {t.cargo}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{(agDaOs?.tecnicosNomes?.length ? tecnicos.filter((item) => agDaOs.tecnicosNomes?.includes(item.nome)) : tecnicos.filter((item) => item.ativo)).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome} — {item.cargo}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-
-              {/* Dados do técnico */}
-              {tecnicoSel && (
-                <div className="rounded-lg bg-muted/30 border p-3 text-xs grid grid-cols-2 gap-1">
-                  <span className="text-muted-foreground">CPF</span><span>{tecnicoSel.cpf}</span>
-                  <span className="text-muted-foreground">Admissão</span><span>{fmtDate(tecnicoSel.dataAdmissao)}</span>
-                  <span className="text-muted-foreground">Cargo</span><span>{tecnicoSel.cargo}</span>
-                </div>
-              )}
-
-              {/* EPIs do contrato */}
-              {contratoDaOs?.epis?.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs space-y-1.5">
-                  <p className="font-semibold flex items-center gap-1 text-amber-700 dark:text-amber-400">
-                    <ShieldAlert className="h-3.5 w-3.5" /> EPIs Obrigatórios para esta OS
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {contratoDaOs.epis.map((e: string) => <Badge key={e} variant="secondary" className="text-[10px]">{e}</Badge>)}
-                  </div>
-                </div>
-              )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOsDialog(false)}>Cancelar</Button>
-                <Button onClick={handleGerarOS} disabled={!osTecnico} className="gap-2">
-                  <FileText className="h-4 w-4" /> Gerar OS
-                </Button>
-              </DialogFooter>
+              {contratoDaOs?.epis?.length ? <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs"><p className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5 mb-1.5"><ShieldAlert className="h-3.5 w-3.5" /> EPIs Obrigatórios</p><div className="flex flex-wrap gap-1">{contratoDaOs.epis.map((item) => <Badge key={item} variant="secondary" className="text-[10px]">{item}</Badge>)}</div></div> : null}
+              <DialogFooter><Button variant="outline" onClick={() => setOsDialog(false)}>Cancelar</Button><Button onClick={handleGerarOS} className="gap-2"><FileText className="h-4 w-4" /> Gerar OS</Button></DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/20 p-5 text-center space-y-2">
-                <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto" />
-                <p className="text-2xl font-bold text-green-700">{osGerada.numero}</p>
-                <p className="text-sm text-muted-foreground">Emitida em {new Date().toLocaleDateString("pt-BR")}</p>
-              </div>
-              <div className="rounded-lg bg-muted/40 border p-3 text-xs grid grid-cols-2 gap-1.5">
-                <span className="text-muted-foreground">Técnico</span><span className="font-medium">{osGerada.tecnicoNome}</span>
-                <span className="text-muted-foreground">Local</span><span>{osGerada.localExecucao}</span>
-                <span className="text-muted-foreground">Serviço</span><span>{osGerada.servico}</span>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOsDialog(false)}>Fechar</Button>
-                <Button onClick={() => window.print()} variant="outline" className="gap-2">
-                  <Printer className="h-4 w-4" /> Imprimir OS
-                </Button>
-              </DialogFooter>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 p-5 text-center space-y-2"><CheckCircle2 className="h-10 w-10 text-emerald-600 mx-auto" /><p className="text-2xl font-bold text-emerald-700">{osGerada.numero}</p><p className="text-sm text-muted-foreground">{new Date().toLocaleDateString("pt-BR")}</p></div>
+              <div className="rounded-xl bg-muted/40 border p-3 text-xs grid grid-cols-2 gap-1.5"><span className="text-muted-foreground">Técnico líder</span><span className="font-medium">{osGerada.tecnicoNome}</span><span className="text-muted-foreground">Equipe</span><span>{osGerada.equipeTecnicosNomes?.join(" • ") || osGerada.tecnicoNome}</span><span className="text-muted-foreground">Veículo</span><span>{osGerada.veiculoDescricao ?? "Não definido"}</span><span className="text-muted-foreground">Local</span><span>{osGerada.localExecucao}</span></div>
+              <DialogFooter><Button variant="outline" onClick={() => setOsDialog(false)}>Fechar</Button><Button onClick={imprimirOS} className="gap-2"><Printer className="h-4 w-4" /> Imprimir via da equipe</Button></DialogFooter>
             </div>
           )}
         </DialogContent>

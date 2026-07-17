@@ -1,5 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Montserrat:ital,wght@0,400;0,600;0,700;1,700&display=swap');
 
+@font-face {
+  font-family: "NeuePower Ultra";
+  src: url("./assets/fonts/NeuePower-Ultra.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -36,13 +44,13 @@
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 20%;
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 92%;
     --sidebar-primary: 152 68% 36%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 152 50% 94%;
-    --sidebar-accent-foreground: 152 68% 26%;
-    --sidebar-border: 150 10% 88%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 14%;
     --sidebar-ring: 152 68% 36%;
 
     /* Custom tokens */
@@ -67,6 +75,14 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at top right, rgba(22, 163, 74, 0.08), transparent 26%),
+      linear-gradient(180deg, rgba(249, 250, 248, 1), rgba(243, 245, 242, 1));
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
   }
 }
 
@@ -75,6 +91,40 @@
     @apply bg-clip-text text-transparent;
     background-image: linear-gradient(135deg, hsl(152, 68%, 36%), hsl(152, 68%, 46%));
   }
+
+  .font-brand {
+    font-family: "NeuePower Ultra", Inter, sans-serif;
+    font-weight: 900;
+  }
+
+  .bg-sidebar { background-color: hsl(var(--sidebar-background)); }
+  .border-sidebar-border { border-color: hsl(var(--sidebar-border)); }
+  .text-sidebar-foreground { color: hsl(var(--sidebar-foreground)); }
+  .hover\:bg-sidebar-accent:hover { background-color: hsl(var(--sidebar-accent)); }
+  .hover\:text-sidebar-foreground:hover { color: hsl(var(--sidebar-foreground)); }
+
+  .panel-soft {
+    @apply rounded-lg border border-border/70 bg-card shadow-sm;
+  }
+
+  .metric-card {
+    @apply rounded-lg border border-border/70 bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .page-grid {
+    @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-4;
+  }
+}
+
+@layer components {
+  .section-title {
+    @apply text-lg font-semibold tracking-tight text-foreground;
+  }
+}
+
+@page measurement-portrait {
+  size: A4 portrait;
+  margin: 0;
 }
 
 @media print {
@@ -86,11 +136,105 @@
   .print\:hidden {
     display: none !important;
   }
-  header, nav {
+  body:not(:has(.document-print-root)) header,
+  body:not(:has(.document-print-root)) nav {
     display: none !important;
   }
   main {
     padding: 0 !important;
     margin: 0 !important;
+  }
+
+  body:has(.document-print-root) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.document-print-root) .document-print-root,
+  body:has(.document-print-root) .document-print-root * {
+    visibility: visible !important;
+  }
+
+  body:has(.document-print-root) .document-print-root {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .measurement-print-root {
+    page: measurement-portrait;
+  }
+
+  .measurement-table thead {
+    display: table-header-group;
+  }
+
+  .measurement-table tfoot {
+    display: table-footer-group;
+  }
+
+  .measurement-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .measurement-document {
+    padding: 8mm 13mm 7mm !important;
+  }
+
+  .measurement-header {
+    margin-top: 3mm !important;
+    padding-bottom: 3mm !important;
+    gap: 7mm !important;
+  }
+
+  .measurement-summary {
+    margin-top: 3mm !important;
+  }
+
+  .measurement-summary > div {
+    padding-top: 2mm !important;
+    padding-bottom: 2mm !important;
+  }
+
+  .measurement-block {
+    margin-top: 3.2mm !important;
+  }
+
+  .measurement-services {
+    margin-top: 4mm !important;
+  }
+
+  .measurement-table {
+    font-size: 8.5px !important;
+  }
+
+  .measurement-table th {
+    padding-top: 1.5mm !important;
+    padding-bottom: 1.5mm !important;
+  }
+
+  .measurement-table td {
+    padding-top: 1.45mm !important;
+    padding-bottom: 1.45mm !important;
+  }
+
+  .measurement-table tfoot td {
+    padding-top: 2mm !important;
+    padding-bottom: 1.5mm !important;
+  }
+
+  .measurement-signatures {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 2.5mm !important;
+  }
+
+  .measurement-signature-box {
+    min-height: 20mm !important;
+    padding: 3mm !important;
   }
 }
