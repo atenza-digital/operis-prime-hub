@@ -16,7 +16,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import logoCiperprag from "@/assets/logo_ciperprag.png";
+import tenantLogoFallback from "@/assets/logo_ciperprag_sidebar.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -109,7 +109,17 @@ function NavLink({
   );
 }
 
-function SidebarContent({ collapsed = false, onLinkClick }: { collapsed?: boolean; onLinkClick?: () => void }) {
+function SidebarContent({
+  collapsed = false,
+  logoSrc,
+  logoAlt,
+  onLinkClick,
+}: {
+  collapsed?: boolean;
+  logoSrc: string;
+  logoAlt: string;
+  onLinkClick?: () => void;
+}) {
   const { hasPermission } = useAuth();
   const visibleGroups = navGroups
     .map((group) => ({
@@ -121,8 +131,8 @@ function SidebarContent({ collapsed = false, onLinkClick }: { collapsed?: boolea
   return (
     <div className="flex h-full flex-col">
       <div className={cn("min-h-[92px] border-b border-sidebar-border px-4", collapsed ? "flex items-center justify-center px-2" : "flex items-center justify-center")}>
-        <div className={cn("flex items-center justify-center rounded-2xl bg-white px-3 py-2 shadow-sm", collapsed ? "h-12 w-12 p-2" : "w-full max-w-[220px]")}>
-          <img src={logoCiperprag} alt="Ciperprag" className={cn("object-contain", collapsed ? "h-8 w-8" : "h-10 w-full")} />
+        <div className={cn("flex items-center justify-center", collapsed ? "h-12 w-12" : "w-full max-w-[230px]")}>
+          <img src={logoSrc} alt={logoAlt} className={cn("object-contain drop-shadow-sm", collapsed ? "h-10 w-12" : "h-14 w-full")} />
         </div>
       </div>
 
@@ -150,6 +160,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const currentMeta = useMemo(() => routeMeta[location.pathname] ?? routeMeta["/"], [location.pathname]);
   const topLinks = navGroups[0].items.filter((item) => hasPermission(item.permission)).slice(0, 5);
+  const tenantLogoSrc = user?.tenant.logoInterfaceUrl || user?.tenant.logoUrl || tenantLogoFallback;
+  const tenantLogoAlt = user?.tenant.nome ? `Logo ${user.tenant.nome}` : "Logo do tenant";
 
   return (
     <div className="flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top_right,_rgba(22,163,74,0.10),_transparent_28%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(246,247,245,0.96))]">
@@ -159,7 +171,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           collapsed ? "w-[72px]" : "w-[280px]",
         )}
       >
-        <SidebarContent collapsed={collapsed} />
+        <SidebarContent collapsed={collapsed} logoSrc={tenantLogoSrc} logoAlt={tenantLogoAlt} />
         <div className="border-t border-sidebar-border p-2">
           <div className={cn("px-3 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-sidebar-foreground/45", collapsed && "px-0 text-center")}>
             {collapsed ? `v${APP_VERSION}` : `${PRODUCT_NAME} · ${APP_VERSION_LABEL}`}
@@ -193,15 +205,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="relative z-10 flex w-[280px] flex-col border-r border-sidebar-border bg-sidebar">
             <div className="flex min-h-[92px] items-center justify-between gap-3 border-b border-sidebar-border px-4">
-              <div className="flex flex-1 items-center justify-center rounded-2xl bg-white px-3 py-2 shadow-sm">
-                <img src={logoCiperprag} alt="Ciperprag" className="h-10 w-full object-contain" />
+              <div className="flex flex-1 items-center justify-center">
+                <img src={tenantLogoSrc} alt={tenantLogoAlt} className="h-14 w-full object-contain drop-shadow-sm" />
               </div>
               <button onClick={() => setMobileOpen(false)} className="rounded-lg p-1 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <SidebarContent onLinkClick={() => setMobileOpen(false)} />
+              <SidebarContent logoSrc={tenantLogoSrc} logoAlt={tenantLogoAlt} onLinkClick={() => setMobileOpen(false)} />
             </div>
             {user ? (
               <div className="border-t border-sidebar-border px-4 py-3">

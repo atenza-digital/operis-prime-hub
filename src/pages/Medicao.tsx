@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { AlertCircle, Ban, CalendarDays, CheckCircle2, Clock3, Printer, Receipt, Search, Send, WalletCards } from "lucide-react";
+import { AlertCircle, Ban, CalendarDays, CheckCircle2, Clock3, Printer, Receipt, Search, Send, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -650,6 +650,22 @@ export default function Medicao() {
     await reload();
   }
 
+  function handleViewMeasurement(measurement: MedicaoApp) {
+    setSelected(measurement);
+    toast.success(`Medição ${measurement.numero} selecionada para conferência.`);
+  }
+
+  function handlePrintMeasurement(measurement?: MedicaoApp | null) {
+    const target = measurement ?? selected;
+    if (!target) {
+      toast.error("Selecione uma medição para imprimir.");
+      return;
+    }
+    setSelected(target);
+    toast.info(`Preparando impressão da medição ${target.numero}.`);
+    setTimeout(() => window.print(), 200);
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -775,6 +791,60 @@ export default function Medicao() {
             </CardContent>
           </Card>
 
+          {selected ? (
+            <Card className="border-primary/30 bg-primary/[0.035] print:hidden">
+              <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle>Medição selecionada</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Use esta área para confirmar o documento antes de imprimir ou continuar o acompanhamento.
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
+                  <X className="mr-1.5 h-4 w-4" /> Limpar seleção
+                </Button>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                <div className="grid gap-3 rounded-2xl border bg-card p-4 text-sm md:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Número</p>
+                    <p className="mt-1 font-mono font-bold">{selected.numero}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Cliente</p>
+                    <p className="mt-1 font-semibold">{selected.clienteNome}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
+                    <p className="mt-1 font-bold text-primary">{money(selected.total)}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Período</p>
+                    <p className="mt-1">{fmtDate(selected.periodoInicio)} até {fmtDate(selected.periodoFim)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Itens</p>
+                    <p className="mt-1">{selected.itens.length} item(ns)</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Status</p>
+                    <p className="mt-1">{selected.status === "cancelada" ? "Cancelada" : "Emitida"}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 md:min-w-52">
+                  <Button onClick={() => handlePrintMeasurement(selected)}>
+                    <Printer className="mr-1.5 h-4 w-4" /> Imprimir PDF
+                  </Button>
+                  {selected.status !== "cancelada" ? (
+                    <Button variant="outline" onClick={() => openFinancialEditor(selected)}>
+                      <WalletCards className="mr-1.5 h-4 w-4" /> Acompanhar
+                    </Button>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="print:hidden">
             <CardHeader>
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -821,8 +891,8 @@ export default function Medicao() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setSelected(measurement)}><CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Ver</Button>
-                        <Button variant="outline" size="sm" onClick={() => { setSelected(measurement); setTimeout(() => window.print(), 150); }}><Printer className="mr-1.5 h-3.5 w-3.5" /> Imprimir</Button>
+                        <Button variant="outline" size="sm" onClick={() => handleViewMeasurement(measurement)}><CalendarDays className="mr-1.5 h-3.5 w-3.5" /> Ver</Button>
+                        <Button variant="outline" size="sm" onClick={() => handlePrintMeasurement(measurement)}><Printer className="mr-1.5 h-3.5 w-3.5" /> Imprimir</Button>
                         {measurement.status !== "cancelada" ? <Button variant="secondary" size="sm" onClick={() => openFinancialEditor(measurement)}><WalletCards className="mr-1.5 h-3.5 w-3.5" /> Acompanhar</Button> : null}
                         {measurement.status !== "cancelada" ? <Button variant="ghost" size="sm" onClick={() => handleCancel(measurement)}><Ban className="mr-1.5 h-3.5 w-3.5" /> Cancelar</Button> : null}
                       </div>

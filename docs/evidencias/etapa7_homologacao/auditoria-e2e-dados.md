@@ -2,7 +2,7 @@
 
 Ambiente: Homologacao
 Tenant: Ciperprag (ciperprag)
-Gerado em: 07/07/2026, 10:23
+Gerado em: 07/07/2026, 11:50
 
 ## Resumo de consistencia
 
@@ -10,7 +10,7 @@ Gerado em: 07/07/2026, 10:23
 | --- | --- | --- |
 | Propostas aprovadas sem contrato gerado identificado | OK | 0 |
 | Contratos vigentes sem item operacional sincronizado | Verificar | 1 |
-| Agendamentos em aberto sem OS gerada | Verificar | 4 |
+| Agendamentos em aberto sem OS gerada | Verificar | 5 |
 | OS encerradas sem snapshot de encerramento | Verificar | 7 |
 | OS encerradas sem medicao vinculada | Verificar | 2 |
 | Certificados emitidos sem documento historico imutavel | Verificar | 7 |
@@ -21,55 +21,59 @@ Gerado em: 07/07/2026, 10:23
 
 | tipo | status | total |
 | --- | --- | --- |
-| contrato | vigente | 1 |
+| contrato | vigente | 4 |
+| proposta | aprovado | 3 |
 | proposta | enviado | 1 |
 
 ### contratos
 
 | status | total |
 | --- | --- |
-| ativo | 4 |
+| ativo | 7 |
 | vencido | 1 |
 
 ### agendamentos
 
 | status | total |
 | --- | --- |
-| agendado | 4 |
-| encerrado | 1 |
-| os_gerada | 1 |
+| agendado | 5 |
+| encerrado | 2 |
+| os_gerada | 3 |
 
 ### ordens_servico
 
 | status | total |
 | --- | --- |
-| aberta | 1 |
-| encerrada | 7 |
+| aberta | 3 |
+| encerrada | 8 |
 
 ### certificados
 
 | status | total |
 | --- | --- |
-| emitido | 7 |
+| emitido | 8 |
 
 ### medicoes
 
 | status | financeiro_status | total |
 | --- | --- | --- |
 | emitida | em_conferencia | 1 |
+| emitida | nf_enviada | 1 |
 
 ### recorrencia_sugestoes
 
 | status | total |
 | --- | --- |
-| confirmada | 1 |
+| confirmada | 2 |
 
 ### evidencias_anexos
 
 | entidade_tipo | categoria | total |
 | --- | --- | --- |
-| medicao | pdf_historico | 1 |
-| os | foto | 19 |
+| certificado | pdf_historico | 1 |
+| medicao | pdf_historico | 2 |
+| os | foto | 20 |
+| os | pdf_historico | 1 |
 
 ## Como usar
 

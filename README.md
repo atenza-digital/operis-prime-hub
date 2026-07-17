@@ -27,7 +27,7 @@ npm run dev
 ## Validação
 
 ```bash
-npm test -- --run
+npm test
 npm run lint
 npm run build
 ```
@@ -55,6 +55,20 @@ Build Docker:
 ```bash
 docker build -t atenza-fieldops .
 docker run -d --name atenza-fieldops -p 3010:80 --env-file .env.production atenza-fieldops
+```
+
+## Homologação
+
+- URL: http://89.116.214.65:3010
+- Acessos de teste: `docs/cliente/ACESSOS_HOMOLOGACAO.md`
+- Roteiro E2E: `docs/cliente/ROTEIRO_HOMOLOGACAO_E2E.md`
+- Evidências: `docs/evidencias/etapa7_homologacao`
+
+Comandos úteis:
+
+```bash
+npm run audit:e2e
+npm run homologation:users -- --reset-passwords
 ```
 
 ## Documentação

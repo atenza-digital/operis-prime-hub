@@ -1,0 +1,123 @@
+name: Deploy Homologacao VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag Docker opcional para a imagem de homologacao"
+        required: false
+        default: ""
+
+env:
+  IMAGE_NAME: atenza-fieldops
+  CONTAINER_NAME: atenza-fieldops
+  APP_PORT: "3010"
+  CONTAINER_PORT: "80"
+  DOCKER_NETWORK: postgresql-evkn_default
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: homologation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --run
+
+      - name: Build app
+        run: npm run build
+
+      - name: Resolve image tag
+        id: image
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            TAG="homologacao-${GITHUB_SHA::12}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        run: docker build -t "${IMAGE_NAME}:${{ steps.image.outputs.tag }}" .
+
+      - name: Save Docker image
+        run: docker save -o "/tmp/${IMAGE_NAME}-${{ steps.image.outputs.tag }}.tar" "${IMAGE_NAME}:${{ steps.image.outputs.tag }}"
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
+          chmod 600 ~/.ssh/homolog_vps_key
+          ssh-keyscan -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload Docker image
+        shell: bash
+        run: |
+          scp -P "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            "/tmp/${IMAGE_NAME}-${{ steps.image.outputs.tag }}.tar" \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}:/tmp/${IMAGE_NAME}-${{ steps.image.outputs.tag }}.tar"
+
+      - name: Deploy on VPS
+        shell: bash
+        run: |
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "IMAGE_NAME='${IMAGE_NAME}' CONTAINER_NAME='${CONTAINER_NAME}' TAG='${{ steps.image.outputs.tag }}' APP_PORT='${APP_PORT}' CONTAINER_PORT='${CONTAINER_PORT}' DOCKER_NETWORK='${DOCKER_NETWORK}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          IMAGE="${IMAGE_NAME}:${TAG}"
+          TAR_PATH="/tmp/${IMAGE_NAME}-${TAG}.tar"
+          PREVIOUS="${CONTAINER_NAME}-prev-${TAG}-$(date +%Y%m%d%H%M%S)"
+          ENV_FILE="/tmp/${CONTAINER_NAME}.env"
+
+          docker load -i "$TAR_PATH"
+
+          if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            echo "Container atual nao encontrado. Crie o primeiro deploy manualmente para definir as variaveis de ambiente." >&2
+            exit 1
+          fi
+
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER_NAME" > "$ENV_FILE"
+          docker stop "$CONTAINER_NAME"
+          docker rename "$CONTAINER_NAME" "$PREVIOUS"
+
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --network "$DOCKER_NETWORK" \
+            --env-file "$ENV_FILE" \
+            -p "127.0.0.1:${APP_PORT}:${CONTAINER_PORT}" \
+            "$IMAGE"
+
+          sleep 5
+          if ! curl -fsS "http://127.0.0.1:${APP_PORT}/api/health"; then
+            echo "Health check falhou. Restaurando container anterior." >&2
+            docker logs --tail 120 "$CONTAINER_NAME" || true
+            docker rm -f "$CONTAINER_NAME" || true
+            docker rename "$PREVIOUS" "$CONTAINER_NAME"
+            docker start "$CONTAINER_NAME"
+            exit 1
+          fi
+
+          docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+          REMOTE

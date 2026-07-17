@@ -14,10 +14,13 @@ import {
   CheckCircle2,
   ClipboardList,
   FileText,
-  RefreshCcw,
   Receipt,
   ShieldCheck,
 } from "lucide-react";
+
+type DashboardContract = BootstrapData["contracts"][number];
+
+const CONTRACTS_PREVIEW_LIMIT = 6;
 
 function fmtDate(date: string) {
   if (!date) return "—";
@@ -35,10 +38,27 @@ function statusBadge(status: string) {
   }
 }
 
+function contractProgress(item: DashboardContract) {
+  return item.contratado ? Math.min(100, Math.round((item.executado / item.contratado) * 100)) : 0;
+}
+
+function contractBalance(item: DashboardContract) {
+  return item.contratado - item.executado;
+}
+
+function contractPriority(item: DashboardContract) {
+  if (item.status === "vencido") return 0;
+  if (item.status === "ativo" && contractBalance(item) <= 0) return 1;
+  if (item.status === "ativo" && contractProgress(item) >= 80) return 2;
+  if (item.status === "ativo") return 3;
+  return 4;
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllContracts, setShowAllContracts] = useState(false);
 
   async function reload() {
     setLoading(true);
@@ -56,7 +76,7 @@ export default function Dashboard() {
     reload();
   }, []);
 
-  const contratos = data?.contracts ?? [];
+  const contratos = useMemo(() => data?.contracts ?? [], [data?.contracts]);
   const agendamentos = data?.schedules ?? [];
   const ordens = data?.orders ?? [];
   const certificados = data?.certificates ?? [];
@@ -66,6 +86,20 @@ export default function Dashboard() {
   const vencidos = contratos.filter((item) => item.status === "vencido").length;
   const osAbertas = ordens.filter((item) => item.status === "aberta").length;
   const agendados = agendamentos.filter((item) => item.status === "agendado").length;
+  const contratosPrioritarios = useMemo(
+    () =>
+      [...contratos].sort((a, b) => {
+        const priorityDiff = contractPriority(a) - contractPriority(b);
+        if (priorityDiff !== 0) return priorityDiff;
+
+        const balanceDiff = contractBalance(a) - contractBalance(b);
+        if (balanceDiff !== 0) return balanceDiff;
+
+        return `${a.cliente} ${a.servico}`.localeCompare(`${b.cliente} ${b.servico}`, "pt-BR");
+      }),
+    [contratos],
+  );
+  const contratosVisiveis = showAllContracts ? contratosPrioritarios : contratosPrioritarios.slice(0, CONTRACTS_PREVIEW_LIMIT);
 
   const proximosPassos = useMemo(() => {
     const cards = [
@@ -184,54 +218,79 @@ export default function Dashboard() {
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <Card className="panel-soft">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle className="section-title">Contratos em execução</CardTitle>
               <p className="text-sm text-muted-foreground">Acompanhe o saldo contratual e priorize itens perto do limite.</p>
             </div>
-            {!loading ? <Badge variant="secondary">{contratos.length} contrato(s)</Badge> : null}
+            {!loading ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{contratos.length} contrato(s)</Badge>
+                {contratos.length > CONTRACTS_PREVIEW_LIMIT ? (
+                  <Button variant="outline" size="sm" onClick={() => setShowAllContracts((current) => !current)}>
+                    {showAllContracts ? "Recolher" : `Ver todos (${contratos.length})`}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent className="space-y-3">
             {loading ? (
               <div className="space-y-3">
                 <Skeleton className="h-12 w-full rounded-xl" />
                 <Skeleton className="h-12 w-full rounded-xl" />
                 <Skeleton className="h-12 w-full rounded-xl" />
               </div>
+            ) : contratos.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                Nenhum contrato operacional disponível para acompanhamento.
+              </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="py-2 pr-4 text-left font-medium">Cliente</th>
-                    <th className="py-2 pr-4 text-left font-medium">Serviço</th>
-                    <th className="py-2 pr-4 text-left font-medium">Progresso</th>
-                    <th className="py-2 pr-4 text-left font-medium">Saldo</th>
-                    <th className="py-2 text-left font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contratos.map((item) => {
-                    const progresso = item.contratado ? Math.min(100, Math.round((item.executado / item.contratado) * 100)) : 0;
-                    const saldo = item.contratado - item.executado;
-                    return (
-                      <tr key={item.id} className="border-b last:border-0">
-                        <td className="py-3 pr-4 font-medium">{item.cliente}</td>
-                        <td className="py-3 pr-4">{item.servico}</td>
-                        <td className="min-w-[220px] py-3 pr-4">
-                          <div className="flex items-center gap-3">
-                            <Progress value={progresso} className="h-2 flex-1" />
-                            <span className="whitespace-nowrap text-xs text-muted-foreground">
-                              {item.executado}/{item.contratado} {item.unidade}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4 font-mono text-xs">{saldo} {item.unidade}</td>
-                        <td className="py-3">{statusBadge(item.status)}</td>
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  <span>
+                    Mostrando {contratosVisiveis.length} de {contratos.length} contrato(s), com prioridade para saldo crítico.
+                  </span>
+                  {!showAllContracts && contratos.length > CONTRACTS_PREVIEW_LIMIT ? (
+                    <span>{contratos.length - contratosVisiveis.length} contrato(s) recolhido(s)</span>
+                  ) : null}
+                </div>
+                <div className={`overflow-x-auto ${showAllContracts ? "max-h-[440px] overflow-y-auto pr-1" : ""}`}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="py-2 pr-4 text-left font-medium">Cliente</th>
+                        <th className="py-2 pr-4 text-left font-medium">Serviço</th>
+                        <th className="py-2 pr-4 text-left font-medium">Progresso</th>
+                        <th className="py-2 pr-4 text-left font-medium">Saldo</th>
+                        <th className="py-2 text-left font-medium">Status</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {contratosVisiveis.map((item) => {
+                        const progresso = contractProgress(item);
+                        const saldo = contractBalance(item);
+                        return (
+                          <tr key={item.id} className="border-b last:border-0">
+                            <td className="py-3 pr-4 font-medium">{item.cliente}</td>
+                            <td className="py-3 pr-4">{item.servico}</td>
+                            <td className="min-w-[220px] py-3 pr-4">
+                              <div className="flex items-center gap-3">
+                                <Progress value={progresso} className="h-2 flex-1" />
+                                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                                  {item.executado}/{item.contratado} {item.unidade}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4 font-mono text-xs">{saldo} {item.unidade}</td>
+                            <td className="py-3">{statusBadge(item.status)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

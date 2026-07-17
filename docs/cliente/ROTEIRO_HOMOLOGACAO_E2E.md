@@ -4,7 +4,7 @@ Ambiente: Homologacao
 
 URL: http://89.116.214.65:3010
 
-Versao base: `0.6.0`
+Versao base: `0.6.3`
 
 ## Objetivo
 
@@ -225,4 +225,3 @@ Validar se servicos recorrentes sugerem novo agendamento apos conclusao.
 - Alta: impede continuar o fluxo ou gera documento incorreto.
 - Media: confunde o usuario, mas existe contorno seguro.
 - Baixa: ajuste visual, texto, acento ou melhoria de conveniencia.
-

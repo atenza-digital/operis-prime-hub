@@ -160,6 +160,29 @@ export default function Configuracoes() {
     reader.readAsDataURL(file);
   }
 
+  function readCertificadoConfig() {
+    try {
+      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function handleInterfaceLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (loadEvent) => {
+      const currentConfig = readCertificadoConfig();
+      setCertificadoConfigText(JSON.stringify({ ...currentConfig, logoInterfaceUrl: String(loadEvent.target?.result || "") }, null, 2));
+      toast.success("Logo da interface atualizada na tela. Salve para gravar no banco.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const interfaceLogoUrl = readCertificadoConfig().logoInterfaceUrl as string | undefined;
+
   return (
     <div className="space-y-6">
       <div>
@@ -189,6 +212,16 @@ export default function Configuracoes() {
                   <Label>Alterar logo</Label>
                   <Input type="file" accept="image/*" onChange={handleLogoChange} className="w-full max-w-md text-sm" />
                   <p className="text-xs text-muted-foreground">A logo será usada nos documentos e no topo do sistema.</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 rounded-2xl border bg-slate-950 p-4 sm:flex-row sm:items-center sm:gap-6">
+                <div className="flex h-20 w-full max-w-60 shrink-0 items-center justify-center overflow-hidden">
+                  {interfaceLogoUrl ? <img src={interfaceLogoUrl} alt="Logo da interface" className="max-h-full max-w-full object-contain" /> : <span className="text-sm text-white/60">Sem logo de interface</span>}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Label className="text-white">Logo da interface</Label>
+                  <Input type="file" accept="image/*" onChange={handleInterfaceLogoChange} className="w-full max-w-md bg-white text-sm" />
+                  <p className="text-xs text-white/65">Usada no menu lateral e nas Ã¡reas internas. Ideal para versÃµes claras da marca sobre fundo escuro.</p>
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
@@ -338,7 +371,7 @@ export default function Configuracoes() {
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Use para parametrizar logoPrincipalUrl, arteFundoUrl, seloInstitucionalUrl, assinaturaUrl,
+                  Use para parametrizar logoInterfaceUrl, logoPrincipalUrl, arteFundoUrl, seloInstitucionalUrl, assinaturaUrl,
                   titulo, subtitulo, publicBaseUrl, licencas, rodapeLinhas, cit, limiteFotos e exibições do template.
                 </p>
               </div>

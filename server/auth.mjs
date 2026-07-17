@@ -52,6 +52,8 @@ async function getUserPayload(client, userId) {
        t.id AS tenant_id,
        t.slug AS tenant_slug,
        t.nome_fantasia AS tenant_nome,
+       ec.logo_url AS tenant_logo_url,
+       ec.logo_interface_url AS tenant_logo_interface_url,
        COALESCE(
          JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('codigo', p.codigo, 'nome', p.nome))
            FILTER (WHERE p.id IS NOT NULL),
@@ -64,12 +66,21 @@ async function getUserPayload(client, userId) {
        ) AS permissoes
      FROM ciperprag_hub.usuarios u
      JOIN ciperprag_hub.tenants t ON t.id = u.tenant_id
+     LEFT JOIN LATERAL (
+       SELECT
+         logo_url,
+         certificado_config->>'logoInterfaceUrl' AS logo_interface_url
+         FROM ciperprag_hub.empresa_config
+        WHERE tenant_id = t.id
+        ORDER BY id
+        LIMIT 1
+     ) ec ON TRUE
      LEFT JOIN ciperprag_hub.usuario_perfis up ON up.usuario_id = u.id
      LEFT JOIN ciperprag_hub.perfis p ON p.id = up.perfil_id
      LEFT JOIN ciperprag_hub.perfil_permissoes pp ON pp.perfil_id = p.id
      LEFT JOIN ciperprag_hub.permissoes perm ON perm.id = pp.permissao_id
      WHERE u.id = $1
-     GROUP BY u.id, t.id`,
+    GROUP BY u.id, t.id, ec.logo_url, ec.logo_interface_url`,
     [userId],
   );
 
@@ -86,19 +97,22 @@ async function getUserPayload(client, userId) {
       id: user.tenant_id,
       slug: user.tenant_slug,
       nome: user.tenant_nome,
+      logoUrl: user.tenant_logo_url,
+      logoInterfaceUrl: user.tenant_logo_interface_url,
     },
     perfis: user.perfis ?? [],
     permissoes: user.permissoes ?? [],
   };
 }
 
-export async function loginWithPassword({ email, password, ip, userAgent }) {
+export async function loginWithPassword({ email, password, tenantSlug, ip, userAgent }) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail || !password) {
     const error = new Error("Informe e-mail e senha.");
     error.status = 400;
     throw error;
   }
+  const normalizedTenantSlug = tenantSlug ? String(tenantSlug).trim().toLowerCase() : null;
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -106,9 +120,10 @@ export async function loginWithPassword({ email, password, ip, userAgent }) {
        FROM ciperprag_hub.usuarios u
        JOIN ciperprag_hub.tenants t ON t.id = u.tenant_id
        WHERE u.email = $1
+         AND ($2::text IS NULL OR t.slug = $2)
        ORDER BY t.slug = 'ciperprag' DESC
        LIMIT 1`,
-      [normalizedEmail],
+      [normalizedEmail, normalizedTenantSlug],
     );
 
     const user = rows[0];

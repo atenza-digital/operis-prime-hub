@@ -11,6 +11,10 @@ Versao base: `0.6.0`
 - Criada ficha de execucao assistida em `docs/evidencias/etapa7_homologacao/EXECUCAO_E2E_2026-07-07.md`.
 - Atualizado README da pasta de evidencias da Etapa 7.
 - Atualizado roadmap com reducao do backlog remanescente da Etapa 7.
+- Criado preparador de usuarios de homologacao por perfil via `npm run homologation:users -- --reset-passwords`.
+- Documentados os acessos de homologacao em `docs/cliente/ACESSOS_HOMOLOGACAO.md`.
+- Corrigida acentuacao do README principal.
+- Criado smoke tecnico da VPS via `npm run homologation:smoke-vps`.
 
 ## Resultado da auditoria inicial
 
@@ -28,6 +32,8 @@ Os itens marcados para verificar podem incluir dados legados ou registros criado
 ## Validacao tecnica
 
 - `npm run audit:e2e`: aprovado, relatorio gerado.
+- `npm run homologation:users -- --reset-passwords`: aprovado, usuarios preparados.
+- `npm run homologation:smoke-vps`: aprovado, API publicada validada.
 - `npm run build`: aprovado.
 - `npm run lint`: aprovado com 17 warnings conhecidos.
 - `npm test`: aprovado, 11 testes.

@@ -12,6 +12,7 @@ dist
 dist-ssr
 tmp/
 output/
+*.tar
 .env
 .env.*
 !.env.example

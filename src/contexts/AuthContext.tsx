@@ -5,7 +5,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   hasPermission: (...permissions: string[]) => boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (email: string, password: string, tenantSlug?: string | null) => Promise<AuthUser>;
   logout: () => Promise<void>;
   setAuthenticatedUser: (user: AuthUser) => void;
 }
@@ -42,8 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  async function handleLogin(email: string, password: string) {
-    const response = await loginRequest({ email, password });
+  async function handleLogin(email: string, password: string, tenantSlug?: string | null) {
+    const response = await loginRequest({ email, password, tenantSlug });
     setAuthToken(response.token);
     setUser(response.user);
     return response.user;

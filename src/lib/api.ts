@@ -489,6 +489,8 @@ export interface AuthUser {
     id: string;
     slug: string;
     nome: string;
+    logoUrl?: string | null;
+    logoInterfaceUrl?: string | null;
   };
   perfis: Array<{ codigo: string; nome: string }>;
   permissoes: string[];
@@ -498,6 +500,14 @@ export interface AuthSession {
   token: string;
   expiresAt: string;
   user: AuthUser;
+}
+
+export interface PublicTenantContext {
+  slug: string;
+  nome: string;
+  logoUrl?: string | null;
+  logoInterfaceUrl?: string | null;
+  corPrimaria?: string | null;
 }
 
 export interface RoleApp {
@@ -602,7 +612,11 @@ export const addDays = (dateStr: string, days: number) => {
 };
 
 export const getBootstrap = () => api<BootstrapData>("/bootstrap");
-export const login = (payload: { email: string; password: string }) =>
+export const getPublicTenantContext = (tenantSlug?: string | null) => {
+  const search = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
+  return api<{ ok: boolean; tenant: PublicTenantContext | null }>(`/public/tenant-context${search}`);
+};
+export const login = (payload: { email: string; password: string; tenantSlug?: string | null }) =>
   api<{ ok: boolean } & AuthSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) });
 export const getCurrentUser = () => api<{ ok: boolean; user: AuthUser }>("/auth/me");
 export const logout = () => api<{ ok: boolean }>("/auth/logout", { method: "POST" });

@@ -36,6 +36,31 @@ function getPublicBaseUrl(req) {
   return host ? `${proto}://${host}` : "http://localhost:3001";
 }
 
+function normalizeTenantSlug(value) {
+  const slug = String(value || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) return null;
+  return slug;
+}
+
+function getTenantSlugFromRequest(req) {
+  const explicit = normalizeTenantSlug(req.query.tenant || req.query.tenantSlug || req.headers["x-tenant-slug"]);
+  if (explicit) return explicit;
+
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .trim()
+    .split(":")[0]
+    .toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost") || /^[\d.]+$/.test(host)) return null;
+
+  const baseDomain = String(process.env.SAAS_BASE_DOMAIN || "").trim().toLowerCase();
+  if (baseDomain && host.endsWith(`.${baseDomain}`)) {
+    return normalizeTenantSlug(host.slice(0, -(baseDomain.length + 1)).split(".").pop());
+  }
+
+  return normalizeTenantSlug(host.split(".")[0]);
+}
+
 function getBearerToken(req) {
   const authorization = String(req.headers.authorization || "");
   if (!authorization.toLowerCase().startsWith("bearer ")) return null;
@@ -123,6 +148,22 @@ function normalizeOptionalDate(value) {
     throw error;
   }
   return text;
+}
+
+function normalizeJsonArray(value) {
+  if (!value) return [];
+  const source = Array.isArray(value) ? value : [value];
+  return source
+    .map((item) => {
+      if (item === null || item === undefined || item === "") return null;
+      if (typeof item !== "string") return item;
+      try {
+        return JSON.parse(item);
+      } catch {
+        return { nome: item };
+      }
+    })
+    .filter(Boolean);
 }
 
 function parseDataUrl(dataUrl) {
@@ -512,7 +553,7 @@ function buildServiceSnapshot(service) {
     geraCertificado: Boolean(service.gera_certificado),
     validadeCertificadoDias: Number(service.validade_certificado_dias || 0),
     produtosQuimicos: service.produtos_quimicos || [],
-    produtosDetalhados: service.produtos_detalhados || [],
+      produtosDetalhados: normalizeJsonArray(service.produtos_detalhados),
     epis: service.epis || [],
     riscos: service.riscos || [],
     normasAplicaveis: service.normas_aplicaveis || [],
@@ -695,7 +736,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       tipo: order.tipo,
       geraCertificado: service?.gera_certificado ?? true,
       produtosQuimicos: service?.produtos_quimicos || [],
-      produtosDetalhados: service?.produtos_detalhados || [],
+      produtosDetalhados: normalizeJsonArray(service?.produtos_detalhados),
       normasAplicaveis: service?.normas_aplicaveis || [],
       popCodigo: service?.pop_codigo || null,
       popTitulo: service?.pop_titulo || null,
@@ -860,7 +901,7 @@ async function getServices(tenantId) {
     geraCertificado: row.gera_certificado,
     validadeCertificadoDias: row.validade_certificado_dias,
     produtosQuimicos: row.produtos_quimicos ?? [],
-    produtosDetalhados: row.produtos_detalhados ?? [],
+    produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     epis: row.epis ?? [],
     riscos: row.riscos ?? [],
     normasAplicaveis: row.normas_aplicaveis ?? [],
@@ -1053,7 +1094,7 @@ async function getCertificates(tenantId) {
     emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
     validadeDias: row.validade_dias,
     produtosQuimicos: row.produtos_quimicos ?? [],
-    produtosDetalhados: row.produtos_detalhados ?? [],
+    produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
@@ -1118,7 +1159,7 @@ async function getCertificateByHash(hash) {
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
     produtosQuimicos: row.produtos_quimicos ?? [],
-    produtosDetalhados: row.produtos_detalhados ?? [],
+    produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
     tagEquipamentoServico: row.tag_equipamento_servico,
     quantidade: Number(row.quantidade || 0),
@@ -1195,7 +1236,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
       executionDate,
       validadeDias,
       service?.produtos_quimicos || [],
-      service?.produtos_detalhados || [],
+      JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
       JSON.stringify(snapshot),
     ],
   );
@@ -1217,7 +1258,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
 
 async function getCompanyConfig(tenantId) {
   const { rows } = await query(
-    `SELECT e.*, t.slug AS tenant_slug, t.nome AS tenant_nome
+    `SELECT e.*, t.slug AS tenant_slug, COALESCE(t.nome_fantasia, t.razao_social, t.slug) AS tenant_nome
      FROM ciperprag_hub.empresa_config e
      LEFT JOIN ciperprag_hub.tenants t ON t.id = e.tenant_id
      WHERE e.tenant_id = $1
@@ -1936,10 +1977,52 @@ app.post("/api/auth/login", async (req, res) => {
   const result = await loginWithPassword({
     email: req.body.email,
     password: req.body.password,
+    tenantSlug: req.body.tenantSlug,
     ip: getRequestIp(req),
     userAgent: req.headers["user-agent"],
   });
   res.json({ ok: true, ...result });
+});
+
+app.get("/api/public/tenant-context", async (req, res) => {
+  const tenantSlug = getTenantSlugFromRequest(req);
+  if (!tenantSlug) return res.json({ ok: true, tenant: null });
+
+  const { rows } = await query(
+    `SELECT
+       t.slug,
+       COALESCE(t.nome_fantasia, t.razao_social, t.slug) AS nome,
+       ec.logo_url,
+       ec.logo_interface_url,
+       ec.cor_primaria
+     FROM ciperprag_hub.tenants t
+     LEFT JOIN LATERAL (
+       SELECT
+         logo_url,
+         certificado_config->>'logoInterfaceUrl' AS logo_interface_url,
+         cor_primaria
+       FROM ciperprag_hub.empresa_config
+       WHERE tenant_id = t.id
+       ORDER BY id
+       LIMIT 1
+     ) ec ON TRUE
+     WHERE t.slug = $1
+     LIMIT 1`,
+    [tenantSlug],
+  );
+
+  const tenant = rows[0];
+  if (!tenant) return res.json({ ok: true, tenant: null });
+  return res.json({
+    ok: true,
+    tenant: {
+      slug: tenant.slug,
+      nome: tenant.nome,
+      logoUrl: tenant.logo_url || null,
+      logoInterfaceUrl: tenant.logo_interface_url || null,
+      corPrimaria: tenant.cor_primaria || null,
+    },
+  });
 });
 
 app.use("/api", requireAuth);
@@ -2326,7 +2409,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
         body.geraCertificado,
         body.validadeCertificadoDias,
         body.produtosQuimicos || [],
-        JSON.stringify(body.produtosDetalhados || []),
+        JSON.stringify(normalizeJsonArray(body.produtosDetalhados)),
         body.epis || [],
         body.riscos || [],
         body.normasAplicaveis || [],
@@ -3227,7 +3310,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         quantidade: isNotExecuted ? 0 : qty,
         naoExecutada: isNotExecuted,
         fotos: Array.isArray(fotos) ? fotos.length : 0,
-        certificadoHash,
+        certificateHash,
       },
     });
 

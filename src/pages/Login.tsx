@@ -1,14 +1,19 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { LockKeyhole, ShieldCheck } from "lucide-react";
-import logoCiperprag from "@/assets/logo_ciperprag.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { getPublicTenantContext, type PublicTenantContext } from "@/lib/api";
 import { APP_VERSION_LABEL, PRODUCT_NAME, PRODUCT_SUBTITLE, PRODUCT_TAGLINE } from "@/lib/version";
+
+function getTenantHintFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("tenant") || params.get("tenantSlug");
+}
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -18,8 +23,23 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [tenantContext, setTenantContext] = useState<PublicTenantContext | null>(null);
 
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || "/";
+
+  useEffect(() => {
+    let active = true;
+    getPublicTenantContext(getTenantHintFromUrl())
+      .then((response) => {
+        if (active) setTenantContext(response.tenant);
+      })
+      .catch(() => {
+        if (active) setTenantContext(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (user) return <Navigate to={user.senhaTemporaria ? "/alterar-senha" : from} replace />;
 
@@ -28,7 +48,7 @@ export default function Login() {
     setError("");
     setSubmitting(true);
     try {
-      const authenticatedUser = await login(email, password);
+      const authenticatedUser = await login(email, password, tenantContext?.slug);
       navigate(authenticatedUser.senhaTemporaria ? "/alterar-senha" : from, { replace: true });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar.");
@@ -42,16 +62,25 @@ export default function Login() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(38,166,102,0.25),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.10),transparent_22%),linear-gradient(135deg,rgba(2,6,4,1),rgba(11,31,22,1))]" />
       <div className="relative grid min-h-screen lg:grid-cols-[1fr_500px]">
         <section className="flex flex-col justify-between p-6 sm:p-10">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-white px-4 py-3 shadow-2xl shadow-black/30">
-              <img src={logoCiperprag} alt="Ciperprag Serviços" className="h-11 w-56 object-contain" />
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
             <EnvironmentBadge />
+            {tenantContext ? (
+              <div className="flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white/80 backdrop-blur">
+                {tenantContext.logoInterfaceUrl || tenantContext.logoUrl ? (
+                  <img
+                    alt={`Logo ${tenantContext.nome}`}
+                    className="h-5 max-w-24 object-contain"
+                    src={tenantContext.logoInterfaceUrl || tenantContext.logoUrl || undefined}
+                  />
+                ) : null}
+                <span>Ambiente {tenantContext.nome}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="max-w-3xl py-16">
             <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-emerald-300">Operação protegida</p>
-            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">{PRODUCT_NAME}</h1>
+            <h1 className="font-brand text-4xl tracking-tight sm:text-6xl">{PRODUCT_NAME}</h1>
             <p className="mt-6 max-w-2xl text-xl font-semibold leading-8 text-white/78">{PRODUCT_TAGLINE}</p>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/54">{PRODUCT_SUBTITLE}</p>
           </div>
