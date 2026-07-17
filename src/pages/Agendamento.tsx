@@ -101,12 +101,15 @@ export default function Agendamento() {
     reload();
   }, []);
 
-  const clientesAtivos = (data?.clients ?? []).filter((item) => item.ativo);
-  const contratos = data?.contracts ?? [];
-  const tecnicos = data?.technicians ?? [];
-  const veiculos = data?.vehicles ?? [];
-  const agendamentos = data?.schedules ?? [];
-  const recorrencias = (data?.recurrenceSuggestions ?? []).filter((item) => item.status === "pendente");
+  const clientesAtivos = useMemo(() => (data?.clients ?? []).filter((item) => item.ativo), [data?.clients]);
+  const contratos = useMemo(() => data?.contracts ?? [], [data?.contracts]);
+  const tecnicos = useMemo(() => data?.technicians ?? [], [data?.technicians]);
+  const veiculos = useMemo(() => data?.vehicles ?? [], [data?.vehicles]);
+  const agendamentos = useMemo(() => data?.schedules ?? [], [data?.schedules]);
+  const recorrencias = useMemo(
+    () => (data?.recurrenceSuggestions ?? []).filter((item) => item.status === "pendente"),
+    [data?.recurrenceSuggestions],
+  );
 
   const clienteNomeSel = useMemo(() => clientesAtivos.find((item) => item.id === clienteId)?.razaoSocial ?? clienteId, [clienteId, clientesAtivos]);
   const clienteAtivo = useMemo(() => clientesAtivos.find((item) => item.id === clienteId), [clienteId, clientesAtivos]);

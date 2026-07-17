@@ -61,10 +61,16 @@ export default function Certificados() {
     reload();
   }, []);
 
-  const certs = data?.certificates ?? [];
-  const ordens = data?.orders ?? [];
-  const clientesUnicos = [...new Set([...certs.map((item) => item.clienteNome), ...ordens.map((item) => item.clienteNome)])].sort();
-  const pendentes = ordens.filter((item) => item.status === "encerrada" && !item.certificadoHash);
+  const certs = useMemo(() => data?.certificates ?? [], [data?.certificates]);
+  const ordens = useMemo(() => data?.orders ?? [], [data?.orders]);
+  const clientesUnicos = useMemo(
+    () => [...new Set([...certs.map((item) => item.clienteNome), ...ordens.map((item) => item.clienteNome)])].sort(),
+    [certs, ordens],
+  );
+  const pendentes = useMemo(
+    () => ordens.filter((item) => item.status === "encerrada" && !item.certificadoHash),
+    [ordens],
+  );
 
   const certsFiltrados = useMemo(() => {
     const termo = busca.toLowerCase();
