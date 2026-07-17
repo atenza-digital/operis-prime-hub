@@ -104,8 +104,8 @@ export default function OrdensServico() {
     reload();
   }, []);
 
-  const ordens = data?.orders ?? [];
-  const tecnicos = data?.technicians ?? [];
+  const ordens = useMemo(() => data?.orders ?? [], [data?.orders]);
+  const tecnicos = useMemo(() => data?.technicians ?? [], [data?.technicians]);
   const osSelecionada = ordens.find((item) => item.id === encOsId);
   const servicoSelecionado = data?.services.find((item) => item.nome === osSelecionada?.servico);
   const clienteSelecionado = data?.clients.find((item) => item.id === osSelecionada?.clienteId || item.cnpj === osSelecionada?.clienteCnpj);

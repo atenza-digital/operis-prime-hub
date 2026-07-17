@@ -143,6 +143,9 @@ Entregue ate agora:
 - CI basico criado no GitHub Actions com `npm ci`, lint, testes e build.
 - Tela de login removeu o card superior de marca e passou a usar fonte institucional `NeuePower Ultra` no nome Atenza FieldOps.
 - Secrets de homologacao preparados no GitHub para deploy manual na VPS: host, usuario, porta e chave SSH.
+- PR de preparacao SaaS/CI-CD integrado na `main` e workflow manual de deploy liberado na branch padrao.
+- Deploy manual de homologacao executado com sucesso via GitHub Actions, publicando a imagem `atenza-fieldops:homologacao-main-502c37e` na VPS.
+- Smoke tecnico pos-deploy aprovado contra a VPS, com evidencia em `docs/evidencias/etapa7_homologacao/smoke-vps-api.md`.
 
 Backlog da Etapa 7: 7 itens.
 
@@ -165,6 +168,9 @@ Objetivo:
 Entregue inicialmente em homologacao:
 
 - Workflow manual `deploy-homologation-vps.yml` criado para validar, buildar e publicar imagem Docker na VPS de homologacao com health check e rollback basico.
+- Workflow manual `deploy-homologation-vps.yml` validado pela `main`, com lint, testes, build, upload de imagem, deploy, health check e smoke tecnico aprovados.
+- Warnings de hooks em filtros derivados corrigidos em Agenda, OS, Certificados/Historico e Contratos Comerciais.
+- ESLint ajustado para manter Fast Refresh ativo no app e evitar falso positivo nos componentes base de UI/contexto compartilhado.
 - Deploy de producao permanece bloqueado/nao configurado ate existirem ambiente, secrets, politica de release e rotina de rollback aprovados.
 - Login publico passou a resolver contexto de tenant por URL/subdominio/query string, mantendo login padrao neutro e exibindo discretamente o ambiente do cliente quando aplicavel.
 - Login autenticado passou a aceitar `tenantSlug` para evitar ambiguidade de e-mails iguais em tenants diferentes.
@@ -189,11 +195,11 @@ Backlog da Etapa 8: 31 itens.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
 - Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa.
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
-- Corrigir warnings tecnicos conhecidos e executar auditoria de dependencias (`npm audit`) antes de producao.
+- Executar auditoria de dependencias (`npm audit`), atualizar Browserslist/caniuse-lite e tratar achados antes de producao.
 - Hardening de seguranca: CORS, rate limit, politica de sessao, cookies, headers e backup de credenciais.
 - Observabilidade: logs estruturados, monitoramento de uptime, alertas e painel simples de saude.
 - Backup/restauracao testada, rotina de release e rollback.
-- Automatizar CD para VPS de homologacao/producao via GitHub Actions, com secrets, chave SSH, build de imagem versionada, health check, rollback controlado e registro de release.
+- Evoluir CD para producao via GitHub Actions, com ambiente separado, secrets proprios, aprovacao de release, imagem versionada, health check, rollback controlado e registro de release.
 - Painel Atenza dono do SaaS para tenants, planos, pagamentos, bloqueios e controle de inadimplencia.
 - Evoluir Comercial > Contratos com filtros e ordenacoes por status, integracao operacional, valor crescente e valor decrescente.
 - Criar central de relatorios operacionais e comerciais com filtros semanal, mensal e anual, incluindo visitas tecnicas, visitas nao realizadas, reagendamentos, propostas finalizadas, propostas nao finalizadas e geracao de PDF para impressao.

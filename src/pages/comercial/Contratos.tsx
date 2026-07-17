@@ -119,9 +119,9 @@ export default function Contratos() {
     reload();
   }, []);
 
-  const templates = data?.contractTemplates ?? [];
-  const clients = data?.clients ?? [];
-  const services = data?.services ?? [];
+  const templates = useMemo(() => data?.contractTemplates ?? [], [data?.contractTemplates]);
+  const clients = useMemo(() => data?.clients ?? [], [data?.clients]);
+  const services = useMemo(() => data?.services ?? [], [data?.services]);
   const companyConfig = data?.companyConfig;
   const numberingConfig = data?.numberingConfig;
 
