@@ -353,6 +353,7 @@ export interface EmpresaConfig {
     subtitulo?: string;
     tipo?: string;
     logoPrincipalUrl?: string;
+    logoInterfaceUrl?: string;
     arteFundoUrl?: string;
     seloInstitucionalUrl?: string;
     assinaturaUrl?: string;
