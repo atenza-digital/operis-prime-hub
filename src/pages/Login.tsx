@@ -14,7 +14,6 @@ function getTenantHintFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get("tenant") || params.get("tenantSlug");
 }
-
 export default function Login() {
   const { user, login } = useAuth();
   const location = useLocation();
@@ -41,7 +40,7 @@ export default function Login() {
     };
   }, []);
 
-  if (user) return <Navigate to={user.senhaTemporaria ? "/alterar-senha" : from} replace />;
+  if (user) return <Navigate to={user.senhaTemporaria ?"/alterar-senha" : from} replace />;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,9 +48,9 @@ export default function Login() {
     setSubmitting(true);
     try {
       const authenticatedUser = await login(email, password, tenantContext?.slug);
-      navigate(authenticatedUser.senhaTemporaria ? "/alterar-senha" : from, { replace: true });
+      navigate(authenticatedUser.senhaTemporaria ?"/alterar-senha" : from, { replace: true });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Não foi possível entrar.");
+      setError(loginError instanceof Error ?loginError.message : "Não foi possível entrar.");
     } finally {
       setSubmitting(false);
     }
@@ -60,13 +59,13 @@ export default function Login() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#07110d] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(38,166,102,0.25),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.10),transparent_22%),linear-gradient(135deg,rgba(2,6,4,1),rgba(11,31,22,1))]" />
-      <div className="relative grid min-h-screen lg:grid-cols-[1fr_500px]">
-        <section className="flex flex-col justify-between p-6 sm:p-10">
+      <div className="relative mx-auto grid min-h-screen w-full max-w-7xl items-center gap-10 px-6 py-8 sm:px-10 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-16 xl:gap-20">
+        <section className="flex min-h-[560px] flex-col justify-between lg:min-h-[640px]">
           <div className="flex flex-wrap items-center gap-3">
             <EnvironmentBadge />
-            {tenantContext ? (
+            {tenantContext ?(
               <div className="flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white/80 backdrop-blur">
-                {tenantContext.logoInterfaceUrl || tenantContext.logoUrl ? (
+                {tenantContext.logoInterfaceUrl || tenantContext.logoUrl ?(
                   <img
                     alt={`Logo ${tenantContext.nome}`}
                     className="h-5 max-w-24 object-contain"
@@ -78,7 +77,7 @@ export default function Login() {
             ) : null}
           </div>
 
-          <div className="max-w-3xl py-16">
+          <div className="max-w-2xl py-12 lg:py-16">
             <p className="mb-4 text-sm font-bold uppercase tracking-[0.28em] text-emerald-300">Operação protegida</p>
             <h1 className="font-brand text-4xl tracking-tight sm:text-6xl">{PRODUCT_NAME}</h1>
             <p className="mt-6 max-w-2xl text-xl font-semibold leading-8 text-white/78">{PRODUCT_TAGLINE}</p>
@@ -92,7 +91,7 @@ export default function Login() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center border-l border-white/10 bg-white/8 p-6 backdrop-blur-xl">
+        <section className="flex items-center justify-center">
           <Card className="w-full max-w-md border-white/12 bg-white text-foreground shadow-2xl">
             <CardHeader className="space-y-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -130,10 +129,10 @@ export default function Login() {
                   />
                 </div>
 
-                {error ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+                {error ?<div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
                 <Button className="h-11 w-full rounded-xl" disabled={submitting} type="submit">
-                  {submitting ? "Entrando..." : "Entrar"}
+                  {submitting ?"Entrando..." : "Entrar"}
                 </Button>
               </form>
 

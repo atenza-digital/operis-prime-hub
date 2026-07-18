@@ -9,6 +9,32 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(rootDir, "docs/evidencias/qa_fluxo_visual");
 const tmpDir = path.join(rootDir, "tmp");
 
+async function embeddedNotoSansCss() {
+  const weights = [400, 600, 700, 900];
+  const faces = await Promise.all(weights.map(async (weight) => {
+    const fontPath = path.join(rootDir, "node_modules/@fontsource/noto-sans/files", `noto-sans-latin-ext-${weight}-normal.woff2`);
+    const contents = await fs.readFile(fontPath);
+    return `@font-face{font-family:"Noto Sans";src:url(data:font/woff2;base64,${contents.toString("base64")}) format("woff2");font-style:normal;font-weight:${weight};}`;
+  }));
+  return faces.join("\n");
+}
+
+const notoSansFontFaces = await embeddedNotoSansCss();
+
+async function resolveSourceAlias(importPath) {
+  const candidate = path.join(rootDir, "src", importPath.slice(2));
+  const paths = [candidate, `${candidate}.ts`, `${candidate}.tsx`, `${candidate}.js`, `${candidate}.jsx`];
+  for (const filePath of paths) {
+    try {
+      await fs.access(filePath);
+      return filePath;
+    } catch {
+      // Try the next extension supported by the local source tree.
+    }
+  }
+  return candidate;
+}
+
 function escapeHtml(value = "") {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -46,11 +72,11 @@ async function loadOsPrintBuilder() {
     write: false,
     format: "esm",
     platform: "browser",
-    loader: { ".png": "dataurl", ".jpg": "dataurl", ".jpeg": "dataurl" },
+    loader: { ".png": "dataurl", ".jpg": "dataurl", ".jpeg": "dataurl", ".woff": "dataurl", ".woff2": "dataurl" },
     plugins: [{
       name: "local-at-alias",
       setup(build) {
-        build.onResolve({ filter: /^@\// }, (args) => ({ path: path.join(rootDir, "src", args.path.slice(2)) }));
+        build.onResolve({ filter: /^@\// }, async (args) => ({ path: await resolveSourceAlias(args.path) }));
       },
     }],
   });
@@ -343,10 +369,10 @@ function commercialEvidenceHtml({ item, services, company, logoSrc }) {
   <meta charset="utf-8" />
   <title>${escapeHtml(title)} ${escapeHtml(item.numero)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+    ${notoSansFontFaces}
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #0f172a; font-family: Inter, Arial, sans-serif; }
+    body { margin: 0; background: #fff; color: #0f172a; font-family: "Noto Sans", Arial, sans-serif; }
     .doc { min-height: 297mm; width: 210mm; background: #fff; padding: 9mm 14mm; display: flex; flex-direction: column; }
     .header { border-bottom: 2px solid ${primary}; padding-bottom: 8px; }
     .header-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }

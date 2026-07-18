@@ -228,13 +228,20 @@ CREATE TABLE contratos_templates (
     id                      VARCHAR(20) PRIMARY KEY,
     numero                  VARCHAR(30),
     cliente_id              VARCHAR(20)          REFERENCES clientes(id) ON DELETE SET NULL,
-    tipo                    VARCHAR(10) NOT NULL CHECK (tipo IN ('contrato','proposta')),
+    tipo                    VARCHAR(10) NOT NULL CHECK (tipo IN ('contrato','proposta','minuta')),
     vigencia_meses          INTEGER     DEFAULT 12,
     forma_pagamento         TEXT,
     prazo_pagamento_dias    INTEGER     DEFAULT 30,
-    status                  VARCHAR(15) NOT NULL CHECK (status IN ('rascunho','enviado','aprovado','vigente','encerrado')),
+    status                  VARCHAR(15) NOT NULL CHECK (status IN ('rascunho','enviado','em_negociacao','aprovado','recusado','cancelado','vigente','encerrado')),
     data_criacao            DATE,
     observacoes             TEXT,
+    titulo                  TEXT,
+    objeto                  TEXT,
+    validade_dias           INTEGER     DEFAULT 30,
+    modalidade              TEXT,
+    locais_execucao         JSONB       DEFAULT '[]'::jsonb,
+    escopo_tecnico          TEXT,
+    condicoes_comerciais    TEXT,
     criado_em               TIMESTAMPTZ DEFAULT NOW(),
     atualizado_em           TIMESTAMPTZ DEFAULT NOW()
 );
@@ -246,6 +253,8 @@ CREATE TABLE contratos_templates_servicos (
     quantidade      NUMERIC(10,2) NOT NULL DEFAULT 1,
     valor_unitario  NUMERIC(12,2) NOT NULL DEFAULT 0,
     frequencia      VARCHAR(30),
+    descricao_comercial TEXT,
+    unidade_comercial   TEXT,
     criado_em       TIMESTAMPTZ DEFAULT NOW()
 );
 

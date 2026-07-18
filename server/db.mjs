@@ -565,9 +565,13 @@ export async function ensureDatabaseShape() {
       metadados JSONB NOT NULL DEFAULT '{}'::jsonb,
       hash_sha256 VARCHAR(64),
       imutavel BOOLEAN NOT NULL DEFAULT FALSE,
+      storage_provider VARCHAR(40) NOT NULL DEFAULT 'database',
+      storage_bucket TEXT,
+      storage_key TEXT,
+      storage_etag TEXT,
       criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato')),
+      CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta')),
       CONSTRAINT evidencias_anexos_categoria_check CHECK (categoria IN ('evidencia','foto','documento','pop_aprovado','pdf_historico','outro'))
     )
   `);
@@ -578,8 +582,17 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS imutavel BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS template_codigo VARCHAR(80),
     ADD COLUMN IF NOT EXISTS template_versao VARCHAR(40),
-    ADD COLUMN IF NOT EXISTS snapshot_hash_sha256 VARCHAR(64)
+    ADD COLUMN IF NOT EXISTS snapshot_hash_sha256 VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS storage_provider VARCHAR(40) NOT NULL DEFAULT 'database',
+    ADD COLUMN IF NOT EXISTS storage_bucket TEXT,
+    ADD COLUMN IF NOT EXISTS storage_key TEXT,
+    ADD COLUMN IF NOT EXISTS storage_etag TEXT
   `);
+
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates DROP CONSTRAINT IF EXISTS contratos_templates_tipo_check");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates ADD CONSTRAINT contratos_templates_tipo_check CHECK (tipo IN ('contrato','proposta','minuta'))");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos DROP CONSTRAINT IF EXISTS evidencias_anexos_entidade_check");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos ADD CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta','minuta'))");
 
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_entidade ON ciperprag_hub.evidencias_anexos(entidade_tipo, entidade_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_tenant ON ciperprag_hub.evidencias_anexos(tenant_id)");
@@ -588,6 +601,8 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_snapshot_hash_sha256 ON ciperprag_hub.evidencias_anexos(snapshot_hash_sha256)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_template ON ciperprag_hub.evidencias_anexos(template_codigo, template_versao)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_imutavel ON ciperprag_hub.evidencias_anexos(imutavel)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_storage_provider ON ciperprag_hub.evidencias_anexos(storage_provider)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_storage_key ON ciperprag_hub.evidencias_anexos(storage_key)");
 
   await query(`
     WITH tenant AS (

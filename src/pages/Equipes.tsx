@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Car, CalendarDays, Plus, Pencil, Phone } from "lucide-react";
 import { toast } from "sonner";
 
-const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+const diasSemana = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const turnoLabel: Record<string, string> = { manha: "Manhã", tarde: "Tarde", integral: "Integral" };
 const turnoColor: Record<string, string> = {
   manha: "bg-info/15 text-info border-info/30",
@@ -40,7 +40,7 @@ export default function Equipes() {
     try {
       setData(await getBootstrap());
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao carregar equipes");
+      toast.error(error instanceof Error ? error.message : "Erro ao carregar equipes e veículos");
     } finally {
       setLoading(false);
     }
@@ -104,9 +104,11 @@ export default function Equipes() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Users className="h-6 w-6 text-primary" />
-          Gestão de Equipes
+          Equipes e veículos
         </h1>
-        <p className="text-muted-foreground text-sm">Cadastro de técnicos, veículos e alocação semanal usando o banco</p>
+        <p className="text-muted-foreground text-sm">
+          Cadastre técnicos e veículos da empresa. A alocação semanal é um apoio visual e será revisada junto ao fluxo de agendamentos.
+        </p>
       </div>
 
       {loading ? (
@@ -114,18 +116,101 @@ export default function Equipes() {
           <CardContent className="py-12 text-center text-sm text-muted-foreground">Carregando equipes...</CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="quadro">
+        <Tabs defaultValue="tecnicos">
           <TabsList>
-            <TabsTrigger value="quadro"><CalendarDays className="h-4 w-4 mr-1.5" />Quadro Semanal</TabsTrigger>
             <TabsTrigger value="tecnicos"><Users className="h-4 w-4 mr-1.5" />Técnicos</TabsTrigger>
             <TabsTrigger value="veiculos"><Car className="h-4 w-4 mr-1.5" />Veículos</TabsTrigger>
+            <TabsTrigger value="quadro"><CalendarDays className="h-4 w-4 mr-1.5" />Alocação semanal</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="quadro" className="space-y-4">
+          <TabsContent value="tecnicos" className="space-y-4">
             <div className="flex justify-end">
+              <Button onClick={() => { setEditTecId(null); setTecForm({ nome: "", cpf: "", cargo: "", dataAdmissao: "", telefone: "", ativo: true }); setTecDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo técnico
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>CPF</TableHead>
+                      <TableHead>Cargo</TableHead>
+                      <TableHead>Admissão</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[60px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tecnicos.map((tecnico) => (
+                      <TableRow key={tecnico.id}>
+                        <TableCell className="font-medium">{tecnico.nome}</TableCell>
+                        <TableCell className="font-mono text-xs">{tecnico.cpf}</TableCell>
+                        <TableCell className="text-sm">{tecnico.cargo}</TableCell>
+                        <TableCell className="text-xs">{tecnico.dataAdmissao ? new Date(`${tecnico.dataAdmissao}T12:00:00`).toLocaleDateString("pt-BR") : "-"}</TableCell>
+                        <TableCell className="text-xs flex items-center gap-1"><Phone className="h-3 w-3" />{tecnico.telefone}</TableCell>
+                        <TableCell><Badge variant={tecnico.ativo ? "default" : "secondary"}>{tecnico.ativo ? "Ativo" : "Inativo"}</Badge></TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost" onClick={() => { setEditTecId(tecnico.id); const { id, ...rest } = tecnico; setTecForm(rest); setTecDialog(true); }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="veiculos" className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={() => { setEditVeiId(null); setVeiForm({ placa: "", modelo: "", ano: new Date().getFullYear(), ativo: true }); setVeiDialog(true); }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo veículo
+              </Button>
+            </div>
+            <Card>
+              <CardContent className="pt-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Placa</TableHead>
+                      <TableHead>Modelo</TableHead>
+                      <TableHead>Ano</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-[60px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {veiculos.map((veiculo) => (
+                      <TableRow key={veiculo.id}>
+                        <TableCell className="font-mono font-bold">{veiculo.placa}</TableCell>
+                        <TableCell>{veiculo.modelo}</TableCell>
+                        <TableCell>{veiculo.ano}</TableCell>
+                        <TableCell><Badge variant={veiculo.ativo ? "default" : "secondary"}>{veiculo.ativo ? "Ativo" : "Inativo"}</Badge></TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost" onClick={() => { setEditVeiId(veiculo.id); const { id, ...rest } = veiculo; setVeiForm(rest); setVeiDialog(true); }}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="quadro" className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-lg border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+              <p>Esta visão mostra a ocupação semanal da equipe. A programação oficial de serviços deve nascer em Agendamentos.</p>
               <Button onClick={() => { setAlocForm({ tecnicoId: "", diaSemana: 1, cliente: "", servico: "", turno: "integral" }); setAlocDialog(true); }}>
                 <Plus className="h-4 w-4 mr-2" />
-                Alocar
+                Nova alocação
               </Button>
             </div>
             <Card>
@@ -162,7 +247,7 @@ export default function Equipes() {
                                   })}
                                 </div>
                               ) : (
-                                <div className="text-center text-muted-foreground/30 text-xs py-2">—</div>
+                                <div className="text-center text-muted-foreground/30 text-xs py-2">-</div>
                               )}
                             </td>
                           );
@@ -174,94 +259,12 @@ export default function Equipes() {
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="tecnicos" className="space-y-4">
-            <div className="flex justify-end">
-              <Button onClick={() => { setEditTecId(null); setTecForm({ nome: "", cpf: "", cargo: "", dataAdmissao: "", telefone: "", ativo: true }); setTecDialog(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Técnico
-              </Button>
-            </div>
-            <Card>
-              <CardContent className="pt-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CPF</TableHead>
-                      <TableHead>Cargo</TableHead>
-                      <TableHead>Admissão</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[60px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tecnicos.map((tecnico) => (
-                      <TableRow key={tecnico.id}>
-                        <TableCell className="font-medium">{tecnico.nome}</TableCell>
-                        <TableCell className="font-mono text-xs">{tecnico.cpf}</TableCell>
-                        <TableCell className="text-sm">{tecnico.cargo}</TableCell>
-                        <TableCell className="text-xs">{tecnico.dataAdmissao ? new Date(`${tecnico.dataAdmissao}T12:00:00`).toLocaleDateString("pt-BR") : "—"}</TableCell>
-                        <TableCell className="text-xs flex items-center gap-1"><Phone className="h-3 w-3" />{tecnico.telefone}</TableCell>
-                        <TableCell><Badge variant={tecnico.ativo ? "default" : "secondary"}>{tecnico.ativo ? "Ativo" : "Inativo"}</Badge></TableCell>
-                        <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => { setEditTecId(tecnico.id); const { id, ...rest } = tecnico; setTecForm(rest); setTecDialog(true); }}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="veiculos" className="space-y-4">
-            <div className="flex justify-end">
-              <Button onClick={() => { setEditVeiId(null); setVeiForm({ placa: "", modelo: "", ano: new Date().getFullYear(), ativo: true }); setVeiDialog(true); }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Veículo
-              </Button>
-            </div>
-            <Card>
-              <CardContent className="pt-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Placa</TableHead>
-                      <TableHead>Modelo</TableHead>
-                      <TableHead>Ano</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[60px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {veiculos.map((veiculo) => (
-                      <TableRow key={veiculo.id}>
-                        <TableCell className="font-mono font-bold">{veiculo.placa}</TableCell>
-                        <TableCell>{veiculo.modelo}</TableCell>
-                        <TableCell>{veiculo.ano}</TableCell>
-                        <TableCell><Badge variant={veiculo.ativo ? "default" : "secondary"}>{veiculo.ativo ? "Ativo" : "Inativo"}</Badge></TableCell>
-                        <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => { setEditVeiId(veiculo.id); const { id, ...rest } = veiculo; setVeiForm(rest); setVeiDialog(true); }}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       )}
 
       <Dialog open={tecDialog} onOpenChange={setTecDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editTecId ? "Editar" : "Novo"} Técnico</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editTecId ? "Editar" : "Novo"} técnico</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1"><Label className="text-xs">Nome *</Label><Input value={tecForm.nome} onChange={(event) => setTecForm({ ...tecForm, nome: event.target.value })} /></div>
@@ -283,7 +286,7 @@ export default function Equipes() {
 
       <Dialog open={veiDialog} onOpenChange={setVeiDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editVeiId ? "Editar" : "Novo"} Veículo</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editVeiId ? "Editar" : "Novo"} veículo</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1"><Label className="text-xs">Placa *</Label><Input value={veiForm.placa} onChange={(event) => setVeiForm({ ...veiForm, placa: event.target.value })} /></div>
@@ -301,7 +304,7 @@ export default function Equipes() {
 
       <Dialog open={alocDialog} onOpenChange={setAlocDialog}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Nova Alocação</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Nova alocação</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs">Técnico *</Label>
@@ -312,7 +315,7 @@ export default function Equipes() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Dia da Semana</Label>
+                <Label className="text-xs">Dia da semana</Label>
                 <Select value={String(alocForm.diaSemana)} onValueChange={(value) => setAlocForm({ ...alocForm, diaSemana: Number(value) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{[1, 2, 3, 4, 5, 6].map((dia) => <SelectItem key={dia} value={String(dia)}>{diasSemana[dia]}</SelectItem>)}</SelectContent>

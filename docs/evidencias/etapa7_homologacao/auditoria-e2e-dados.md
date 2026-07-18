@@ -2,18 +2,19 @@
 
 Ambiente: Homologacao
 Tenant: Ciperprag (ciperprag)
-Gerado em: 07/07/2026, 11:50
+Gerado em: 18/07/2026, 10:59
 
 ## Resumo de consistencia
 
 | Verificacao | Status | Total |
 | --- | --- | --- |
-| Propostas aprovadas sem contrato gerado identificado | OK | 0 |
+| Propostas aprovadas sem minuta gerada identificada | Verificar | 1 |
+| Minutas aprovadas sem contrato final gerado identificado | OK | 0 |
 | Contratos vigentes sem item operacional sincronizado | Verificar | 1 |
-| Agendamentos em aberto sem OS gerada | Verificar | 5 |
-| OS encerradas sem snapshot de encerramento | Verificar | 7 |
-| OS encerradas sem medicao vinculada | Verificar | 2 |
-| Certificados emitidos sem documento historico imutavel | Verificar | 7 |
+| Agendamentos em aberto sem OS gerada | Verificar | 4 |
+| OS encerradas sem snapshot de encerramento | Verificar | 6 |
+| OS encerradas sem medicao vinculada | Verificar | 6 |
+| Certificados emitidos sem documento historico imutavel | Verificar | 5 |
 
 ## Contagens por area
 
@@ -22,7 +23,9 @@ Gerado em: 07/07/2026, 11:50
 | tipo | status | total |
 | --- | --- | --- |
 | contrato | vigente | 4 |
-| proposta | aprovado | 3 |
+| minuta | aprovado | 2 |
+| proposta | aprovado | 2 |
+| proposta | em_negociacao | 1 |
 | proposta | enviado | 1 |
 
 ### contratos
@@ -36,44 +39,44 @@ Gerado em: 07/07/2026, 11:50
 
 | status | total |
 | --- | --- |
-| agendado | 5 |
-| encerrado | 2 |
-| os_gerada | 3 |
+| agendado | 4 |
+| encerrado | 1 |
 
 ### ordens_servico
 
 | status | total |
 | --- | --- |
-| aberta | 3 |
-| encerrada | 8 |
+| encerrada | 7 |
 
 ### certificados
 
 | status | total |
 | --- | --- |
-| emitido | 8 |
+| emitido | 6 |
 
 ### medicoes
 
 | status | financeiro_status | total |
 | --- | --- | --- |
-| emitida | em_conferencia | 1 |
 | emitida | nf_enviada | 1 |
 
 ### recorrencia_sugestoes
 
 | status | total |
 | --- | --- |
-| confirmada | 2 |
+| confirmada | 1 |
 
 ### evidencias_anexos
 
 | entidade_tipo | categoria | total |
 | --- | --- | --- |
 | certificado | pdf_historico | 1 |
-| medicao | pdf_historico | 2 |
-| os | foto | 20 |
+| medicao | pdf_historico | 1 |
+| minuta | documento | 1 |
+| minuta | pdf_historico | 1 |
+| os | foto | 19 |
 | os | pdf_historico | 1 |
+| proposta | pdf_historico | 1 |
 
 ## Como usar
 

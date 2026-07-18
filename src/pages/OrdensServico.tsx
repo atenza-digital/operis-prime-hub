@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
+import { notoSansFontFaces } from "@/lib/documentFontFaces";
+import { repairMojibake } from "@/lib/repairMojibake";
 import { PageHeader } from "@/components/PageHeader";
 import { todayInputDateBr } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +21,16 @@ import { toast } from "sonner";
 function fmtDate(date: string) {
   if (!date) return "—";
   return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
+}
+
+function cleanText(value: string | number | null | undefined, fallback = "") {
+  const text = String(value ?? fallback);
+  return repairMojibake(text) || fallback;
+}
+
+function cleanJoin(items: string[] | undefined, fallback: string) {
+  const cleaned = (items ?? []).map((item) => cleanText(item)).filter(Boolean);
+  return cleaned.length ? cleaned.join(" • ") : cleanText(fallback);
 }
 
 function formatBytes(bytes?: number) {
@@ -54,7 +66,7 @@ async function downloadAttachment(anexo: EvidenciaAnexoApp) {
 function printElement(html: string, title: string) {
   const printWindow = window.open("", "_blank", "width=900,height=700");
   if (!printWindow) return;
-  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');*{box-sizing:border-box}body{font-family:Inter,sans-serif;font-size:11px;padding:10mm;color:#000}table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:bold}h2{text-align:center;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border-radius:6px}.section{border:1px solid #555;margin-bottom:8px}.section-header{background:#f0f0f0;padding:4px 8px;font-weight:bold;border-bottom:1px solid #555}.section-body{padding:6px 8px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:12px}</style></head><body>${html}<script>window.onload=function(){window.print();}</script></body></html>`);
+          printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>${notoSansFontFaces}*{box-sizing:border-box}body{font-family:"Noto Sans",Arial,sans-serif;font-size:11px;padding:10mm;color:#000}table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:bold}h2{text-align:center;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border-radius:6px}.section{border:1px solid #555;margin-bottom:8px}.section-header{background:#f0f0f0;padding:4px 8px;font-weight:bold;border-bottom:1px solid #555}.section-body{padding:6px 8px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:12px}</style></head><body>${html}<script>window.onload=function(){window.print();}</script></body></html>`);
   printWindow.document.close();
 }
 
@@ -86,6 +98,8 @@ export default function OrdensServico() {
   const [editTecnico, setEditTecnico] = useState("");
   const [editLocal, setEditLocal] = useState("");
   const [editTag, setEditTag] = useState("");
+  const [savingClose, setSavingClose] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
@@ -94,7 +108,7 @@ export default function OrdensServico() {
     try {
       setData(await getBootstrap());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao carregar ordens de serviço.");
+      setError(cleanText(err instanceof Error ? err.message : "Falha ao carregar ordens de serviço."));
     } finally {
       setLoading(false);
     }
@@ -115,13 +129,16 @@ export default function OrdensServico() {
     let list = [...ordens].reverse();
     if (filtroStatus !== "todos") list = list.filter((item) => item.status === filtroStatus);
     if (busca) {
-      const termo = busca.toLowerCase();
-      list = list.filter((item) =>
-        item.numero.toLowerCase().includes(termo) ||
-        item.clienteNome.toLowerCase().includes(termo) ||
-        item.servico.toLowerCase().includes(termo) ||
-        item.tecnicoNome.toLowerCase().includes(termo),
-      );
+      const termo = cleanText(busca).toLowerCase();
+      list = list.filter((item) => [
+        item.numero,
+        item.clienteNome,
+        item.servico,
+        item.tecnicoNome,
+        item.localExecucao,
+        item.tagEquipamentoServico || item.tags,
+        item.equipeTecnicosNomes?.join(" "),
+      ].some((value) => cleanText(value).toLowerCase().includes(termo)));
     }
     return list;
   }, [ordens, filtroStatus, busca]);
@@ -163,6 +180,7 @@ export default function OrdensServico() {
 
   async function handleEncerrar() {
     if (!osSelecionada || !dataExecucao) return;
+    if (savingClose) return;
     if (servicoSelecionado?.exigeFoto && !naoExecutada && fotos.length === 0) {
       toast.error("Este serviço exige ao menos uma foto de evidência.");
       return;
@@ -171,19 +189,26 @@ export default function OrdensServico() {
       toast.error("Informe o motivo da não execução.");
       return;
     }
-    const response = await closeOrder(osSelecionada.id, {
-      dataExecucao,
-      quantidade: Number(quantidade || 1),
-      tagEquipamentoServico: tagEquipamento,
-      fotos: fotos.map((item) => item.base64),
-      checklistRespostas: checklist,
-      naoExecutada,
-      motivoNaoExecucao,
-    });
-    setCertHash(response.certificateHash || "");
-    setEncerrada(true);
-    toast.success(response.certificateHash ? `OS encerrada e certificado ${response.certificateHash} gerado.` : "OS encerrada com sucesso!");
-    reload();
+    setSavingClose(true);
+    try {
+      const response = await closeOrder(osSelecionada.id, {
+        dataExecucao,
+        quantidade: Number(quantidade || 1),
+        tagEquipamentoServico: tagEquipamento,
+        fotos: fotos.map((item) => item.base64),
+        checklistRespostas: checklist,
+        naoExecutada,
+        motivoNaoExecucao,
+      });
+      setCertHash(response.certificateHash || "");
+      setEncerrada(true);
+      toast.success(response.certificateHash ? `OS encerrada e certificado ${response.certificateHash} gerado.` : "OS encerrada com sucesso!");
+      reload();
+    } catch (error) {
+      toast.error(cleanText(error instanceof Error ? error.message : "Não foi possível encerrar a OS."));
+    } finally {
+      setSavingClose(false);
+    }
   }
 
   function handleImprimirOS(os: OSApp) {
@@ -199,10 +224,18 @@ export default function OrdensServico() {
 
   async function handleSaveEdit() {
     if (!editOs) return;
-    await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal, tagEquipamentoServico: editTag, tags: editTag });
-    toast.success("OS atualizada!");
-    setEditOs(null);
-    reload();
+    if (savingEdit) return;
+    setSavingEdit(true);
+    try {
+      await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal, tagEquipamentoServico: editTag, tags: editTag });
+      toast.success("OS atualizada!");
+      setEditOs(null);
+      reload();
+    } catch (error) {
+      toast.error(cleanText(error instanceof Error ? error.message : "Não foi possível atualizar a OS."));
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   return (
@@ -305,12 +338,12 @@ export default function OrdensServico() {
                       <Badge variant={os.status === "aberta" ? "secondary" : "default"}>{os.status === "aberta" ? "Aberta" : "Encerrada"}</Badge>
                     </div>
                     <div className="space-y-1 text-xs">
-                      <p className="truncate text-sm font-semibold">{os.clienteNome}</p>
-                      <p className="truncate text-muted-foreground">{os.servico}</p>
-                      <div className="flex items-center gap-1 text-muted-foreground"><User className="h-3 w-3" /> {os.tecnicoNome}</div>
-                      <div className="flex items-center gap-1 text-muted-foreground"><Users className="h-3 w-3" /> {os.equipeTecnicosNomes?.join(" • ") || os.tecnicoNome}</div>
-                      <div className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" /> {os.localExecucao}</div>
-                      {(os.tagEquipamentoServico || os.tags) ? <div className="flex items-center gap-1 text-muted-foreground"><Tag className="h-3 w-3" /> {os.tagEquipamentoServico || os.tags}</div> : null}
+                        <p className="truncate text-sm font-semibold">{cleanText(os.clienteNome)}</p>
+                        <p className="truncate text-muted-foreground">{cleanText(os.servico)}</p>
+                        <div className="flex items-center gap-1 text-muted-foreground"><User className="h-3 w-3" /> {cleanText(os.tecnicoNome)}</div>
+                      <div className="flex items-center gap-1 text-muted-foreground"><Users className="h-3 w-3" /> {cleanJoin(os.equipeTecnicosNomes, os.tecnicoNome)}</div>
+                      <div className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" /> {cleanText(os.localExecucao)}</div>
+                      {(os.tagEquipamentoServico || os.tags) ? <div className="flex items-center gap-1 text-muted-foreground"><Tag className="h-3 w-3" /> {cleanText(os.tagEquipamentoServico || os.tags)}</div> : null}
                       {os.evidencias?.length ? <div className="flex items-center gap-1 font-medium text-primary"><FileCheck2 className="h-3 w-3" /> {os.evidencias.length} evidência(s)</div> : null}
                       {os.naoExecutada ? <div className="flex items-center gap-1 font-medium text-destructive"><XCircle className="h-3 w-3" /> Não executada</div> : null}
                       {os.certificadoHash ? <div className="flex items-center gap-1 font-medium text-primary"><Award className="h-3 w-3" /> {os.certificadoHash}</div> : null}
@@ -342,7 +375,7 @@ export default function OrdensServico() {
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5 text-primary" />{encerrada ? "OS encerrada" : `Encerrar ${osSelecionada?.numero}`}</DialogTitle></DialogHeader>
           {!encerrada ? (
             <div className="space-y-4">
-              {osSelecionada ? <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{osSelecionada.clienteNome}</span><span className="text-muted-foreground">Serviço</span><span>{osSelecionada.servico}</span><span className="text-muted-foreground">Equipe</span><span>{osSelecionada.equipeTecnicosNomes?.join(" • ") || osSelecionada.tecnicoNome}</span><span className="text-muted-foreground">Local</span><span>{osSelecionada.localExecucao}</span></div> : null}
+              {osSelecionada ? <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cleanText(osSelecionada.clienteNome)}</span><span className="text-muted-foreground">Serviço</span><span>{cleanText(osSelecionada.servico)}</span><span className="text-muted-foreground">Equipe</span><span>{cleanJoin(osSelecionada.equipeTecnicosNomes, osSelecionada.tecnicoNome)}</span><span className="text-muted-foreground">Local</span><span>{cleanText(osSelecionada.localExecucao)}</span></div> : null}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
@@ -354,7 +387,7 @@ export default function OrdensServico() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="sem-tag">Sem tag específica</SelectItem>
-                      {equipamentosOs.map((equipamento) => <SelectItem key={equipamento.id || equipamento.tag} value={equipamento.tag}>{equipamento.tag} — {equipamento.descricao || equipamento.tipo || "Equipamento"}</SelectItem>)}
+                      {equipamentosOs.map((equipamento) => <SelectItem key={equipamento.id || equipamento.tag} value={equipamento.tag}>{cleanText(equipamento.tag)} — {cleanText(equipamento.descricao || equipamento.tipo || "Equipamento")}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -365,7 +398,7 @@ export default function OrdensServico() {
                 <div className="rounded-lg border bg-muted/30 p-3 text-xs">
                   <p className="flex items-center gap-1.5 font-semibold"><BookOpen className="h-3.5 w-3.5 text-primary" /> POP vinculado</p>
                   <p className="mt-1 text-muted-foreground">{servicoSelecionado.popCodigo || "POP"} {servicoSelecionado.popVersao ? `· versão ${servicoSelecionado.popVersao}` : ""}</p>
-                  {servicoSelecionado.popTitulo ? <p className="font-medium">{servicoSelecionado.popTitulo}</p> : null}
+                  {servicoSelecionado.popTitulo ? <p className="font-medium">{cleanText(servicoSelecionado.popTitulo)}</p> : null}
                 </div>
               ) : null}
               {checklist.length > 0 ? (
@@ -374,7 +407,7 @@ export default function OrdensServico() {
                   {checklist.map((item, index) => (
                     <label key={`${item.item}-${index}`} className="flex items-start gap-2 rounded-md border p-2 text-xs">
                       <Checkbox checked={item.concluido} onCheckedChange={(checked) => setChecklist((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, concluido: Boolean(checked) } : entry))} />
-                      <span>{item.item}</span>
+                      <span>{cleanText(item.item)}</span>
                     </label>
                   ))}
                 </div>
@@ -389,7 +422,7 @@ export default function OrdensServico() {
                 </div>
               ) : null}
               <div className="space-y-2"><Label>Fotos de evidência <span className="text-xs text-muted-foreground">(até 3)</span></Label><input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotoChange} /><div className="flex gap-3">{[0, 1, 2].map((index) => <div key={index} className="relative">{fotos[index] ? <div className="group relative h-24 w-24 overflow-hidden rounded-lg border-2 border-primary"><img src={fotos[index].preview} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" /><button onClick={() => setFotos((prev) => prev.filter((_, fotoIndex) => fotoIndex !== index))} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5"><X className="h-3 w-3 text-white" /></button></div> : <button onClick={() => fileInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50">Foto {index + 1}</button>}</div>)}</div></div>
-              <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)}>Cancelar</Button><Button onClick={handleEncerrar}>Encerrar OS</Button></DialogFooter>
+              <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)} disabled={savingClose}>Cancelar</Button><Button onClick={handleEncerrar} disabled={savingClose}>{savingClose ? "Encerrando..." : "Encerrar OS"}</Button></DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
@@ -409,12 +442,12 @@ export default function OrdensServico() {
                 {[
                   ["Número", viewOs.numero],
                   ["Status", viewOs.status === "aberta" ? "Aberta" : "Encerrada"],
-                  ["Cliente", viewOs.clienteNome],
-                  ["Serviço", viewOs.servico],
-                  ["Técnico líder", viewOs.tecnicoNome],
-                  ["Equipe", viewOs.equipeTecnicosNomes?.join(" • ") || viewOs.tecnicoNome],
-                  ["Local", viewOs.localExecucao],
-                  ["Tag equipamento", viewOs.tagEquipamentoServico || "—"],
+                  ["Cliente", cleanText(viewOs.clienteNome)],
+                  ["Serviço", cleanText(viewOs.servico)],
+                  ["Técnico líder", cleanText(viewOs.tecnicoNome)],
+                  ["Equipe", cleanJoin(viewOs.equipeTecnicosNomes, viewOs.tecnicoNome)],
+                  ["Local", cleanText(viewOs.localExecucao)],
+                  ["Tag equipamento", cleanText(viewOs.tagEquipamentoServico || "—")],
                   ["Emissão", fmtDate(viewOs.dataEmissao)],
                   ["Execução", viewOs.dataExecucao ? fmtDate(viewOs.dataExecucao) : "—"],
                   ["Quantidade", `${viewOs.quantidade} ${viewOs.unidade}`],
@@ -435,7 +468,7 @@ export default function OrdensServico() {
                     {(viewOs.evidencias?.length ? viewOs.evidencias.filter(isImageEvidence) : viewOs.fotos.map((foto, index) => ({ id: `foto-${index}`, nomeArquivo: `Foto ${index + 1}`, conteudoBase64: foto, tamanhoBytes: undefined }))).map((anexo, index) => (
                       <div key={anexo.id || index} className="space-y-1">
                         <img src={anexo.conteudoBase64} alt={anexo.nomeArquivo || `Foto ${index + 1}`} className="h-24 w-24 rounded-lg border object-cover" />
-                        <p className="max-w-24 truncate text-[10px] text-muted-foreground">{anexo.nomeArquivo} {formatBytes(anexo.tamanhoBytes)}</p>
+                    <p className="max-w-24 truncate text-[10px] text-muted-foreground">{cleanText(anexo.nomeArquivo)} {formatBytes(anexo.tamanhoBytes)}</p>
                       </div>
                     ))}
                   </div>
@@ -446,7 +479,7 @@ export default function OrdensServico() {
                       {viewOs.evidencias.filter((item) => item.categoria === "pdf_historico").map((item) => (
                         <div key={item.id} className="mt-2 flex flex-col gap-2 rounded-md border bg-background p-2 md:flex-row md:items-center md:justify-between">
                           <p className="text-[11px] text-muted-foreground">
-                            {item.nomeArquivo} {item.imutavel ? "· imutável" : ""} {item.hashSha256 ? `· hash ${item.hashSha256.slice(0, 12)}...` : ""}
+                            {cleanText(item.nomeArquivo)} {item.imutavel ? "· imutável" : ""} {item.hashSha256 ? `· hash ${item.hashSha256.slice(0, 12)}...` : ""}
                           </p>
                           <div className="flex gap-1.5">
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAttachment(item)}>Abrir</Button>
@@ -467,10 +500,11 @@ export default function OrdensServico() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><PenLine className="h-4 w-4 text-primary" /> Editar OS — {editOs?.numero}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5"><Label>Técnico responsável</Label><Select value={editTecnico} onValueChange={setEditTecnico}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tecnicos.filter((item) => item.ativo).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome} — {item.cargo}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>Técnico responsável</Label><Select value={editTecnico} onValueChange={setEditTecnico}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tecnicos.filter((item) => item.ativo).map((item) => <SelectItem key={item.id} value={item.nome}>{cleanText(item.nome)} — {cleanText(item.cargo)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Local de execução</Label><Input value={editLocal} onChange={(event) => setEditLocal(event.target.value)} /></div>
+            <div className="space-y-1.5"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag/equipamento</Label><Input value={editTag} onChange={(event) => setEditTag(event.target.value)} placeholder="Ex: BEB-02, CX-01, ARM-03" /></div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setEditOs(null)}>Cancelar</Button><Button onClick={handleSaveEdit}>Salvar</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setEditOs(null)} disabled={savingEdit}>Cancelar</Button><Button onClick={handleSaveEdit} disabled={savingEdit}>{savingEdit ? "Salvando..." : "Salvar"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

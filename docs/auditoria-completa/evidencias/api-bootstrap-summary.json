@@ -1,0 +1,181 @@
+{
+  "tenant": {
+    "id": "378afed5-2b6b-45e1-b33e-86096d217f9b",
+    "slug": "ciperprag",
+    "nome": "Ciperprag",
+    "logoUrl": null,
+    "logoInterfaceUrl": null
+  },
+  "permissions": [
+    "agenda.manage",
+    "auditoria.view",
+    "certificados.manage",
+    "clientes.manage",
+    "configuracoes.manage",
+    "contratos.manage",
+    "dashboard.view",
+    "equipes.manage",
+    "financeiro.view",
+    "medicoes.manage",
+    "os.close",
+    "os.manage",
+    "servicos.manage",
+    "usuarios.manage"
+  ],
+  "counts": {
+    "clients": 6,
+    "services": 6,
+    "contracts": 5,
+    "schedules": 3,
+    "orders": 6,
+    "certificates": 5,
+    "measurements": 0,
+    "attachments": 18,
+    "roles": 8,
+    "users": 1
+  },
+  "roles": [
+    {
+      "codigo": "admin_empresa",
+      "nome": "Administrador da empresa",
+      "permissoes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "comercial",
+      "nome": "Comercial",
+      "permissoes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "consulta_auditoria",
+      "nome": "Consulta/Auditoria",
+      "permissoes": [
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "administrativo",
+      "nome": "Contratos/Administrativo",
+      "permissoes": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "financeiro",
+      "nome": "Financeiro",
+      "permissoes": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "operacao",
+      "nome": "Opera????o/Agendamento",
+      "permissoes": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "responsavel_tecnico",
+      "nome": "Respons??vel t??cnico",
+      "permissoes": [
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "codigo": "tecnico",
+      "nome": "T??cnico",
+      "permissoes": [
+        null,
+        null,
+        null
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "b59cacc3-ea2c-465b-9609-4d1d3fa25c83",
+      "nome": "Administrador Local",
+      "email": "admin@atenza.local",
+      "status": "ativo",
+      "perfis": [
+        "admin_empresa"
+      ]
+    }
+  ],
+  "companyConfigKeys": [
+    "alvara",
+    "anvisa",
+    "cargoResponsavel",
+    "certificadoConfig",
+    "certificadoTextoFixacao",
+    "certificadoTextoLegal",
+    "certificadoValidadePadraoDias",
+    "cnpj",
+    "corDestaque",
+    "corPrimaria",
+    "corSecundaria",
+    "cr02",
+    "email",
+    "endereco",
+    "logoUrl",
+    "medicaoFormaPagamentoPadrao",
+    "medicaoLocalEntregaPadrao",
+    "nomeFantasia",
+    "razaoSocial",
+    "responsavelExecucao",
+    "responsavelTecnico",
+    "telefone",
+    "telefoneEmergencia",
+    "tenantNome",
+    "tenantSlug",
+    "vigilanciaSanitaria"
+  ],
+  "numberingConfig": {
+    "propostaFormato": "PC-{SEQ}/{ANO}",
+    "propostaUltimo": 50,
+    "contratoFormato": "CT-{SEQ}/{ANO}",
+    "contratoUltimo": 125,
+    "osFormato": "OS-{SEQ}",
+    "osUltimo": 2675,
+    "certificadoFormato": "CERT-{SEQ}/{ANO}",
+    "certificadoUltimo": 0,
+    "medicaoFormato": "MED-{SEQ}/{ANO}",
+    "medicaoUltimo": 0
+  }
+}

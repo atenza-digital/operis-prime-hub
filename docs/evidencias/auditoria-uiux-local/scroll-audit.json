@@ -1,0 +1,93 @@
+[
+  {
+    "name": "Dashboard",
+    "path": "/",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "-",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Agendamentos",
+    "path": "/agendar",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "H1 24/1 112/1",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | Agendamentos | Ordens de serviço | Certificados e histórico | Equipes e veículos | Auditoria de anexos | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Ordens",
+    "path": "/ordens",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 1211/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | Agendamentos | Ordens de serviço | Certificados e histórico | Equipes e veículos | Auditoria de anexos | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Certificados",
+    "path": "/certificados",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 1180/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | Agendamentos | Ordens de serviço | Certificados e histórico | Equipes e veículos | Auditoria de anexos | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Medi??o",
+    "path": "/medicao",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 1283/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | Medição | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Equipes",
+    "path": "/equipes",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "H1 24/1 135/1",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | Agendamentos | Ordens de serviço | Certificados e histórico | Equipes e veículos | Auditoria de anexos | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "AuditoriaAnexos",
+    "path": "/auditoria-anexos",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 1894/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | Agendamentos | Ordens de serviço | Certificados e histórico | Equipes e veículos | Auditoria de anexos | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Clientes",
+    "path": "/comercial/clientes",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "-",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | Clientes | Serviços | Contratos e Propostas | Parâmetros do tenant | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Servi?os",
+    "path": "/comercial/servicos",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "-",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | Clientes | Serviços | Contratos e Propostas | Parâmetros do tenant | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Contratos",
+    "path": "/comercial/contratos",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "H1 24/1 167/1",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | Clientes | Serviços | Contratos e Propostas | Parâmetros do tenant | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Par?metrosTenant",
+    "path": "/comercial/configuracoes",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 3245/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | Clientes | Serviços | Contratos e Propostas | Parâmetros do tenant | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Sair"
+  },
+  {
+    "name": "Usu?rios",
+    "path": "/usuarios",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "H1 24/1 122/1",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Usuários e perfis | Eventos de auditoria | Sair"
+  },
+  {
+    "name": "EventosAuditoria",
+    "path": "/auditoria-eventos",
+    "sidebarScroll": "649/649",
+    "mainScrollable": "MAIN 3304/821 1164/1164",
+    "nav": "InícioVisão executiva | Dashboard | ComercialClientes, serviços, propostas e contratos | OperacionalAgendamentos, OS, evidências e certificados | FinanceiroMedições e acompanhamento de NF | AdministraçãoUsuários, perfis e auditoria | Usuários e perfis | Eventos de auditoria | Sair"
+  }
+]

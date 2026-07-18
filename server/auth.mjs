@@ -53,6 +53,7 @@ async function getUserPayload(client, userId) {
        t.slug AS tenant_slug,
        t.nome_fantasia AS tenant_nome,
        ec.logo_url AS tenant_logo_url,
+       ec.brand_icon_url AS tenant_brand_icon_url,
        ec.logo_interface_url AS tenant_logo_interface_url,
        COALESCE(
          JSON_AGG(DISTINCT JSONB_BUILD_OBJECT('codigo', p.codigo, 'nome', p.nome))
@@ -69,7 +70,8 @@ async function getUserPayload(client, userId) {
      LEFT JOIN LATERAL (
        SELECT
          logo_url,
-         certificado_config->>'logoInterfaceUrl' AS logo_interface_url
+         certificado_config->>'brandIconUrl' AS brand_icon_url,
+         COALESCE(certificado_config->>'sidebarLogoDarkUrl', certificado_config->>'logoInterfaceUrl') AS logo_interface_url
          FROM ciperprag_hub.empresa_config
         WHERE tenant_id = t.id
         ORDER BY id
@@ -80,7 +82,7 @@ async function getUserPayload(client, userId) {
      LEFT JOIN ciperprag_hub.perfil_permissoes pp ON pp.perfil_id = p.id
      LEFT JOIN ciperprag_hub.permissoes perm ON perm.id = pp.permissao_id
      WHERE u.id = $1
-    GROUP BY u.id, t.id, ec.logo_url, ec.logo_interface_url`,
+    GROUP BY u.id, t.id, ec.logo_url, ec.brand_icon_url, ec.logo_interface_url`,
     [userId],
   );
 
@@ -98,6 +100,7 @@ async function getUserPayload(client, userId) {
       slug: user.tenant_slug,
       nome: user.tenant_nome,
       logoUrl: user.tenant_logo_url,
+      brandIconUrl: user.tenant_brand_icon_url,
       logoInterfaceUrl: user.tenant_logo_interface_url,
     },
     perfis: user.perfis ?? [],

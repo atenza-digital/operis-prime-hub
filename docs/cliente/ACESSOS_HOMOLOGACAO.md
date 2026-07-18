@@ -2,9 +2,11 @@
 
 Ambiente: Homologacao
 
-URL: http://89.116.214.65:3010
+URL: https://fieldops-homologacao.atenza.digital/login
 
 Versao: `0.6.3`
+
+Identidade: o favicon global e a tela de login usam a identidade Atenza FieldOps. A logo do tenant aparece somente depois do login e nos documentos parametrizados.
 
 ## Politica de teste
 

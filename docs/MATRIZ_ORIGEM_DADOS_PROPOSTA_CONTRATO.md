@@ -1,6 +1,6 @@
 # Matriz de origem dos dados - Proposta e Contrato
 
-Esta matriz registra a origem dos campos usados nos templates comerciais revisados. A proposta e o contrato sao documentos diferentes: a proposta apresenta a oferta tecnico-comercial; o contrato formaliza as condicoes apos aprovacao.
+Esta matriz registra a origem dos campos usados nos templates comerciais revisados. A proposta, a minuta e o contrato final sao documentos diferentes: a proposta apresenta a oferta tecnico-comercial; a minuta formaliza a versao de revisao/negociacao; o contrato final consolida as condicoes apos aprovacao da minuta e libera a operacao.
 
 | Campo/bloco | Proposta | Contrato | Origem atual | Status SaaS | Observacao |
 | --- | --- | --- | --- | --- | --- |
@@ -36,7 +36,7 @@ Esta matriz registra a origem dos campos usados nos templates comerciais revisad
 ## Deve evoluir
 
 - Biblioteca de clausulas e condicoes comerciais versionada por tenant.
-- Snapshot imutavel da proposta aprovada para gerar o contrato.
+- Snapshot imutavel da proposta aprovada para gerar a minuta e snapshot imutavel da minuta aprovada para gerar o contrato final.
 - PDF server-side com hash e anexo imutavel.
 - Assinatura eletronica/digital ou registro formal de aceite.
 - Editor administrativo para textos comerciais, juridicos e responsaveis por documento.

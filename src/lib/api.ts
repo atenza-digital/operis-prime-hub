@@ -143,7 +143,7 @@ export interface AgendamentoApp {
 
 export interface EvidenciaAnexoApp {
   id: string;
-  entidadeTipo: "os" | "certificado" | "medicao" | "servico_pop" | "cliente" | "contrato";
+  entidadeTipo: "os" | "certificado" | "medicao" | "servico_pop" | "cliente" | "contrato" | "proposta" | "minuta";
   entidadeId: string;
   categoria: "evidencia" | "foto" | "documento" | "pop_aprovado" | "pdf_historico" | "outro";
   nomeArquivo: string;
@@ -157,6 +157,10 @@ export interface EvidenciaAnexoApp {
   snapshotHashSha256?: string;
   templateCodigo?: string;
   templateVersao?: string;
+  storageProvider?: string;
+  storageBucket?: string;
+  storageKey?: string;
+  storageEtag?: string;
   imutavel?: boolean;
   criadoEm: string;
 }
@@ -299,6 +303,8 @@ export interface ContratoServico {
   quantidade: number;
   valorUnitario: number;
   frequencia: string;
+  descricaoComercial?: string;
+  unidadeComercial?: string;
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -308,14 +314,26 @@ export interface ContratoTemplate {
   id: string;
   numero: string;
   clienteId: string;
-  tipo: "contrato" | "proposta";
+  tipo: "contrato" | "proposta" | "minuta";
   servicos: ContratoServico[];
   vigenciaMeses: number;
   formaPagamento: string;
   prazoPagamentoDias: number;
-  status: "rascunho" | "enviado" | "aprovado" | "vigente" | "encerrado";
+  status: "rascunho" | "enviado" | "em_negociacao" | "aprovado" | "recusado" | "cancelado" | "vigente" | "encerrado";
   dataCriacao: string;
   observacoes: string;
+  titulo?: string;
+  objeto?: string;
+  validadeDias?: number;
+  modalidade?: string;
+  locaisExecucao?: string[];
+  escopoTecnico?: string;
+  condicoesComerciais?: string;
+  issueCity?: string;
+  issueState?: string;
+  issuedAt?: string;
+  timezone?: string;
+  issuingBranchId?: string;
   operacionalizado?: boolean;
   contratosOperacionaisIds?: string[];
 }
@@ -352,11 +370,16 @@ export interface EmpresaConfig {
     titulo?: string;
     subtitulo?: string;
     tipo?: string;
+    brandIconUrl?: string;
+    sidebarLogoDarkUrl?: string;
+    documentLogoLightUrl?: string;
     logoPrincipalUrl?: string;
     logoInterfaceUrl?: string;
     arteFundoUrl?: string;
     seloInstitucionalUrl?: string;
     assinaturaUrl?: string;
+    assinaturaModo?: "imagem" | "linha" | "ocultar" | "obrigatoria";
+    assinaturaDocumentos?: Record<string, "imagem" | "linha" | "ocultar" | "obrigatoria">;
     corPrimaria?: string;
     corSecundaria?: string;
     corDestaque?: string;
@@ -491,6 +514,7 @@ export interface AuthUser {
     slug: string;
     nome: string;
     logoUrl?: string | null;
+    brandIconUrl?: string | null;
     logoInterfaceUrl?: string | null;
   };
   perfis: Array<{ codigo: string; nome: string }>;
@@ -507,6 +531,7 @@ export interface PublicTenantContext {
   slug: string;
   nome: string;
   logoUrl?: string | null;
+  brandIconUrl?: string | null;
   logoInterfaceUrl?: string | null;
   corPrimaria?: string | null;
 }
@@ -680,6 +705,20 @@ export const generateContractFromProposal = (id: string) => api<{
   numero: string;
   operationalSync?: { created: number; updated: number; disabled: number; skipped: boolean };
 }>(`/contract-templates/${id}/generate-contract`, { method: "POST" });
+export const generateMinutaFromProposal = (id: string) => api<{
+  ok: boolean;
+  id: string;
+  numero: string;
+}>(`/contract-templates/${id}/generate-minuta`, { method: "POST" });
+export const issueContractTemplateDocument = (id: string) => api<{
+  ok: boolean;
+  snapshotHashSha256: string | null;
+  attachment: Pick<EvidenciaAnexoApp, "id" | "hashSha256" | "snapshotHashSha256" | "templateCodigo" | "templateVersao" | "storageProvider">;
+}>(`/contract-templates/${id}/issue-document`, { method: "POST" });
+export const uploadContractTemplateSourceFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
+  ok: boolean;
+  attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string };
+}>(`/contract-templates/${id}/source-file`, { method: "POST", body: JSON.stringify(payload) });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });

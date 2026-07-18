@@ -119,7 +119,7 @@ function AssetUploadCard({
         {value ? (
           <img src={value} alt={title} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="text-xs text-muted-foreground">Nao configurado</span>
+          <span className="text-xs text-muted-foreground">Não configurado</span>
         )}
       </div>
       <div className="space-y-2">
@@ -202,7 +202,8 @@ export default function Configuracoes() {
 
     readImageFile(file, (value) => {
       setEmpresa((prev) => ({ ...prev, logoUrl: value }));
-      updateCertificadoConfig("logoPrincipalUrl", value);
+      const currentConfig = readCertificadoConfig();
+      setCertificadoConfigText(JSON.stringify({ ...currentConfig, documentLogoLightUrl: value, logoPrincipalUrl: value }, null, 2));
       toast.success("Logo atualizada na tela. Salve para gravar no banco.");
     });
     event.target.value = "";
@@ -226,7 +227,8 @@ export default function Configuracoes() {
     if (!file) return;
 
     readImageFile(file, (value) => {
-      updateCertificadoConfig("logoInterfaceUrl", value);
+      const currentConfig = readCertificadoConfig();
+      setCertificadoConfigText(JSON.stringify({ ...currentConfig, sidebarLogoDarkUrl: value, logoInterfaceUrl: value }, null, 2));
       toast.success("Logo da interface atualizada na tela. Salve para gravar no banco.");
     });
     event.target.value = "";
@@ -239,7 +241,7 @@ export default function Configuracoes() {
       return {};
     }
   }, [certificadoConfigText]);
-  const interfaceLogoUrl = certificadoConfig.logoInterfaceUrl as string | undefined;
+  const interfaceLogoUrl = (certificadoConfig.sidebarLogoDarkUrl || certificadoConfig.logoInterfaceUrl) as string | undefined;
 
   return (
     <div className="space-y-6">
@@ -269,7 +271,7 @@ export default function Configuracoes() {
                 <div className="min-w-0 flex-1 space-y-2">
                   <Label>Alterar logo</Label>
                   <Input type="file" accept="image/*" onChange={handleLogoChange} className="w-full max-w-md text-sm" />
-                  <p className="text-xs text-muted-foreground">A logo será usada nos documentos e no topo do sistema.</p>
+                  <p className="text-xs text-muted-foreground">A logo será usada como fallback documental do tenant.</p>
                 </div>
               </div>
               <div className="flex flex-col gap-4 rounded-2xl border bg-slate-950 p-4 sm:flex-row sm:items-center sm:gap-6">
@@ -279,7 +281,7 @@ export default function Configuracoes() {
                 <div className="min-w-0 flex-1 space-y-2">
                   <Label className="text-white">Logo da interface</Label>
                   <Input type="file" accept="image/*" onChange={handleInterfaceLogoChange} className="w-full max-w-md bg-white text-sm" />
-                  <p className="text-xs text-white/65">Usada no menu lateral e nas Ã¡reas internas. Ideal para versÃµes claras da marca sobre fundo escuro.</p>
+                  <p className="text-xs text-white/65">Usada no menu lateral e em áreas internas com fundo escuro. Ideal para versões claras da marca.</p>
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
@@ -413,32 +415,46 @@ export default function Configuracoes() {
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <AssetUploadCard
-                  title="Logo principal"
-                  description="Logo usada no cabeçalho dos certificados e documentos."
-                  value={(certificadoConfig.logoPrincipalUrl as string) || empresa.logoUrl}
+                  title="Logo dos documentos"
+                  description="Logo para fundo claro, usada em certificados, propostas, contratos, OS, relatórios e medições."
+                  value={(certificadoConfig.documentLogoLightUrl as string) || (certificadoConfig.logoPrincipalUrl as string) || empresa.logoUrl}
                   onChange={(value) => {
                     setEmpresa((prev) => ({ ...prev, logoUrl: value }));
-                    updateCertificadoConfig("logoPrincipalUrl", value);
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, documentLogoLightUrl: value, logoPrincipalUrl: value }, null, 2));
                   }}
                 />
                 <AssetUploadCard
-                  title="Arte de fundo"
-                  description="Marca d'agua, icone lateral ou elemento visual do certificado."
-                  value={certificadoConfig.arteFundoUrl as string}
+                  title="Ícone da marca"
+                  description="Ícone compacto para menu retraído, marca d'água e usos visuais menores."
+                  value={(certificadoConfig.brandIconUrl as string) || (certificadoConfig.arteFundoUrl as string)}
                   previewClassName="bg-slate-100"
-                  onChange={(value) => updateCertificadoConfig("arteFundoUrl", value)}
+                  onChange={(value) => {
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, brandIconUrl: value, arteFundoUrl: value }, null, 2));
+                  }}
+                />
+                <AssetUploadCard
+                  title="Logo fundo escuro"
+                  description="Logo para menu lateral expandido e fundos escuros, preferencialmente PNG/SVG com transparência."
+                  value={(certificadoConfig.sidebarLogoDarkUrl as string) || (certificadoConfig.logoInterfaceUrl as string)}
+                  previewClassName="bg-slate-950"
+                  onChange={(value) => {
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, sidebarLogoDarkUrl: value, logoInterfaceUrl: value }, null, 2));
+                  }}
                 />
                 <AssetUploadCard
                   title="Selo institucional"
-                  description="Selo, brasao, certificacao ou marca complementar do tenant."
+                  description="Selo, brasão, certificação ou marca complementar do tenant."
                   value={certificadoConfig.seloInstitucionalUrl as string}
                   onChange={(value) => updateCertificadoConfig("seloInstitucionalUrl", value)}
                 />
                 <AssetUploadCard
                   title="Assinatura"
-                  description="Imagem da assinatura do responsavel configurado para sair no documento."
+                  description="Imagem da assinatura do responsável configurado para sair nos documentos permitidos."
                   value={certificadoConfig.assinaturaUrl as string}
                   onChange={(value) => updateCertificadoConfig("assinaturaUrl", value)}
                 />
@@ -473,6 +489,22 @@ export default function Configuracoes() {
                   <Input value={empresa.telefoneEmergencia || ""} onChange={(event) => setEmpresa({ ...empresa, telefoneEmergencia: event.target.value })} />
                 </div>
               </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Uso da assinatura no certificado</Label>
+                  <select
+                    value={(certificadoConfig.assinaturaModo as string) || "imagem"}
+                    onChange={(event) => updateCertificadoConfig("assinaturaModo", event.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="imagem">Usar imagem quando houver</option>
+                    <option value="linha">Deixar linha para assinatura física/digital</option>
+                    <option value="ocultar">Não exibir assinatura</option>
+                    <option value="obrigatoria">Bloquear emissão sem assinatura configurada</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">A configuração poderá ser refinada por família documental na etapa SaaS de perfis documentais.</p>
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label>Texto legal padrão</Label>
                 <Textarea value={empresa.certificadoTextoLegal || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoLegal: event.target.value })} rows={3} />
@@ -490,8 +522,8 @@ export default function Configuracoes() {
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Use para parametrizar logoInterfaceUrl, logoPrincipalUrl, arteFundoUrl, seloInstitucionalUrl, assinaturaUrl,
-                  titulo, subtitulo, publicBaseUrl, licencas, rodapeLinhas, cit, limiteFotos e exibições do template.
+                  Use para parametrizar brandIconUrl, sidebarLogoDarkUrl, documentLogoLightUrl, seloInstitucionalUrl,
+                  assinaturaUrl, assinaturaModo, titulo, subtitulo, publicBaseUrl, licencas, rodapeLinhas, cit, limiteFotos e exibições do template.
                 </p>
               </div>
             </CardContent>

@@ -1,5 +1,7 @@
 import logoCiperprag from "@/assets/logo_ciperprag.png";
+import { repairMojibake } from "@/lib/repairMojibake";
 import type { BootstrapData, Contrato, OSApp, ServicoCatalogo } from "@/lib/api";
+import { notoSansFontFaces } from "@/lib/documentFontFaces";
 
 function escapeHtml(value: string | number | null | undefined) {
   return String(value ?? "")
@@ -202,7 +204,7 @@ export function buildOsPrintHtml(
       ? ["Cones e correntes", "Sinalização de área", "Bloqueio e etiquetagem quando aplicável"]
       : ["Cones e correntes", "Sinalização de área", "Kit de emergência e lavagem quando aplicável"];
 
-  const logoSrc = options.logoSrc ?? logoCiperprag;
+  const logoSrc = options.logoSrc ?? company?.logoUrl ?? logoCiperprag;
   const clienteNome = customer?.razaoSocial || os.clienteNome || contract?.cliente || "";
   const clienteCnpj = customer?.cnpj || os.clienteCnpj || contract?.cnpj || "";
   const clienteEndereco = customer
@@ -214,16 +216,16 @@ export function buildOsPrintHtml(
     .filter(Boolean)
     .join(", ");
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(os.numero)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    ${notoSansFontFaces}
     * { box-sizing: border-box; }
     @page { size: A4; margin: 6mm; }
-    body { margin: 0; font-family: Inter, Arial, Helvetica, sans-serif; color: #111; background: #fff; }
+    body { margin: 0; font-family: "Noto Sans", Arial, Helvetica, sans-serif; color: #111; background: #fff; }
     .page { width: 100%; height: 284mm; border: 1.2px solid #222; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
@@ -384,6 +386,7 @@ export function buildOsPrintHtml(
   </div>
 </body>
 </html>`;
+  return repairMojibake(html);
 }
 
 export function printOsDocument(os: OSApp, bootstrap: BootstrapData | null) {

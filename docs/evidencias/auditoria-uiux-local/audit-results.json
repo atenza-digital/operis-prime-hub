@@ -1,0 +1,250 @@
+[
+  {
+    "name": "Dashboard",
+    "path": "/",
+    "loadMs": 1381,
+    "url": "/",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Dashboard",
+      "Painel de operação",
+      "Olá, Administrador"
+    ],
+    "buttons": 13,
+    "links": 2,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/dashboard.png"
+  },
+  {
+    "name": "Agendamentos",
+    "path": "/agendar",
+    "loadMs": 1197,
+    "url": "/agendar",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Agendamentos",
+      "Agendamentos"
+    ],
+    "buttons": 18,
+    "links": 6,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/agendamentos.png"
+  },
+  {
+    "name": "Ordens",
+    "path": "/ordens",
+    "loadMs": 1284,
+    "url": "/ordens",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Ordens de serviço",
+      "Ordens de Serviço"
+    ],
+    "buttons": 29,
+    "links": 7,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/ordens.png"
+  },
+  {
+    "name": "Certificados",
+    "path": "/certificados",
+    "loadMs": 1310,
+    "url": "/certificados",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Certificados e histórico",
+      "Certificados e Histórico"
+    ],
+    "buttons": 27,
+    "links": 7,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/certificados.png"
+  },
+  {
+    "name": "Medi??o",
+    "path": "/medicao",
+    "loadMs": 1224,
+    "url": "/medicao",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Medição",
+      "Medição"
+    ],
+    "buttons": 12,
+    "links": 3,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/medi-o.png"
+  },
+  {
+    "name": "Equipes",
+    "path": "/equipes",
+    "loadMs": 1239,
+    "url": "/equipes",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Equipes e veículos",
+      "Equipes e veículos"
+    ],
+    "buttons": 16,
+    "links": 6,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/equipes.png"
+  },
+  {
+    "name": "AuditoriaAnexos",
+    "path": "/auditoria-anexos",
+    "loadMs": 1163,
+    "url": "/auditoria-anexos",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Auditoria de anexos",
+      "Auditoria de Anexos"
+    ],
+    "buttons": 47,
+    "links": 6,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/auditoriaanexos.png"
+  },
+  {
+    "name": "Clientes",
+    "path": "/comercial/clientes",
+    "loadMs": 1258,
+    "url": "/comercial/clientes",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Clientes",
+      "Gestão de Clientes"
+    ],
+    "buttons": 15,
+    "links": 5,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/clientes.png"
+  },
+  {
+    "name": "Servi?os",
+    "path": "/comercial/servicos",
+    "loadMs": 1432,
+    "url": "/comercial/servicos",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Serviços",
+      "Serviços"
+    ],
+    "buttons": 15,
+    "links": 5,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/servi-os.png"
+  },
+  {
+    "name": "Contratos",
+    "path": "/comercial/contratos",
+    "loadMs": 1256,
+    "url": "/comercial/contratos",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Contratos e Propostas",
+      "Contratos e Propostas"
+    ],
+    "buttons": 14,
+    "links": 5,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/contratos.png"
+  },
+  {
+    "name": "Par?metrosTenant",
+    "path": "/comercial/configuracoes",
+    "loadMs": 1278,
+    "url": "/comercial/configuracoes",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Parâmetros do tenant",
+      "Configurações"
+    ],
+    "buttons": 10,
+    "links": 5,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/par-metrostenant.png"
+  },
+  {
+    "name": "Usu?rios",
+    "path": "/usuarios",
+    "loadMs": 1179,
+    "url": "/usuarios",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Usuários e perfis",
+      "Usuários e Perfis"
+    ],
+    "buttons": 11,
+    "links": 4,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": false,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/usu-rios.png"
+  },
+  {
+    "name": "EventosAuditoria",
+    "path": "/auditoria-eventos",
+    "loadMs": 1249,
+    "url": "/auditoria-eventos",
+    "title": "Atenza FieldOps",
+    "headings": [
+      "Eventos de auditoria",
+      "Eventos de Auditoria"
+    ],
+    "buttons": 47,
+    "links": 3,
+    "dialogs": 0,
+    "scrollHeight": 900,
+    "clientHeight": 900,
+    "hasMojibake": true,
+    "hasDoubleQuestion": true,
+    "screenshot": "docs/evidencias/auditoria-uiux-local/eventosauditoria.png"
+  }
+]

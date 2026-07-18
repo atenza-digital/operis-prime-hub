@@ -15,7 +15,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Nortica", "system-ui", "sans-serif"],
+        document: ["Noto Sans", "Arial", "sans-serif"],
+        proposal: ["MontserratDocument", "Montserrat", "Arial", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       colors: {

@@ -72,5 +72,6 @@ Exemplo:
 ## Migracoes Recentes
 
 - `013_tenant_scope_measurements_and_documents.sql`: adiciona/garante `tenant_id` em certificados, sugestoes de recorrencia e medicoes, preenche dados legados da homologacao Ciperprag e cria indices de isolamento por tenant.
+- `025_document_visual_identity_aliases.sql`: normaliza aliases SaaS em `empresa_config.certificado_config` para `brandIconUrl`, `sidebarLogoDarkUrl`, `documentLogoLightUrl` e `assinaturaModo`, preservando compatibilidade com os nomes antigos usados na homologacao.
 
 No DBeaver, abra o arquivo, confira o banco/schema de destino e execute em uma transação controlada.

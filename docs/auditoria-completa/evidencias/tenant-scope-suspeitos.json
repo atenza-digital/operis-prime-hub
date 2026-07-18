@@ -1,0 +1,30 @@
+[
+  {
+    "line": 112,
+    "text": " const { rows } = await db.query(\"SELECT 1 FROM ciperprag_hub.certificados WHERE hash = $1 LIMIT 1\", [hash]); if (!rows.length) return hash; } throw new Error(\"Nao foi possivel gerar um hash unico para o certificado.\"); } function makeId(prefix) { return `${pr"
+  },
+  {
+    "line": 1527,
+    "text": " `UPDATE ciperprag_hub.contratos SET contrato_template_servico_id=$4, numero_comercial=$5, cliente_id=$6, cliente=$7, cnpj=$8, servico=$9, tipo=$10,"
+  },
+  {
+    "line": 2207,
+    "text": " await client.query(\"DELETE FROM ciperprag_hub.usuario_perfis WHERE usuario_id = $1\", [savedUser.id]); for (const role of roleRows) { await client.query( `INSERT INTO ciperprag_hub.usuario_perfis (usuario_id, perfil_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, "
+  },
+  {
+    "line": 2210,
+    "text": " `INSERT INTO ciperprag_hub.usuario_perfis (usuario_id, perfil_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [savedUser.id, role.id], ); } const auditAction ="
+  },
+  {
+    "line": 2263,
+    "text": " `UPDATE ciperprag_hub.usuario_sessoes SET revoked_at = NOW() WHERE usuario_id = $1 AND revoked_at IS NULL`, [userId], ); await query( `INSERT INTO ciperprag_hub.audit_logs"
+  },
+  {
+    "line": 2991,
+    "text": " `UPDATE ciperprag_hub.medicoes SET financeiro_status = $3, nf_numero = $4, nf_enviada_em = $5, pagamento_previsto_em = $6, pago_no_erp_em = $7, financeiro_observacao = $8, financeiro_atualizado_em = NOW(),"
+  },
+  {
+    "line": 3190,
+    "text": " `UPDATE ciperprag_hub.ordens_servico SET status = 'encerrada', data_execucao = $2, quantidade = $3, tag_equipamento_servico = $4, fotos = $5, checklist_respostas = $6, nao_executada = $7,"
+  }
+]

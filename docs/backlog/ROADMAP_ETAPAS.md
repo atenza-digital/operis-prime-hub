@@ -6,9 +6,9 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em andamento.
-- Proxima etapa recomendada: continuar Etapa 8 de 8 em paralelo aos testes da equipe, priorizando infraestrutura de homologacao, branding SaaS e preparacao de producao sem publicar em producao.
-- Itens de backlog mapeados apos feedback externo incorporado: 44.
-- Itens de backlog remanescentes: 38.
+- Proxima etapa recomendada: validar visualmente P0.6 Relatorios tecnicos e avancar para P0.7 Medicoes e acompanhamento, consolidando a matriz P0 antes da prontidao de homologacao assistida.
+- Itens de backlog mapeados apos feedback externo incorporado: 47.
+- Itens de backlog remanescentes: 47.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -146,16 +146,39 @@ Entregue ate agora:
 - PR de preparacao SaaS/CI-CD integrado na `main` e workflow manual de deploy liberado na branch padrao.
 - Deploy manual de homologacao executado com sucesso via GitHub Actions, publicando a imagem `atenza-fieldops:homologacao-main-502c37e` na VPS.
 - Smoke tecnico pos-deploy aprovado contra a VPS, com evidencia em `docs/evidencias/etapa7_homologacao/smoke-vps-api.md`.
+- Smoke E2E local de P0.3 aprovado contra `http://127.0.0.1:3001`, validando proposta aprovada -> minuta aprovada -> contrato final vigente -> contrato operacional -> agendamento -> OS -> encerramento -> certificado -> medicao -> acompanhamento financeiro operacional -> recorrencia.
+- Auditoria E2E atualizada para respeitar o fluxo proposta -> minuta -> contrato final, gerando alertas separados para propostas sem minuta e minutas sem contrato final.
+- Evidencia da rodada local registrada em `docs/evidencias/etapa7_homologacao/execucao-tecnica-e2e.md`.
+- P0.4 Ordens de Servico iniciada com melhoria de experiencia na tela: exibicao e busca passam a reparar dados legados com caracteres corrompidos, e encerramento/edicao mostram loading e erro amigavel.
+- Impressao da OS a partir do agendamento foi unificada no gerador centralizado `printOsDocument`, removendo o HTML legado embutido que poderia gerar documento divergente.
+- Edicao da OS recebeu campo de tag/equipamento para corrigir informacao operacional antes do encerramento/certificado.
+- Evidencia visual da OS gerada em A4 retrato com 2 paginas: `docs/evidencias/qa_fluxo_visual/os-atual.pdf`, `docs/evidencias/qa_fluxo_visual/os-atual-page-1.png` e `docs/evidencias/qa_fluxo_visual/os-atual-page-2.png`.
+- Renderizacao da OS passou a corrigir acentuacao legada em EPIs, procedimentos e observacoes vindas de seeds antigos, mantendo o saneamento definitivo do banco como backlog.
+- P0.5 Certificados iniciou validacao visual assistida com evidencias SaaS para Ciperprag com produtos, Ciperprag com ate 3 fotos dinamicas da OS, tenant generico com logo propria e tenant generico sem logo.
+- Roteiro especifico de certificados para validacao do Tarcisio gerado em `docs/cliente/ROTEIRO_VALIDACAO_CERTIFICADOS_TARCISIO.docx`, com checklist editavel, acesso de homologacao, criterios esperados e imagens de referencia renderizadas.
+- PDF/PNGs auxiliares do roteiro gerados em `docs/cliente/qa_roteiro_certificados`, permitindo conferencia visual antes do envio.
+- Familia de certificados refinada sem redesenho visual: rastreabilidade obrigatoria com numero do certificado, OS, data de execucao, validade quando aplicavel, codigo curto e impressao digital SHA-256 abreviada; blocos de produtos, licencas, fotos, assinatura e validade passaram a ser condicionais.
+- Snapshot de certificado passou a persistir `snapshotHashSha256` criptografico no momento da emissao, separando identificador legado `HSH` do hash real.
+- Validacao publica de certificado teve acentuacao corrigida e passou a exibir SHA-256 do snapshot quando disponivel.
+- Evidencias de aceite da familia de certificados geradas com 13 cenarios em `docs/evidencias/certificado_saas` e PDF consolidado em `docs/cliente/certificados_montserrat/certificados-montserrat-validacao-final.pdf`.
+- Teste automatizado `scripts/validate-certificate-evidence.py` aprovado com 13/13 cenarios, validando consistencia entre titulo, cliente, servico, OS, QR, codigo publico, SHA-256, blocos condicionais, fonte Montserrat, pagina nao vazia e PDF individual marcado como Tagged.
+- P0.6 Relatorios tecnicos iniciado com tela operacional em `/relatorios-tecnicos`, filtros por status/servico/busca e emissao do relatorio a partir da OS, sem expor valores comerciais.
+- Relatorio tecnico usa dados dinamicos de tenant, OS, servico, cliente, equipe, veiculo, checklist, fotos, produtos, EPIs e normas; logo e cor primaria documental seguem configuracao do tenant quando existir.
+- Evidencia visual de P0.6 gerada em `docs/cliente/relatorios_tecnicos/relatorio-tecnico-ciperprag-amostra.pdf`, com renders `relatorio-tecnico-ciperprag-amostra-render-1.png` e `relatorio-tecnico-ciperprag-amostra-render-2.png`.
+- Validacao tecnica do relatorio confirmou PDF A4 retrato com 2 paginas, texto selecionavel, acentuacao correta e PDF marcado como Tagged.
 
-Backlog da Etapa 7: 7 itens.
+Backlog da Etapa 7: 10 itens.
 
-- Executar E2E manual e documentado: proposta -> contrato -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
+- Executar E2E manual e documentado com usuario humano: proposta -> minuta -> contrato final -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
 - Validar multi-tenant com tenant generico e tenant Ciperprag, incluindo documentos sem logo.
 - Validar numeração automatica de OS, proposta, contrato, certificado e medicao.
 - Validar datas, horas, moeda e acentuacao em formato brasileiro.
+- Sanear dados legados/seed de homologacao com caracteres corrompidos (`??`) em nomes, cargos, servicos, clientes, observacoes e documentos, garantindo que o banco entregue textos corretos em portugues antes dos testes assistidos.
+- Sanear residuos de dados antigos apontados pela auditoria local: proposta P0.1 sem minuta, contrato seed sem sincronizacao operacional, agendamentos antigos sem OS, OS antigas sem snapshot/medicao e certificados seed sem PDF historico imutavel.
 - Validar anexos, downloads, hashes e documentos historicos na tela de auditoria.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
+- Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
@@ -176,10 +199,19 @@ Entregue inicialmente em homologacao:
 - Login autenticado passou a aceitar `tenantSlug` para evitar ambiguidade de e-mails iguais em tenants diferentes.
 - Configuracoes passou a expor assets documentais por tenant em campos visuais: logo principal/documental, logo da interface, arte de fundo, selo institucional, assinatura, titulo e subtitulo do certificado, mantendo persistencia em `empresa_config.certificado_config`.
 - Checagem visual automatizada passou a capturar tambem a tela de Configuracoes > assets documentais do tenant.
+- Tela de login padrao recebeu refinamento visual local: remocao da divisoria vertical, melhor distribuicao entre bloco institucional e formulario, menor sensacao de conteudo colado nas laterais e manutencao do visual SaaS neutro.
+- Dashboard recebeu base adaptativa por perfil/permissoes, com saudacao do usuario, badges de contexto, pontos de atencao e atalhos filtrados pelo que o perfil pode executar.
+- Validacao local em Docker preparada antes da publicacao em homologacao, usando banco PostgreSQL local e container `atenza-fieldops-local-ux` em porta dedicada.
+- Favicon alterado para identidade Atenza e fonte padrao da interface migrada para Nortica, mantendo NeuePower Ultra apenas na marca Atenza FieldOps.
+- Navegacao principal reorganizada em Inicio, Comercial, Operacional, Financeiro e Administracao, com menu retratil mais evidente, logo do tenant menor e topbar com saudacao/data/perfil.
+- Dashboard compactado com abas (`Agora`, `Contratos`, `Agenda`, `Atalhos`) para reduzir rolagem e separar aprofundamento por contexto.
+- Agenda recebeu filtros por mes/semana/todos, ano/mes, busca por cliente e detalhes ao clicar no agendamento.
+- Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
+- Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 
-Backlog da Etapa 8: 31 itens.
+Backlog da Etapa 8: 37 itens.
 
-- Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant; futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `cor_primaria`, `nome_exibicao`, dominio/subdominio e assets documentais. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
+- Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
 - Persistir PDF final como anexo imutavel com hash real, snapshot completo e versao do template.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
@@ -188,14 +220,15 @@ Backlog da Etapa 8: 31 itens.
 - Implementar storage externo ou filesystem controlado para anexos/documentos, reduzindo base64 no banco.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
-- Evoluir assets documentais para armazenamento externo/filesystem controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar logo principal, logo da interface, arte de fundo, selo institucional e assinatura em `certificado_config`, mas ainda falta vincular assinatura a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao.
+- Evoluir assets documentais para armazenamento externo/filesystem controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant.
 - Parametrizar clausulas comerciais/juridicas por tenant.
+- Parametrizar integralmente os blocos contratuais por tenant e versao documental, incluindo dados da empresa, clausulas, condicoes comerciais, local e periodicidade, vigencia, reajuste, rescisao, responsabilidades, aceite, observacoes, anexos e textos legais, evitando contrato/minuta/proposta engessados no frontend.
 - Criar biblioteca de condicoes comerciais padrao por tenant.
 - Parametrizar textos executivos da proposta por tenant e por tipo de servico.
 - Implementar assinatura eletronica/digital ou trilha formal de aceite.
 - Implementar revogacao/substituicao formal de certificados e documentos.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
-- Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa.
+- Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa. Incluir descricoes curtas e acessiveis para usuarios nao tecnicos explicando POP, EPIs, normas, checklist e campos tecnicos; permitir upload de POP em PDF/DOCX/imagem para clientes que ja possuem documentos prontos e querem apenas controlar versoes/anexos pelo sistema, sem obrigar cadastro estruturado completo no primeiro uso.
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
 - Executar auditoria de dependencias (`npm audit`), atualizar Browserslist/caniuse-lite e tratar achados antes de producao.
 - Hardening de seguranca: CORS, rate limit, politica de sessao, cookies, headers e backup de credenciais.
@@ -208,8 +241,17 @@ Backlog da Etapa 8: 31 itens.
 - Criar pesquisa global do sistema, limitada pelas permissoes do usuario, permitindo localizar OS, agendamentos, clientes, contratos, propostas, certificados, telas e funcionalidades, com pre-visualizacao ao digitar.
 - Consolidar perfil ADM/administrador do tenant com acesso total as funcionalidades permitidas ao cliente, gestao granular de usuarios, papeis, perfis, permissoes, resets de senha e auditoria de acesso, permitindo que o administrador defina o que cada papel pode fazer. Exemplo Ciperprag: Aline pode atuar como comercial e administradora, acumulando papeis conforme decisao do tenant.
 - Criar grupos/equipes de usuarios gerenciados pelo administrador, como grupo comercial ou equipe operacional, permitindo incluir/remover membros, delegar tarefas e organizar responsabilidades.
-- Evoluir um unico `/dashboard` adaptativo por perfil/contexto, sem criar telas demais no inicio. O dashboard deve mudar cards, atalhos, alertas e graficos conforme papeis/permissoes do usuario logado, por exemplo comercial, operacao, tecnico, qualidade, medicao, administrador do tenant e administrador Atenza/SaaS.
+- Aprofundar o `/dashboard` adaptativo por perfil/contexto com graficos, estados vazios especificos, indicadores por tecnico/equipe e visao do administrador Atenza/SaaS. A base de cards, atalhos e alertas por permissao ja foi iniciada.
 - Planejar e implementar login com Google como opcao futura de autenticacao SaaS, mantendo login interno por e-mail/senha como base. A integracao deve respeitar tenant, dominio permitido, convite/primeiro acesso, associacao com usuario existente e auditoria de login.
+- Implementar matriz visual de permissoes por modulo, permitindo que o administrador do tenant marque o que cada papel pode executar em Comercial, Operacional e Financeiro. Padrao sugerido: Comercial cuida de clientes, catalogo de produtos/servicos, propostas, contratos e parametros comerciais; Operacional cuida de agenda, OS, equipes, evidencias, tags/equipamentos, certificados e historico operacional sem visualizar valores comerciais/negociacao; Financeiro cuida de medicoes, envio de NF, acompanhamento de cobranca, pagamento e baixa manual no ERP, sem substituir contas a receber do ERP.
+- Executar auditoria UI/UX formal por fluxo e perfil, medindo quantidade de cliques, clareza de estados vazios, hierarquia de menus, acentuacao, responsividade, contraste, risco de confusao entre modulos e complexidade percebida por usuarios da Ciperprag.
+- Evoluir a identidade visual com uso leve e intencional de glassmorphism/morphism em areas de orientacao, cards de contexto e estados vazios, sem prejudicar contraste, leitura ou performance. Incluir botao dedicado para alternar modo claro/escuro, com preferencia persistida por usuario/dispositivo e sem misturar esse controle com a parametrizacao documental do tenant.
+- Revisar aproveitamento de espaco de tela e responsividade em todos os modulos, reduzindo areas vazias, excesso de altura, rolagens desnecessarias e melhorando comportamento em notebook, desktop grande, tablet e mobile.
+- Revisar os cards do bloco "Fluxo recomendado" no Dashboard, corrigindo distorcao visual, alinhamento dos indicadores numericos, largura dos cards, quebra de texto e responsividade em telas menores.
+- Revisar todos os fluxos de abertura de telas, dialogs, drawers e modais para eliminar sensacao de tela criada por cima de outra, padronizando quando usar pagina, modal, drawer lateral, wizard ou painel contextual.
+- Reorganizar a arquitetura de informacao por modulo Comercial, Operacional e Financeiro, garantindo que cada tela tenha um objetivo claro, nomes consistentes, caminho de volta evidente e separacao correta de informacoes sensiveis como valores comerciais.
+- Avaliar se a alocacao semanal deve permanecer em Equipes e veiculos como apoio visual ou migrar/integrar ao modulo Agendamentos, ja que a programacao operacional principal deve nascer no fluxo de agendamento.
+- Corrigir definitivamente o favicon padrao Atenza em todos os ambientes e builds, eliminando fallback/cache do favicon Ciperprag no login SaaS neutro e validando asset local, `index.html`, Docker, navegador e homologacao.
 
 ## Itens explicitamente postergados
 
@@ -223,8 +265,8 @@ Todos os itens abaixo estao alocados na Etapa 8:
 
 ## Controle de backlog
 
-- Total de itens mapeados apos fechamento da Etapa 6: 35.
-- Total de itens remanescentes: 38.
-- Etapa 7: 7 itens.
-- Etapa 8: 31 itens.
+- Total de itens mapeados apos atualizacao de UI/UX e fluxo: 46.
+- Total de itens remanescentes: 47.
+- Etapa 7: 10 itens.
+- Etapa 8: 37 itens.
 - Itens fora de etapa: 0.

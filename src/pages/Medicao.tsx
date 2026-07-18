@@ -146,7 +146,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
 
   return (
     <div className="document-print-root measurement-print-root bg-[#f1f5f9] p-0 text-slate-950 print:m-0 print:p-0">
-      <section className="relative mx-auto flex min-h-[210mm] w-[297mm] overflow-hidden bg-[#f8fafc] font-sans shadow-2xl print:shadow-none">
+      <section className="relative mx-auto flex min-h-[210mm] w-[297mm] overflow-hidden bg-[#f8fafc] font-document shadow-2xl print:shadow-none">
         <div className="absolute inset-y-0 left-0 w-[10mm] bg-[#334155]" />
         <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#475569]" />
         <div className="absolute -right-10 top-24 h-28 w-28 rounded-full border-[18px] border-[#cbd5e1]/35" />
@@ -352,7 +352,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
 
   return (
     <div className="document-print-root measurement-print-root bg-slate-100 p-0 text-slate-950 print:m-0 print:bg-white print:p-0" style={themeStyle}>
-      <section className="measurement-document mx-auto min-h-[297mm] w-[210mm] bg-white px-[15mm] py-[11mm] font-sans text-[var(--measurement-text)] shadow-2xl print:shadow-none">
+      <section className="measurement-document mx-auto min-h-[297mm] w-[210mm] bg-white px-[15mm] py-[11mm] font-document text-[var(--measurement-text)] shadow-2xl print:shadow-none">
         <div className="h-1 rounded-full bg-[var(--measurement-primary)]" />
 
         <header className="measurement-header mt-4 grid grid-cols-[1fr_0.95fr] gap-8 border-b border-slate-200 pb-4">
