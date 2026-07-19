@@ -126,10 +126,15 @@ jobs:
             exit 1
           fi
 
+          curl -fsSI "http://127.0.0.1:${APP_PORT}/login" >/dev/null
+          curl -fsSI "http://127.0.0.1:${APP_PORT}/favicon.png" >/dev/null
+          curl -fsSI "http://127.0.0.1:${APP_PORT}/favicon.ico" >/dev/null
+
           docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
           REMOTE
 
       - name: Public smoke
         env:
           HOMOLOGATION_BASE_URL: ${{ github.event.inputs.public_url }}
+          HOMOLOGATION_SMOKE_ALLOW_CLOUDFLARE_CHALLENGE: "true"
         run: npm run homologation:smoke-public

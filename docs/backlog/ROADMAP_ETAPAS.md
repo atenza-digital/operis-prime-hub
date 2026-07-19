@@ -210,7 +210,7 @@ Entregue inicialmente em homologacao:
 - Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 - Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
-- Deploy de homologacao passou a executar smoke publico pos-deploy no dominio oficial, validando health, rotas principais e favicons sem depender de conexao direta ao PostgreSQL local.
+- Deploy de homologacao passou a executar smoke obrigatorio dentro da VPS (health, login e favicons) e smoke publico best-effort no dominio oficial, registrando quando o GitHub Actions for bloqueado pelo desafio do Cloudflare.
 - Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 
 Backlog da Etapa 8: 37 itens.

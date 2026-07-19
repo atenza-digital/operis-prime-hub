@@ -51,6 +51,21 @@ checks.push(await requestWithRetry("/favicon.png"));
 checks.push(await requestWithRetry("/favicon.ico"));
 
 const health = checks.find((check) => check.pathname === "/api/health");
+const cloudflareChallenge = checks.some((check) =>
+  check.status === 403
+  && /Just a moment|challenges\.cloudflare\.com|cf_chl/i.test(check.body || "")
+);
+
+if (cloudflareChallenge && process.env.HOMOLOGATION_SMOKE_ALLOW_CLOUDFLARE_CHALLENGE === "true") {
+  console.log("Smoke publico de homologacao: Cloudflare challenge detectado para o runner externo.");
+  console.log("A validacao obrigatoria deve ocorrer pelo smoke interno da VPS no workflow.");
+  console.log(JSON.stringify({
+    baseUrl,
+    checks: checks.map(({ pathname, status, contentType }) => ({ pathname, status, contentType })),
+  }, null, 2));
+  process.exit(0);
+}
+
 assertOk(health?.ok && health.body.includes('"ok":true'), "Health publico indisponivel.");
 
 for (const page of ["/login", "/medicao"]) {
