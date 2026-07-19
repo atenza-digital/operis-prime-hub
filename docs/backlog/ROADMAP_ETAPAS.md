@@ -225,6 +225,7 @@ Entregue inicialmente em homologacao:
 - Deploy de homologacao passou a executar smoke obrigatorio dentro da VPS (health, login e favicons) e smoke publico best-effort no dominio oficial, registrando quando o GitHub Actions for bloqueado pelo desafio do Cloudflare.
 - Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 - Renderizadores ativos de documentos passaram a resolver logo documental por configuracao/snapshot do tenant, sem fallback fixo da Ciperprag: propostas, contratos/minutas, OS, certificados, medicoes e relatorios tecnicos.
+- Auditoria segura de dependencias executada sem `--force`: `npm audit fix` atualizou o `package-lock.json`, zerou vulnerabilidades de dependencias de producao com `npm audit --omit=dev` e manteve pendencia controlada para upgrade major de Vite/esbuild antes de producao.
 
 Backlog da Etapa 8: 38 itens.
 
@@ -248,7 +249,7 @@ Backlog da Etapa 8: 38 itens.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
 - Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa. Incluir descricoes curtas e acessiveis para usuarios nao tecnicos explicando POP, EPIs, normas, checklist e campos tecnicos; permitir upload de POP em PDF/DOCX/imagem para clientes que ja possuem documentos prontos e querem apenas controlar versoes/anexos pelo sistema, sem obrigar cadastro estruturado completo no primeiro uso.
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
-- Executar auditoria de dependencias (`npm audit`), atualizar Browserslist/caniuse-lite e tratar achados antes de producao.
+- Concluir auditoria de dependencias antes de producao: resolver pendencias dev/build de Vite/esbuild que exigem upgrade major, atualizar Browserslist/caniuse-lite quando o utilitario nao depender de Bun ou houver ferramenta configurada, e revalidar lint/test/build/audit completo. A auditoria de producao ja esta zerada em homologacao.
 - Hardening de seguranca: CORS, rate limit, politica de sessao, cookies, headers e backup de credenciais.
 - Observabilidade: logs estruturados, monitoramento de uptime, alertas e painel simples de saude.
 - Backup/restauracao testada, rotina de release e rollback.
