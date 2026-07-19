@@ -228,6 +228,7 @@ Entregue inicialmente em homologacao:
 - Auditoria de dependencias concluida em duas rodadas controladas: `npm audit fix` reduziu os achados sem `--force`; depois o toolchain foi atualizado para Vite 8.1.5, Vitest 4.1.10 e plugin React SWC 4.3.1; Browserslist/caniuse-lite foi atualizado via `npm update`; `npm audit` completo ficou zerado.
 - Fundacao de storage documental por tenant criada: anexos e documentos imutaveis passam a registrar plano R2 deterministico por ambiente/tenant/entidade/categoria/hash, mantendo o banco como provider ativo em homologacao ate existir upload/download real validado.
 - Upload e download R2 implementados no backend via API S3 compativel da Cloudflare, com proxy autenticado pela rota de anexos, hash/metadados preservados e fallback automatico para banco caso o ambiente nao tenha credenciais completas ou o envio falhe.
+- Rotina controlada de migracao de anexos antigos base64 para R2 criada via `scripts/migrate-attachments-to-r2.mjs` e comando `storage:migrate-r2`, com dry-run por padrao, filtro por tenant/tipo/categoria/limite, bloqueio de `--apply` sem R2 ativo, preservacao de hash/metadados e opcao de manter copia no banco durante rollout assistido.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -237,7 +238,7 @@ Backlog da Etapa 8: 37 itens.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
-- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real e o download autenticado ja foram implementados; falta migracao dos anexos existentes, teste com credenciais reais em homologacao e validacao tri-tenant.
+- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado e a rotina de migracao controlada ja foram implementados; falta executar a migracao real com credenciais R2 em homologacao, testar download pos-migracao e validar tri-tenant.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.
