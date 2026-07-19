@@ -178,6 +178,7 @@ Entregue ate agora:
 - Auditoria inicial de logos/assets documentais criada em `docs/auditorias/auditoria-assets-documentais.md`, com script `scripts/audit-document-assets.mjs`, matriz por familia documental e inspecao estatica dos renderizadores ativos.
 - Infraestrutura tipografica documental corrigida para Montserrat local incorporada nos documentos gerados: pesos 400, 500, 600 e 700 sao carregados antes da impressao, codigos/valores usam Montserrat com numeros tabulares e a validacao pos-PDF bloqueia fallbacks como NotoSans, Arial, Roboto, Times, Consolas e Liberation Sans.
 - Auditoria final de fontes documentais por lote aprovada para os PDFs representativos de proposta, contrato, OS, certificado, relatorio tecnico e medicao, com relatorio em `docs/evidencias/etapa7_homologacao/auditoria-fontes-documentais.md`.
+- Roteiro consolidado de validacao final para Tarcisio gerado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.1.docx`, com URL oficial de homologacao, perfis de teste, referencias documentais, checklist por perfil e registro de divergencias no proprio arquivo.
 
 Backlog da Etapa 7: 8 itens.
 
