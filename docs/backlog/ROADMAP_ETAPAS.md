@@ -5,10 +5,10 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 ## Resumo atual
 
 - Versao de homologacao: `0.6.3`.
-- Etapa atual: Etapa 7 de 8 em andamento.
-- Proxima etapa recomendada: preparar a rodada final de homologacao assistida com Tarcisio/equipe, usando os roteiros atualizados e coletando divergencias por perfil.
+- Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
+- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando storage/R2 por tenant e revisao de anexos/documentos imutaveis.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 46.
+- Itens de backlog remanescentes: 45.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -225,9 +225,9 @@ Entregue inicialmente em homologacao:
 - Deploy de homologacao passou a executar smoke obrigatorio dentro da VPS (health, login e favicons) e smoke publico best-effort no dominio oficial, registrando quando o GitHub Actions for bloqueado pelo desafio do Cloudflare.
 - Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 - Renderizadores ativos de documentos passaram a resolver logo documental por configuracao/snapshot do tenant, sem fallback fixo da Ciperprag: propostas, contratos/minutas, OS, certificados, medicoes e relatorios tecnicos.
-- Auditoria segura de dependencias executada sem `--force`: `npm audit fix` atualizou o `package-lock.json`, zerou vulnerabilidades de dependencias de producao com `npm audit --omit=dev` e manteve pendencia controlada para upgrade major de Vite/esbuild antes de producao.
+- Auditoria de dependencias concluida em duas rodadas controladas: `npm audit fix` reduziu os achados sem `--force`; depois o toolchain foi atualizado para Vite 8.1.5, Vitest 4.1.10 e plugin React SWC 4.3.1; Browserslist/caniuse-lite foi atualizado via `npm update`; `npm audit` completo ficou zerado.
 
-Backlog da Etapa 8: 38 itens.
+Backlog da Etapa 8: 37 itens.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -249,7 +249,6 @@ Backlog da Etapa 8: 38 itens.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
 - Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa. Incluir descricoes curtas e acessiveis para usuarios nao tecnicos explicando POP, EPIs, normas, checklist e campos tecnicos; permitir upload de POP em PDF/DOCX/imagem para clientes que ja possuem documentos prontos e querem apenas controlar versoes/anexos pelo sistema, sem obrigar cadastro estruturado completo no primeiro uso.
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
-- Concluir auditoria de dependencias antes de producao: resolver pendencias dev/build de Vite/esbuild que exigem upgrade major, atualizar Browserslist/caniuse-lite quando o utilitario nao depender de Bun ou houver ferramenta configurada, e revalidar lint/test/build/audit completo. A auditoria de producao ja esta zerada em homologacao.
 - Hardening de seguranca: CORS, rate limit, politica de sessao, cookies, headers e backup de credenciais.
 - Observabilidade: logs estruturados, monitoramento de uptime, alertas e painel simples de saude.
 - Backup/restauracao testada, rotina de release e rollback.
@@ -285,7 +284,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo e complemento de medicao: 48.
-- Total de itens remanescentes: 46.
+- Total de itens remanescentes: 45.
 - Etapa 7: 8 itens.
-- Etapa 8: 38 itens.
+- Etapa 8: 37 itens.
 - Itens fora de etapa: 0.
