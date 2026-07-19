@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
+import { buildStorageMetadata, createAttachmentStoragePlan } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -328,13 +329,21 @@ function drawCompanyHeader(doc, company, { x, y, width, logoWidth = 92 }) {
   doc.font("Helvetica").fontSize(8).fillColor("#475569").text([company.cnpj ? `CNPJ ${company.cnpj}` : null, company.endereco].filter(Boolean).join(" | "), textX, y + 38, { width: textWidth });
 }
 
-async function saveImmutablePdfAttachment(client, { tenantId, userId, entityType, entityId, fileName, pdfBuffer, snapshot, template, metadata = {} }) {
+async function saveImmutablePdfAttachment(client, { tenantId, tenantSlug, userId, entityType, entityId, fileName, pdfBuffer, snapshot, template, metadata = {} }) {
   const encoded = encodeBinaryDocument(pdfBuffer, "application/pdf");
   const snapHash = snapshotHash(snapshot);
+  const storageTarget = createAttachmentStoragePlan({
+    tenantSlug,
+    entityType,
+    entityId,
+    category: "pdf_historico",
+    fileName,
+    hashSha256: encoded.hash,
+  });
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
-     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, imutavel, criado_por)
-     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,TRUE,$13)
+     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,$16)
      ON CONFLICT (id) DO NOTHING`,
     [
       makeId("PDF"),
@@ -351,15 +360,20 @@ async function saveImmutablePdfAttachment(client, { tenantId, userId, entityType
         snapshotHashSha256: snapHash,
         templateCodigo: template.code,
         templateVersao: template.version,
+        ...buildStorageMetadata(storageTarget),
       }),
       encoded.hash,
       snapHash,
       template.code,
       template.version,
+      storageTarget.provider,
+      storageTarget.bucket,
+      storageTarget.key,
+      storageTarget.etag,
       userId || null,
     ],
   );
-  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes };
+  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes, storageProvider: storageTarget.provider };
 }
 
 async function buildMeasurementPdfBuffer(snapshot, measurement) {
@@ -534,6 +548,7 @@ async function saveImmutableDocumentAttachment(client, {
   html,
   snapshot = null,
   template = null,
+  tenantSlug = null,
   storage = null,
   metadata = {},
 }) {
@@ -541,7 +556,14 @@ async function saveImmutableDocumentAttachment(client, {
   const snapHash = snapshot ? snapshotHash(snapshot) : null;
   const templateCode = template?.code || null;
   const templateVersion = template?.version || null;
-  const storageTarget = storage || {};
+  const storageTarget = storage || createAttachmentStoragePlan({
+    tenantSlug,
+    entityType,
+    entityId,
+    category: "pdf_historico",
+    fileName,
+    hashSha256: encoded.hash,
+  });
   const attachmentId = makeId("DOC");
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
@@ -563,9 +585,7 @@ async function saveImmutableDocumentAttachment(client, {
         snapshotHashSha256: snapHash,
         templateCodigo: templateCode,
         templateVersao: templateVersion,
-        storageProvider: storageTarget.provider || "database",
-        plannedStorageProvider: storageTarget.plannedProvider || null,
-        plannedStorageKey: storageTarget.plannedKey || null,
+        ...buildStorageMetadata(storageTarget),
       }),
       encoded.hash,
       snapHash,
@@ -586,6 +606,8 @@ async function saveImmutableDocumentAttachment(client, {
     templateCodigo: templateCode,
     templateVersao: templateVersion,
     storageProvider: storageTarget.provider || "database",
+    storageBucket: storageTarget.bucket || null,
+    storageKey: storageTarget.key || null,
   };
 }
 
@@ -1296,7 +1318,7 @@ async function getCertificateByHash(hash) {
   };
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, userId = null, publicBaseUrl = null } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1364,6 +1386,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
     const certificate = { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero };
     await saveImmutableDocumentAttachment(client, {
       tenantId: scopedTenantId,
+      tenantSlug,
       userId,
       entityType: "certificado",
       entityId: certId,
@@ -1653,12 +1676,6 @@ function buildCommercialDocumentHtml(snapshot) {
       : "Proposta comercial";
   const serviceRows = services.map((item, index) => `<tr><td>${index + 1}</td><td>${htmlEscape(item.nome)}</td><td>${htmlEscape(item.quantidade)} ${htmlEscape(item.unidade)}</td><td>${htmlEscape(item.frequencia || "-")}</td><td>${Number(item.valorUnitario || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td>${Number(item.valorTotal || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>`).join("");
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(document.numero || typeLabel)}</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:36px;line-height:1.45}h1{color:#087f5b;margin-bottom:4px}h2{font-size:15px;color:#087f5b;border-bottom:2px solid #087f5b;padding-bottom:4px;margin-top:24px}.muted{color:#667085;font-size:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;border:1px solid #d7dee8;border-radius:8px;padding:16px}.label{color:#667085;font-size:11px;text-transform:uppercase;font-weight:bold}.value{margin-top:2px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#087f5b;color:#fff;text-align:left}td,th{border:1px solid #d7dee8;padding:8px}.right{text-align:right}.total{font-size:18px;font-weight:bold;color:#087f5b;text-align:right;margin-top:12px}.section{page-break-inside:avoid}</style></head><body><h1>${htmlEscape(typeLabel)}</h1><p class="muted">${htmlEscape(document.numero || "Documento sem número")} | Snapshot histórico ${htmlEscape(snapshot.snapshotVersion)}</p><div class="grid"><div><div class="label">Contratada</div><div class="value"><strong>${htmlEscape(company.razaoSocial || company.nomeFantasia || "Empresa emissora")}</strong><br>${htmlEscape(company.cnpj || "-")}<br>${htmlEscape(company.endereco || "-")}</div></div><div><div class="label">Contratante</div><div class="value"><strong>${htmlEscape(client.razaoSocial || client.nomeFantasia || "Cliente não informado")}</strong><br>${htmlEscape(client.cnpj || "-")}<br>${htmlEscape([client.endereco, client.municipio, client.uf].filter(Boolean).join(", ") || "-")}</div></div></div><div class="section"><h2>Objeto e condições</h2><p>${htmlEscape(document.objeto || document.titulo || "Serviços técnicos conforme catálogo e condições comerciais registradas.")}</p><p><strong>Modalidade:</strong> ${htmlEscape(document.modalidade || "-")} | <strong>Validade:</strong> ${htmlEscape(document.validadeDias || "-")} dias | <strong>Vigência:</strong> ${htmlEscape(document.vigenciaMeses || "-")} meses</p><p>${htmlEscape(document.condicoesComerciais || document.formaPagamento || "-")}</p></div><div class="section"><h2>Serviços contratados</h2><table><thead><tr><th>#</th><th>Serviço</th><th>Quantidade</th><th>Frequência</th><th>Valor unitário</th><th>Total</th></tr></thead><tbody>${serviceRows || "<tr><td colspan=\"6\">Nenhum serviço informado.</td></tr>"}</tbody></table><div class="total">Total geral: ${total}</div></div><div class="section"><h2>Escopo técnico</h2><p>${htmlEscape(document.escopoTecnico || "Conforme catálogo de serviços, procedimentos e registros operacionais do sistema.")}</p></div><p class="muted">Documento histórico gerado em ${htmlEscape(new Date(snapshot.capturedAt).toLocaleString("pt-BR"))}. A versão impressa deve ser conferida pelo hash do anexo registrado no sistema.</p></body></html>`;
-}
-
-function getCommercialStoragePlan({ tenantSlug, entityType, entityId, fileName }) {
-  const plannedProvider = process.env.R2_BUCKET_DOCUMENTS ? "r2" : null;
-  const plannedKey = `${process.env.RUNTIME_ENV || "homologacao"}/${tenantSlug || "tenant"}/${entityType}/${entityId}/${safeFileNamePart(fileName)}`;
-  return { provider: "database", plannedProvider, plannedKey };
 }
 
 function makeCompactId(prefix) {
@@ -3263,6 +3280,7 @@ app.post("/api/contract-templates/:id/issue-document", requirePermission("contra
     const html = buildCommercialDocumentHtml(snapshot);
     const attachment = await saveImmutableDocumentAttachment(client, {
       tenantId,
+      tenantSlug,
       userId: req.auth.user.id,
       entityType,
       entityId: snapshot.documento.id,
@@ -3270,7 +3288,6 @@ app.post("/api/contract-templates/:id/issue-document", requirePermission("contra
       html,
       snapshot,
       template,
-      storage: getCommercialStoragePlan({ tenantSlug, entityType, entityId: snapshot.documento.id, fileName }),
       metadata: {
         origem: "emissao_documento_comercial",
         numero: snapshot.documento.numero,
@@ -3301,6 +3318,7 @@ app.post("/api/contract-templates/:id/issue-document", requirePermission("contra
 
 app.post("/api/contract-templates/:id/source-file", requirePermission("contratos.manage"), async (req, res) => {
   const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
   const fileName = safeFileNamePart(req.body.fileName || "minuta-cliente");
   const mimeType = String(req.body.mimeType || "application/octet-stream").toLowerCase();
   const allowedTypes = new Set([
@@ -3335,10 +3353,18 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
       throw error;
     }
     const id = makeId("SRC");
+    const storageTarget = createAttachmentStoragePlan({
+      tenantSlug,
+      entityType: "minuta",
+      entityId: template.id,
+      category: "documento",
+      fileName,
+      hashSha256: hash,
+    });
     await client.query(
       `INSERT INTO ciperprag_hub.evidencias_anexos
-       (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, imutavel, criado_por)
-       VALUES ($1,$2,'minuta',$3,'documento',$4,$5,$6,$7,$8,$9,'database',TRUE,$10)`,
+       (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+       VALUES ($1,$2,'minuta',$3,'documento',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,$14)`,
       [
         id,
         tenantId,
@@ -3347,8 +3373,12 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
         mimeType,
         parsed.bytes,
         dataUrl,
-        JSON.stringify({ origem: "arquivo_original_cliente", numero: template.numero, hashSha256: hash }),
+        JSON.stringify({ origem: "arquivo_original_cliente", numero: template.numero, hashSha256: hash, ...buildStorageMetadata(storageTarget) }),
         hash,
+        storageTarget.provider,
+        storageTarget.bucket,
+        storageTarget.key,
+        storageTarget.etag,
         req.auth.user.id,
       ],
     );
@@ -3486,6 +3516,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     }
     await saveImmutableDocumentAttachment(client, {
       tenantId: req.auth.user.tenant.id,
+      tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "medicao",
       entityId: id,
@@ -3806,19 +3837,34 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     await client.query("DELETE FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND categoria = 'foto' AND tenant_id = $2", [orderId, tenantId]);
     for (const [index, foto] of (Array.isArray(fotos) ? fotos : []).entries()) {
       const parsed = parseDataUrl(foto);
+      const fotoHash = parsed.base64Data ? sha256Hex(Buffer.from(parsed.base64Data, "base64")) : sha256Hex(String(foto));
+      const fotoFileName = `evidencia-${String(index + 1).padStart(2, "0")}.jpg`;
+      const storageTarget = createAttachmentStoragePlan({
+        tenantSlug: req.auth.user.tenant.slug,
+        entityType: "os",
+        entityId: orderId,
+        category: "foto",
+        fileName: fotoFileName,
+        hashSha256: fotoHash,
+      });
       await client.query(
         `INSERT INTO ciperprag_hub.evidencias_anexos
-         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, criado_por)
-         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9)`,
+         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, criado_por)
+         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           `${makeId("EV")}-${index + 1}`,
           tenantId,
           orderId,
-          `evidencia-${String(index + 1).padStart(2, "0")}.jpg`,
+          fotoFileName,
           parsed.mimeType || "image/jpeg",
           parsed.bytes,
           foto,
-          JSON.stringify({ origem: "encerramento_os", posicao: index + 1, dataExecucao }),
+          JSON.stringify({ origem: "encerramento_os", posicao: index + 1, dataExecucao, hashSha256: fotoHash, ...buildStorageMetadata(storageTarget) }),
+          fotoHash,
+          storageTarget.provider,
+          storageTarget.bucket,
+          storageTarget.key,
+          storageTarget.etag,
           req.auth.user.id,
         ],
       );
@@ -3843,6 +3889,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     );
     await saveImmutableDocumentAttachment(client, {
       tenantId,
+      tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "os",
       entityId: orderId,
@@ -3881,7 +3928,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       certificateHash = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] },
-        { dataExecucao, tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
       );
       await logAuditEvent(client, req, {
         entityType: "certificado",
@@ -3931,7 +3978,7 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   if (!order) return res.status(404).json({ error: "OS nao encontrada" });
   if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
   const hash = await withTransaction(async (client) => {
-    const certificateHash = await issueCertificateForOrder(client, order, { tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
+    const certificateHash = await issueCertificateForOrder(client, order, { tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
     await logAuditEvent(client, req, {
       entityType: "certificado",
       entityId: certificateHash,

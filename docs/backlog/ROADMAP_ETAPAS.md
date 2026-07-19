@@ -226,6 +226,7 @@ Entregue inicialmente em homologacao:
 - Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 - Renderizadores ativos de documentos passaram a resolver logo documental por configuracao/snapshot do tenant, sem fallback fixo da Ciperprag: propostas, contratos/minutas, OS, certificados, medicoes e relatorios tecnicos.
 - Auditoria de dependencias concluida em duas rodadas controladas: `npm audit fix` reduziu os achados sem `--force`; depois o toolchain foi atualizado para Vite 8.1.5, Vitest 4.1.10 e plugin React SWC 4.3.1; Browserslist/caniuse-lite foi atualizado via `npm update`; `npm audit` completo ficou zerado.
+- Fundacao de storage documental por tenant criada: anexos e documentos imutaveis passam a registrar plano R2 deterministico por ambiente/tenant/entidade/categoria/hash, mantendo o banco como provider ativo em homologacao ate existir upload/download real validado.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -235,7 +236,7 @@ Backlog da Etapa 8: 37 itens.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
-- Implementar storage externo ou filesystem controlado para anexos/documentos, reduzindo base64 no banco.
+- Concluir storage externo R2 ou filesystem controlado para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash ja foi criada e aplicada aos novos metadados; falta upload real, download seguro, migracao dos anexos existentes e teste tri-tenant.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.
