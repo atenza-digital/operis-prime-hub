@@ -32,6 +32,8 @@ const suspiciousPatterns = [
   { label: "replacement_char", sql: "%�%" },
 ];
 
+const suspiciousEncodingRegex = /(\?\?|Ã[\u0080-\u00BF]|Â[\u0080-\u00BF]|�|ï¿½)/;
+
 function quoteIdent(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -50,6 +52,10 @@ function markdownTable(headers, rows) {
   const divider = `| ${headers.map(() => "---").join(" | ")} |`;
   const body = rows.map((row) => `| ${row.map((cell) => String(cell ?? "").replaceAll("|", "\\|").replace(/\s+/g, " ").slice(0, 180)).join(" | ")} |`);
   return [header, divider, ...body].join("\n");
+}
+
+function hasSuspiciousEncoding(value) {
+  return suspiciousEncodingRegex.test(String(value ?? ""));
 }
 
 async function main() {
@@ -95,11 +101,13 @@ async function main() {
       [...params, ...patternParams],
     );
 
-    if (rows.length) {
+    const suspiciousRows = rows.filter((row) => hasSuspiciousEncoding(row.value));
+
+    if (suspiciousRows.length) {
       findings.push({
         table: column.table_name,
         column: column.column_name,
-        examples: rows.map((row) => row.value).join(" || "),
+        examples: suspiciousRows.map((row) => row.value).join(" || "),
       });
     }
   }
