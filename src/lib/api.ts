@@ -1,3 +1,5 @@
+import { repairMojibake } from "@/lib/repairMojibake";
+
 export interface ContatoCliente {
   nome: string;
   cargo: string;
@@ -613,6 +615,44 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+const SKIP_TEXT_REPAIR_KEYS = new Set([
+  "conteudoBase64",
+  "contentBase64",
+  "fotos",
+  "logoUrl",
+  "clienteLogoUrl",
+  "downloadUrl",
+  "url",
+  "hash",
+  "hashSha256",
+  "snapshotHashSha256",
+  "storageKey",
+  "storageEtag",
+  "token",
+]);
+
+function repairBootstrapText<T>(value: T, key = ""): T {
+  if (typeof value === "string") {
+    return (SKIP_TEXT_REPAIR_KEYS.has(key) ? value : repairMojibake(value)) as T;
+  }
+
+  if (Array.isArray(value)) {
+    if (SKIP_TEXT_REPAIR_KEYS.has(key)) return value;
+    return value.map((item) => repairBootstrapText(item)) as T;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+        entryKey,
+        repairBootstrapText(entryValue, entryKey),
+      ]),
+    ) as T;
+  }
+
+  return value;
+}
+
 export async function fetchAttachmentBlob(id: string, download = false) {
   const token = getAuthToken();
   const response = await fetch(`/api/attachments/${encodeURIComponent(id)}/download${download ? "?download=1" : ""}`, {
@@ -637,7 +677,7 @@ export const addDays = (dateStr: string, days: number) => {
   return date.toISOString().split("T")[0];
 };
 
-export const getBootstrap = () => api<BootstrapData>("/bootstrap");
+export const getBootstrap = async () => repairBootstrapText(await api<BootstrapData>("/bootstrap"));
 export const getPublicTenantContext = (tenantSlug?: string | null) => {
   const search = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
   return api<{ ok: boolean; tenant: PublicTenantContext | null }>(`/public/tenant-context${search}`);

@@ -167,6 +167,7 @@ Entregue ate agora:
 - Relatorio tecnico usa dados dinamicos de tenant, OS, servico, cliente, equipe, veiculo, checklist, fotos, produtos, EPIs e normas; logo e cor primaria documental seguem configuracao do tenant quando existir.
 - Evidencia visual de P0.6 gerada em `docs/cliente/relatorios_tecnicos/relatorio-tecnico-ciperprag-amostra.pdf`, com renders `relatorio-tecnico-ciperprag-amostra-render-1.png` e `relatorio-tecnico-ciperprag-amostra-render-2.png`.
 - Validacao tecnica do relatorio confirmou PDF A4 retrato com 2 paginas, texto selecionavel, acentuacao correta e PDF marcado como Tagged.
+- Bootstrap da aplicacao passou a reparar textos legados com encoding corrompido antes de alimentar Dashboard, Agenda, Equipes e demais telas, preservando hashes, URLs, base64 e chaves de storage. Teste automatizado adicionado para impedir regressao em nomes, servicos, EPIs e anexos.
 
 Backlog da Etapa 7: 10 itens.
 
@@ -269,7 +270,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 
 ## Controle de backlog
 
-- Total de itens mapeados apos atualizacao de UI/UX e fluxo: 46.
+- Total de itens mapeados apos atualizacao de UI/UX e fluxo: 47.
 - Total de itens remanescentes: 47.
 - Etapa 7: 10 itens.
 - Etapa 8: 37 itens.

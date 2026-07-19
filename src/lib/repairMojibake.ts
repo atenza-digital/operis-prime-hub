@@ -13,6 +13,8 @@ const legacyQuestionMarkReplacements: Array<[string, string]> = [
   ["Sanit??rio", "Sanitário"],
   ["An??lise", "Análise"],
   ["D'??gua", "D'água"],
+  ["D????gua", "D'água"],
+  ["??gua", "água"],
   ["Metal??rgica", "Metalúrgica"],
   ["Manuten????o", "Manutenção"],
   ["Higieniza????o", "Higienização"],
