@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
-import { buildStorageMetadata, createAttachmentStoragePlan } from "./storage.mjs";
+import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -340,6 +340,22 @@ async function saveImmutablePdfAttachment(client, { tenantId, tenantSlug, userId
     fileName,
     hashSha256: encoded.hash,
   });
+  const persisted = await persistAttachmentContent({
+    storagePlan: storageTarget,
+    buffer: pdfBuffer,
+    contentBase64: encoded.dataUrl,
+    mimeType: "application/pdf",
+    hashSha256: encoded.hash,
+    fileName,
+    metadata: {
+      ...metadata,
+      formato: "pdf_server_side",
+      hashSha256: encoded.hash,
+      snapshotHashSha256: snapHash,
+      templateCodigo: template.code,
+      templateVersao: template.version,
+    },
+  });
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
      (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
@@ -352,28 +368,20 @@ async function saveImmutablePdfAttachment(client, { tenantId, tenantSlug, userId
       entityId,
       fileName,
       encoded.bytes,
-      encoded.dataUrl,
-      JSON.stringify({
-        ...metadata,
-        formato: "pdf_server_side",
-        hashSha256: encoded.hash,
-        snapshotHashSha256: snapHash,
-        templateCodigo: template.code,
-        templateVersao: template.version,
-        ...buildStorageMetadata(storageTarget),
-      }),
+      persisted.contentBase64,
+      JSON.stringify(persisted.metadata),
       encoded.hash,
       snapHash,
       template.code,
       template.version,
-      storageTarget.provider,
-      storageTarget.bucket,
-      storageTarget.key,
-      storageTarget.etag,
+      persisted.provider,
+      persisted.bucket,
+      persisted.key,
+      persisted.etag,
       userId || null,
     ],
   );
-  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes, storageProvider: storageTarget.provider };
+  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes, storageProvider: persisted.provider };
 }
 
 async function buildMeasurementPdfBuffer(snapshot, measurement) {
@@ -564,6 +572,22 @@ async function saveImmutableDocumentAttachment(client, {
     fileName,
     hashSha256: encoded.hash,
   });
+  const persisted = await persistAttachmentContent({
+    storagePlan: storageTarget,
+    buffer: Buffer.from(html, "utf8"),
+    contentBase64: encoded.dataUrl,
+    mimeType: "text/html",
+    hashSha256: encoded.hash,
+    fileName,
+    metadata: {
+      ...metadata,
+      formato: "html_historico",
+      hashSha256: encoded.hash,
+      snapshotHashSha256: snapHash,
+      templateCodigo: templateCode,
+      templateVersao: templateVersion,
+    },
+  });
   const attachmentId = makeId("DOC");
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
@@ -577,24 +601,16 @@ async function saveImmutableDocumentAttachment(client, {
       entityId,
       fileName,
       encoded.bytes,
-      encoded.dataUrl,
-      JSON.stringify({
-        ...metadata,
-        formato: "html_historico",
-        hashSha256: encoded.hash,
-        snapshotHashSha256: snapHash,
-        templateCodigo: templateCode,
-        templateVersao: templateVersion,
-        ...buildStorageMetadata(storageTarget),
-      }),
+      persisted.contentBase64,
+      JSON.stringify(persisted.metadata),
       encoded.hash,
       snapHash,
       templateCode,
       templateVersion,
-      storageTarget.provider || "database",
-      storageTarget.bucket || null,
-      storageTarget.key || null,
-      storageTarget.etag || null,
+      persisted.provider,
+      persisted.bucket,
+      persisted.key,
+      persisted.etag,
       userId || null,
     ],
   );
@@ -605,9 +621,9 @@ async function saveImmutableDocumentAttachment(client, {
     bytes: encoded.bytes,
     templateCodigo: templateCode,
     templateVersao: templateVersion,
-    storageProvider: storageTarget.provider || "database",
-    storageBucket: storageTarget.bucket || null,
-    storageKey: storageTarget.key || null,
+    storageProvider: persisted.provider,
+    storageBucket: persisted.bucket,
+    storageKey: persisted.key,
   };
 }
 
@@ -2406,7 +2422,9 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   const requiredPermission = attachmentPermissionFor(attachment.entidade_tipo);
   const granted = new Set(req.auth?.user?.permissoes || []);
   if (!granted.has(requiredPermission)) return res.status(403).json({ error: "Usuario sem permissao para acessar este anexo." });
-  if (!attachment.conteudo_base64 && !attachment.url) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
+  const hasDatabaseContent = Boolean(attachment.conteudo_base64);
+  const hasR2Content = attachment.storage_provider === "r2" && attachment.storage_bucket && attachment.storage_key;
+  if (!hasDatabaseContent && !attachment.url && !hasR2Content) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
   await logAuditEvent(null, req, {
     entityType: "anexo",
     entityId: attachment.id,
@@ -2420,9 +2438,11 @@ app.get("/api/attachments/:id/download", async (req, res) => {
       hashSha256: attachment.hash_sha256,
     },
   });
-  if (attachment.url && !attachment.conteudo_base64) return res.redirect(attachment.url);
+  if (attachment.url && !hasDatabaseContent && !hasR2Content) return res.redirect(attachment.url);
 
-  const decoded = decodeStoredAttachmentContent(attachment.conteudo_base64);
+  const decoded = hasR2Content && !hasDatabaseContent
+    ? await readAttachmentContentFromStorage({ bucket: attachment.storage_bucket, key: attachment.storage_key })
+    : decodeStoredAttachmentContent(attachment.conteudo_base64);
   const mimeType = attachment.mime_type || decoded.mimeType || "application/octet-stream";
   const dispositionType = req.query.download === "1" ? "attachment" : "inline";
   const fileName = String(attachment.nome_arquivo || `${attachment.id}.bin`).replaceAll('"', "");
@@ -2431,6 +2451,7 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   res.setHeader("Content-Length", decoded.buffer.length);
   res.setHeader("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(fileName)}"`);
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Storage-Provider", hasR2Content && !hasDatabaseContent ? "r2" : "database");
   if (attachment.hash_sha256) res.setHeader("X-Document-Hash-Sha256", attachment.hash_sha256);
   res.send(decoded.buffer);
 });
@@ -3361,6 +3382,15 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
       fileName,
       hashSha256: hash,
     });
+    const persisted = await persistAttachmentContent({
+      storagePlan: storageTarget,
+      buffer: Buffer.from(parsed.base64Data, "base64"),
+      contentBase64: dataUrl,
+      mimeType,
+      hashSha256: hash,
+      fileName,
+      metadata: { origem: "arquivo_original_cliente", numero: template.numero, hashSha256: hash },
+    });
     await client.query(
       `INSERT INTO ciperprag_hub.evidencias_anexos
        (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
@@ -3372,13 +3402,13 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
         fileName,
         mimeType,
         parsed.bytes,
-        dataUrl,
-        JSON.stringify({ origem: "arquivo_original_cliente", numero: template.numero, hashSha256: hash, ...buildStorageMetadata(storageTarget) }),
+        persisted.contentBase64,
+        JSON.stringify(persisted.metadata),
         hash,
-        storageTarget.provider,
-        storageTarget.bucket,
-        storageTarget.key,
-        storageTarget.etag,
+        persisted.provider,
+        persisted.bucket,
+        persisted.key,
+        persisted.etag,
         req.auth.user.id,
       ],
     );
@@ -3847,6 +3877,18 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         fileName: fotoFileName,
         hashSha256: fotoHash,
       });
+      const fotoBuffer = parsed.base64Data && parsed.mimeType
+        ? Buffer.from(parsed.base64Data, "base64")
+        : Buffer.from(String(foto), "utf8");
+      const persisted = await persistAttachmentContent({
+        storagePlan: storageTarget,
+        buffer: fotoBuffer,
+        contentBase64: foto,
+        mimeType: parsed.mimeType || "image/jpeg",
+        hashSha256: fotoHash,
+        fileName: fotoFileName,
+        metadata: { origem: "encerramento_os", posicao: index + 1, dataExecucao, hashSha256: fotoHash },
+      });
       await client.query(
         `INSERT INTO ciperprag_hub.evidencias_anexos
          (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, criado_por)
@@ -3857,14 +3899,14 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
           orderId,
           fotoFileName,
           parsed.mimeType || "image/jpeg",
-          parsed.bytes,
-          foto,
-          JSON.stringify({ origem: "encerramento_os", posicao: index + 1, dataExecucao, hashSha256: fotoHash, ...buildStorageMetadata(storageTarget) }),
+          parsed.bytes || fotoBuffer.length,
+          persisted.contentBase64,
+          JSON.stringify(persisted.metadata),
           fotoHash,
-          storageTarget.provider,
-          storageTarget.bucket,
-          storageTarget.key,
-          storageTarget.etag,
+          persisted.provider,
+          persisted.bucket,
+          persisted.key,
+          persisted.etag,
           req.auth.user.id,
         ],
       );

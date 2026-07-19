@@ -1,3 +1,5 @@
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
 const DEFAULT_ENVIRONMENT = "homologacao";
 const DEFAULT_PROVIDER = "database";
 const EXTERNAL_PROVIDER = "r2";
@@ -42,9 +44,33 @@ export function resolveDocumentStorageConfig(env = process.env) {
     requestedProvider,
     activeProvider,
     bucket,
+    accountId: String(env.R2_ACCOUNT_ID || "").trim() || null,
+    accessKeyId: String(env.R2_ACCESS_KEY_ID || "").trim() || null,
+    secretAccessKey: String(env.R2_SECRET_ACCESS_KEY || "").trim() || null,
     plannedProvider: bucket ? EXTERNAL_PROVIDER : null,
     r2Ready,
   };
+}
+
+function createR2Client(config) {
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
+}
+
+async function streamToBuffer(stream) {
+  if (!stream) return Buffer.alloc(0);
+  if (Buffer.isBuffer(stream)) return stream;
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 export function buildTenantObjectKey({
@@ -125,5 +151,104 @@ export function buildStorageMetadata(storagePlan) {
     plannedStorageKey: plan.plannedKey || null,
     requestedStorageProvider: plan.requestedProvider || null,
     storageReady: Boolean(plan.r2Ready),
+  };
+}
+
+export async function persistAttachmentContent({
+  storagePlan,
+  buffer,
+  contentBase64,
+  mimeType,
+  hashSha256,
+  fileName,
+  metadata = {},
+  env = process.env,
+}) {
+  const plan = storagePlan || {};
+  const config = resolveDocumentStorageConfig(env);
+  const contentBuffer = buffer || Buffer.from(String(contentBase64 || ""), "utf8");
+
+  if (plan.activeProvider === EXTERNAL_PROVIDER && plan.plannedBucket && plan.plannedKey && config.r2Ready) {
+    try {
+      const client = createR2Client(config);
+      const response = await client.send(new PutObjectCommand({
+        Bucket: plan.plannedBucket,
+        Key: plan.plannedKey,
+        Body: contentBuffer,
+        ContentType: mimeType || "application/octet-stream",
+        Metadata: {
+          hashsha256: String(hashSha256 || ""),
+          filename: sanitizeStorageSegment(fileName, "arquivo"),
+        },
+      }));
+
+      return {
+        contentBase64: null,
+        provider: EXTERNAL_PROVIDER,
+        bucket: plan.plannedBucket,
+        key: plan.plannedKey,
+        etag: response.ETag || null,
+        metadata: {
+          ...metadata,
+          ...buildStorageMetadata({
+            ...plan,
+            provider: EXTERNAL_PROVIDER,
+            bucket: plan.plannedBucket,
+            key: plan.plannedKey,
+            etag: response.ETag || null,
+          }),
+          storageUpload: "r2",
+        },
+      };
+    } catch (error) {
+      return {
+        contentBase64,
+        provider: DEFAULT_PROVIDER,
+        bucket: null,
+        key: null,
+        etag: null,
+        metadata: {
+          ...metadata,
+          ...buildStorageMetadata(plan),
+          storageUpload: "fallback_database",
+          storageUploadError: String(error?.message || error || "erro_desconhecido").slice(0, 300),
+        },
+      };
+    }
+  }
+
+  return {
+    contentBase64,
+    provider: DEFAULT_PROVIDER,
+    bucket: null,
+    key: null,
+    etag: null,
+    metadata: {
+      ...metadata,
+      ...buildStorageMetadata(plan),
+      storageUpload: "database",
+    },
+  };
+}
+
+export async function readAttachmentContentFromStorage({ bucket, key, env = process.env }) {
+  const config = resolveDocumentStorageConfig(env);
+  if (!config.r2Ready) {
+    const error = new Error("Storage R2 nao configurado para leitura.");
+    error.status = 503;
+    throw error;
+  }
+  if (!bucket || !key) {
+    const error = new Error("Objeto R2 sem bucket ou chave.");
+    error.status = 404;
+    throw error;
+  }
+
+  const client = createR2Client(config);
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  return {
+    buffer: await streamToBuffer(response.Body),
+    mimeType: response.ContentType || null,
+    etag: response.ETag || null,
   };
 }

@@ -52,7 +52,7 @@ R2_SECRET_ACCESS_KEY=
 
 ## Decisão de segurança
 
-Mesmo que um bucket R2 esteja informado, o provider ativo continua `database` até a etapa de upload/download real ser implementada e validada. Isso evita registrar `storage_provider = r2` sem o arquivo existir no objeto externo.
+Atualização em 19/07/2026: o upload/download real foi implementado em `server/storage.mjs`. Mesmo assim, o provider ativo continua `database` quando as credenciais R2 não estiverem completas ou quando o upload falhar. Isso evita registrar `storage_provider = r2` sem o arquivo existir no objeto externo.
 
 Enquanto isso, os metadados recebem:
 
@@ -65,9 +65,7 @@ Enquanto isso, os metadados recebem:
 
 ## Pendências
 
-- Implementar upload real para R2 via credenciais por ambiente.
-- Implementar download/redirect seguro a partir do objeto externo.
-- Definir política de URL assinada ou proxy autenticado por permissão.
+- Configurar credenciais reais do bucket de homologação quando disponíveis.
+- Executar teste real de upload/download no R2 de homologação.
 - Criar rotina de migração dos anexos já existentes no banco.
 - Validar isolamento tri-tenant com Ciperprag, tenant demonstração e tenant sem identidade visual.
-

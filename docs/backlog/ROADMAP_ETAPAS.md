@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando storage/R2 por tenant e revisao de anexos/documentos imutaveis.
+- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando migracao controlada dos anexos antigos para R2 e validacao tri-tenant.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 45.
 - Itens fora de etapa: 0.
@@ -227,6 +227,7 @@ Entregue inicialmente em homologacao:
 - Renderizadores ativos de documentos passaram a resolver logo documental por configuracao/snapshot do tenant, sem fallback fixo da Ciperprag: propostas, contratos/minutas, OS, certificados, medicoes e relatorios tecnicos.
 - Auditoria de dependencias concluida em duas rodadas controladas: `npm audit fix` reduziu os achados sem `--force`; depois o toolchain foi atualizado para Vite 8.1.5, Vitest 4.1.10 e plugin React SWC 4.3.1; Browserslist/caniuse-lite foi atualizado via `npm update`; `npm audit` completo ficou zerado.
 - Fundacao de storage documental por tenant criada: anexos e documentos imutaveis passam a registrar plano R2 deterministico por ambiente/tenant/entidade/categoria/hash, mantendo o banco como provider ativo em homologacao ate existir upload/download real validado.
+- Upload e download R2 implementados no backend via API S3 compativel da Cloudflare, com proxy autenticado pela rota de anexos, hash/metadados preservados e fallback automatico para banco caso o ambiente nao tenha credenciais completas ou o envio falhe.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -236,7 +237,7 @@ Backlog da Etapa 8: 37 itens.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
-- Concluir storage externo R2 ou filesystem controlado para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash ja foi criada e aplicada aos novos metadados; falta upload real, download seguro, migracao dos anexos existentes e teste tri-tenant.
+- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real e o download autenticado ja foram implementados; falta migracao dos anexos existentes, teste com credenciais reais em homologacao e validacao tri-tenant.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.

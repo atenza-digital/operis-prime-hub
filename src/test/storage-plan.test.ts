@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTenantObjectKey, createAttachmentStoragePlan, resolveDocumentStorageConfig, sanitizeStorageSegment } from "../../server/storage.mjs";
+import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveDocumentStorageConfig, sanitizeStorageSegment } from "../../server/storage.mjs";
 
 describe("document storage planning", () => {
   it("normaliza segmentos para chaves seguras e previsiveis", () => {
@@ -54,5 +54,50 @@ describe("document storage planning", () => {
     expect(config.activeProvider).toBe("database");
     expect(config.plannedProvider).toBe("r2");
     expect(config.r2Ready).toBe(false);
+  });
+
+  it("ativa R2 somente quando bucket e credenciais estao completos", () => {
+    const config = resolveDocumentStorageConfig({
+      DOCUMENT_STORAGE_PROVIDER: "r2",
+      RUNTIME_ENV: "homologacao",
+      R2_BUCKET_DOCUMENTS: "fieldops-homologacao-docs",
+      R2_ACCOUNT_ID: "account-id",
+      R2_ACCESS_KEY_ID: "access-key",
+      R2_SECRET_ACCESS_KEY: "secret-key",
+    });
+
+    expect(config.activeProvider).toBe("r2");
+    expect(config.r2Ready).toBe(true);
+  });
+
+  it("mantem conteudo no banco quando R2 nao esta pronto", async () => {
+    const env = {
+      DOCUMENT_STORAGE_PROVIDER: "r2",
+      RUNTIME_ENV: "homologacao",
+      R2_BUCKET_DOCUMENTS: "fieldops-homologacao-docs",
+    };
+    const plan = createAttachmentStoragePlan({
+      tenantSlug: "ciperprag",
+      entityType: "proposta",
+      entityId: "PC-001",
+      category: "documento",
+      fileName: "proposta.html",
+      hashSha256: "ABCDEF1234567890",
+      env,
+    });
+    const persisted = await persistAttachmentContent({
+      storagePlan: plan,
+      contentBase64: "data:text/html;base64,PGgxPk9LPC9oMT4=",
+      mimeType: "text/html",
+      hashSha256: "ABCDEF1234567890",
+      fileName: "proposta.html",
+      metadata: { origem: "teste" },
+      env,
+    });
+
+    expect(persisted.provider).toBe("database");
+    expect(persisted.contentBase64).toBe("data:text/html;base64,PGgxPk9LPC9oMT4=");
+    expect(persisted.metadata.storageUpload).toBe("database");
+    expect(persisted.metadata.plannedStorageProvider).toBe("r2");
   });
 });

@@ -28,6 +28,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1090.0",
     "@fontsource/montserrat": "^5.2.8",
     "@fontsource/noto-sans": "^5.2.10",
     "@hookform/resolvers": "^3.10.0",
