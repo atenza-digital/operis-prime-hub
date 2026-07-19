@@ -180,6 +180,7 @@ Entregue ate agora:
 - Auditoria final de fontes documentais por lote aprovada para os PDFs representativos de proposta, contrato, OS, certificado, relatorio tecnico e medicao, com relatorio em `docs/evidencias/etapa7_homologacao/auditoria-fontes-documentais.md`.
 - Roteiro consolidado de validacao final para Tarcisio gerado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.1.docx`, com URL oficial de homologacao, perfis de teste, referencias documentais, checklist por perfil e registro de divergencias no proprio arquivo.
 - Relatorio executivo de prontidao P0 gerado em `docs/cliente/relatorios_homologacao/Relatorio_Prontidao_P0_Atenza_FieldOps_v1.0.docx`, consolidando status por frente, evidencias, bloqueios para producao e proxima acao sugerida para a homologacao assistida.
+- Matriz de triagem de divergencias P0 criada em `docs/cliente/relatorios_homologacao/Matriz_Triagem_Divergencias_Homologacao_P0_v1.0.xlsx`, com abas de resumo, triagem, criterios e referencias para classificar os retornos do Tarcisio/equipe sem deixar itens fora do roadmap.
 
 Backlog da Etapa 7: 8 itens.
 
