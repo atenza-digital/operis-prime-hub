@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Briefcase, FileSignature, LogOut, Settings, Users } from "lucide-react";
-import logoImg from "@/assets/logo_ciperprag.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,16 +22,21 @@ const meta: Record<string, { title: string; description: string }> = {
 
 export default function ComercialLayout({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
-  const { logout, hasPermission } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
   const current = meta[pathname] ?? meta["/comercial/clientes"];
   const visibleNavItems = navItems.filter((item) => hasPermission(item.permission));
+  const tenantLogoSrc = user?.tenant.logoInterfaceUrl || user?.tenant.logoUrl || "";
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,_rgba(248,248,246,1),_rgba(243,245,242,1))]">
       <header className="sticky top-0 z-40 border-b bg-surface-dark text-surface-dark-foreground print:hidden">
         <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <img src={logoImg} alt="Ciperprag" className="h-9 object-contain" />
+            {tenantLogoSrc ? (
+              <img src={tenantLogoSrc} alt={`Logo ${user?.tenant.nome || "do tenant"}`} className="h-9 object-contain" />
+            ) : (
+              <div className="rounded-xl border border-white/10 px-3 py-2 text-sm font-black text-white">{user?.tenant.nome || PRODUCT_NAME}</div>
+            )}
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{PRODUCT_NAME}</p>
               <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-surface-dark-foreground/40">{APP_VERSION_LABEL}</p>

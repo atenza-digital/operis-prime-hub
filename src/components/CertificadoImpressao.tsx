@@ -1,8 +1,4 @@
 ﻿import { addDays, getBootstrap, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
-import logoCiperprag from "@/assets/logo_ciperprag_certificado.png";
-import brasaoPrefeitura from "@/assets/brasao_prefeitura_parauapebas.png";
-import assinaturaCiperprag from "@/assets/assinatura_certificado.png";
-import iconeLateralCiperprag from "@/assets/icone_lateral_certificado.png";
 import templateCertificado from "@/template_certificado_dinamico.html?raw";
 import { montserratDocumentFontFaces } from "@/lib/documentFontFaces";
 import QRCode from "qrcode";
@@ -10,9 +6,6 @@ import QRCode from "qrcode";
 type RecordLike = Record<string, unknown>;
 type LicenseItem = { titulo?: string; valor?: string };
 type EvidencePhoto = { src: string; legenda?: string };
-
-const CIPERPRAG_CNPJ = "15.722.292/0001-43";
-const FIELDOPS_PUBLIC_BASE_URL = "https://fieldops-homologacao.atenza.digital";
 
 function fmtDate(date: string) {
   if (!date) return "-";
@@ -69,17 +62,6 @@ function asLicenses(value: unknown): LicenseItem[] {
 
 function snapshotSection(cert: CertificadoApp, section: string) {
   return asRecord(cert.snapshotDados?.[section]);
-}
-
-function normalizeText(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-}
-
-function isCiperpragTenant(company: EmpresaConfig | null, snapshotEmpresa: RecordLike) {
-  const slug = firstText(company?.tenantSlug, snapshotEmpresa.tenantSlug);
-  const cnpj = firstText(snapshotEmpresa.cnpj, company?.cnpj);
-  const name = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia);
-  return slug === "ciperprag" || cnpj === CIPERPRAG_CNPJ || normalizeText(name).includes("ciperprag");
 }
 
 function buildShortPublicCode(hash: string) {
@@ -151,10 +133,10 @@ function buildVerificationUrl(publicCode: string, publicBaseUrl: string) {
   return `${cleanBase}/validar-certificado/${encodeURIComponent(publicCode)}`;
 }
 
-function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike, isCiperprag: boolean) {
+function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const safeOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(origin) ? "" : origin;
-  return firstText(config.publicBaseUrl, snapshotCertificado.publicBaseUrl, safeOrigin, isCiperprag ? FIELDOPS_PUBLIC_BASE_URL : "");
+  return firstText(config.publicBaseUrl, snapshotCertificado.publicBaseUrl, safeOrigin);
 }
 
 function toBase64Img(url: string): Promise<string> {
@@ -343,7 +325,7 @@ function normalizePhotos(fotos: string[], legends: string[]): EvidencePhoto[] {
   return fotos.map((src, index) => ({ src, legenda: firstText(legends[index]) })).filter((foto) => isValidEvidenceImage(foto.src));
 }
 
-function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snapshotEmpresa: RecordLike, config: RecordLike, isCiperprag: boolean) {
+function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snapshotEmpresa: RecordLike, config: RecordLike) {
   const configured = asLicenses(config.licencas);
   if (configured.length) return configured;
   const snapshotLicenses = asLicenses(snapshotEmpresa.licencas);
@@ -359,18 +341,7 @@ function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snap
     { titulo: "VIG. SANITÁRIA", valor: firstText(snapshotEmpresa.vigilanciaSanitaria, company?.vigilanciaSanitaria) },
   ].filter((item) => item.valor);
 
-  if (fromFields.length > 1) return fromFields;
-  if (!isCiperprag) return fromFields;
-
-  return [
-    { titulo: "CERTIFICADO", valor: cert.numero },
-    { titulo: "MTRR", valor: "151012245873" },
-    { titulo: "MEIO AMBIENTE", valor: "Nº102/2024" },
-    { titulo: "C.R.02", valor: "1611984/2025" },
-    { titulo: "CTR02", valor: "1657521/2024" },
-    { titulo: "ALVARÁ", valor: "00060/2025" },
-    { titulo: "VIG. SANITÁRIA", valor: "VSP-2025-4432" },
-  ];
+  return fromFields;
 }
 
 export async function imprimirCertificado(cert: CertificadoApp) {
@@ -385,7 +356,6 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const currentConfig = asRecord(company?.certificadoConfig);
   const snapshotConfig = asRecord(snapshotEmpresa.certificadoConfig);
   const config = { ...currentConfig, ...snapshotConfig };
-  const isCiperprag = isCiperpragTenant(company, snapshotEmpresa);
 
   const customer = bootstrap.clients.find(
     (item) =>
@@ -402,11 +372,11 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const tagTexto = firstText(snapshotOs.tagEquipamentoServico, os?.tagEquipamentoServico);
   const servicoNome = firstText(snapshotServico.nome, cert.servico);
   const servicoTexto = tagTexto ? `${servicoNome} - ${tagTexto}` : servicoNome;
-  const empresaNome = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia, isCiperprag ? "CIPERPRAG SERVIÇOS LTDA" : "");
-  const primaryColor = firstText(config.corPrimaria, company?.corPrimaria, isCiperprag ? "#169556" : "#0f766e");
+  const empresaNome = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia);
+  const primaryColor = firstText(config.corPrimaria, company?.corPrimaria, "#0f766e");
   const secondaryColor = firstText(config.corSecundaria, company?.corSecundaria, "#6f9dd3");
   const accentColor = firstText(config.corDestaque, company?.corDestaque, "#df2027");
-  const publicBaseUrl = resolvePublicBaseUrl(config, snapshotCertificado, isCiperprag);
+  const publicBaseUrl = resolvePublicBaseUrl(config, snapshotCertificado);
   const certificateDocument = asRecord((cert as CertificadoApp & { documento?: RecordLike }).documento);
   const persistedSha256 = firstText(
     snapshotCertificado.hashSha256,
@@ -438,7 +408,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const evidencias = normalizePhotos(fotos, fotoLegendas);
   const exibirFotos = firstBool(true, config.exibirFotos);
   const exibirProdutos = firstBool(true, config.exibirProdutosQuimicos);
-  const licencas = buildLicenses(cert, company, snapshotEmpresa, config, isCiperprag);
+  const licencas = buildLicenses(cert, company, snapshotEmpresa, config);
   const validadeDias = Number(cert.validadeDias || 0);
   const exibirValidade = validadeDias > 0 && firstBool(true, config.exibirValidade, config.exibirPeriodoValidade);
   const validadeTexto = buildValidityText(cert.dataExecucao, validadeDias);
@@ -460,21 +430,20 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     snapshotEmpresa.logoPrincipalUrl,
     snapshotEmpresa.logoUrl,
     company?.logoUrl,
-    isCiperprag ? logoCiperprag : "",
   );
   const logoSrc = await toBase64Img(logoPrincipalUrl);
-  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl, isCiperprag ? iconeLateralCiperprag : "");
+  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl);
   const arteFundoSrc = await toBase64Img(arteFundoUrl);
-  const seloUrl = firstText(config.seloInstitucionalUrl, isCiperprag ? brasaoPrefeitura : "");
+  const seloUrl = firstText(config.seloInstitucionalUrl, snapshotEmpresa.seloInstitucionalUrl);
   const seloSrc = await toBase64Img(seloUrl);
-  const assinaturaUrl = firstText(config.assinaturaUrl, isCiperprag ? assinaturaCiperprag : "");
+  const assinaturaUrl = firstText(config.assinaturaUrl, snapshotEmpresa.assinaturaUrl, snapshotCertificado.assinaturaUrl);
   const assinaturaSrc = await toBase64Img(assinaturaUrl);
   const assinaturaDocumentos = asRecord(config.assinaturaDocumentos);
   const assinaturaModo = firstText(assinaturaDocumentos.certificado, config.assinaturaModo, assinaturaSrc ? "imagem" : "linha");
   const responsavelObrigatorio = firstBool(true, config.responsavelTecnicoObrigatorio);
-  const responsavel = firstText(config.responsavelTecnico, snapshotEmpresa.responsavelTecnico, company?.responsavelTecnico, company?.responsavelExecucao, isCiperprag ? "Aline Costa Vieira" : "");
-  const cargo = firstText(config.cargoResponsavel, snapshotEmpresa.cargoResponsavel, company?.cargoResponsavel, isCiperprag ? "Diretora / Resp. Técnico" : "");
-  const registro = firstText(config.registroProfissional, snapshotEmpresa.registroProfissional, isCiperprag ? "CRT02-87963930253" : "");
+  const responsavel = firstText(config.responsavelTecnico, snapshotEmpresa.responsavelTecnico, company?.responsavelTecnico, company?.responsavelExecucao);
+  const cargo = firstText(config.cargoResponsavel, snapshotEmpresa.cargoResponsavel, company?.cargoResponsavel);
+  const registro = firstText(config.registroProfissional, snapshotEmpresa.registroProfissional);
   if (responsavelObrigatorio && !responsavel) {
     window.alert("Este certificado exige responsável técnico configurado antes da emissão.");
     return;
@@ -483,19 +452,14 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     window.alert("Este certificado exige assinatura configurada antes da emissão.");
     return;
   }
-  const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia, isCiperprag ? "CIT - CENTRO DE INFORMAÇÕES TOXICOLÓGICAS DE BELÉM: 0800-7226001" : "");
+  const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia);
   const rodapeLinhas = asStringArray(config.rodapeLinhas);
   const defaultRodape = [
     empresaNome && company?.cnpj ? `${empresaNome} CNPJ: ${company.cnpj}` : empresaNome,
     firstText(snapshotEmpresa.endereco, company?.endereco),
     [company?.telefone, company?.email].filter(Boolean).join(" | "),
   ].filter(Boolean);
-  const ciperpragRodape = [
-    "CIPERPRAG SERVIÇOS LTDA CNPJ: 15.722.292/0001-43",
-    "Rua Topázio Qd 11 Lote 03, Vale dos Carajás, Parauapebas - PA",
-    "Rua Tiradentes, nº 190 - Centro, Rondon do Pará - PA",
-  ];
-  const footerLines = rodapeLinhas.length ? rodapeLinhas : isCiperprag ? ciperpragRodape : defaultRodape;
+  const footerLines = rodapeLinhas.length ? rodapeLinhas : defaultRodape;
   const certificadoReferencia = renderCertificateReference(cert.numero);
   const osReferencia = renderOsReference(firstText(cert.osNumero, os?.numero, snapshotOs.numero));
   const traceabilityText = [certificadoReferencia, osReferencia, `Execução: ${fmtDate(cert.dataExecucao)}`].filter(Boolean).join(" • ");

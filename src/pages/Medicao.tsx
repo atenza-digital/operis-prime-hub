@@ -271,6 +271,59 @@ function sanitizeHexColor(value: unknown, fallback: string) {
   return /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(color) ? color : fallback;
 }
 
+function companyDocumentConfig(company?: BootstrapData["companyConfig"] | null) {
+  const config = company?.certificadoConfig;
+  return config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+}
+
+function companyDocumentLogo(company?: BootstrapData["companyConfig"] | null) {
+  const config = companyDocumentConfig(company);
+  return textFrom(config.documentLogoLightUrl) || textFrom(config.logoPrincipalUrl) || textFrom(company?.logoUrl);
+}
+
+function parseCityStateFromAddress(address?: string | null) {
+  const text = textFrom(address);
+  const stateMatch = text.match(/(?:-|\/)\s*([A-Z]{2})\b/);
+  const state = stateMatch?.[1] || "";
+  const city = stateMatch?.index !== undefined
+    ? text
+        .slice(0, stateMatch.index)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .at(-1) || ""
+    : "";
+  return { city, state };
+}
+
+function formatLongDateBr(date: Date, timeZone: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone }).format(date);
+}
+
+function measurementIssuePlaceDate(measurement: MedicaoApp, company?: BootstrapData["companyConfig"] | null) {
+  const snapshot = measurement.snapshotDados ?? {};
+  const config = companyDocumentConfig(company);
+  const parsedAddress = parseCityStateFromAddress(company?.endereco);
+  const timeZone = textFrom((snapshot as Record<string, unknown>).timezone) || textFrom(config.timezone) || "America/Fortaleza";
+  const city =
+    textFrom((snapshot as Record<string, unknown>).issueCity) ||
+    textFrom(config.issueCity) ||
+    textFrom(config.cidadeDocumental) ||
+    parsedAddress.city;
+  const state =
+    textFrom((snapshot as Record<string, unknown>).issueState) ||
+    textFrom(config.issueState) ||
+    textFrom(config.ufDocumental) ||
+    parsedAddress.state;
+  const issuedAtRaw =
+    textFrom((snapshot as Record<string, unknown>).issuedAt) ||
+    textFrom((snapshot as Record<string, unknown>).acceptedAt) ||
+    measurement.criadoEm;
+  const issuedAt = new Date(issuedAtRaw || Date.now());
+  if (!city || !state || Number.isNaN(issuedAt.getTime())) return "";
+  return `${city} - ${state}, ${formatLongDateBr(issuedAt, timeZone)}.`;
+}
+
 function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data: BootstrapData | null }) {
   const company = data?.companyConfig;
   const today = new Date(measurement.criadoEm || Date.now());
@@ -281,6 +334,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
   const trackingCode = `${measurement.id}-${measurement.numero}`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24).toUpperCase();
   const companyName = company?.razaoSocial || company?.nomeFantasia || "Empresa emissora";
   const companyCnpj = company?.cnpj || "-";
+  const logoSrc = companyDocumentLogo(company);
 
   return (
     <div className="document-print-root measurement-print-root bg-[#f1f5f9] p-0 text-slate-950 print:m-0 print:p-0">
@@ -293,8 +347,8 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
         <div className="relative z-10 flex w-full flex-col p-[12mm] pl-[18mm]">
           <div className="grid grid-cols-[1fr_1.2fr_0.85fr] gap-5">
             <div className="rounded-3xl border border-white/70 bg-white/95 p-4 shadow-sm">
-              {company?.logoUrl ? (
-                <img src={company.logoUrl} alt={companyName} className="h-14 w-48 object-contain object-left" />
+              {logoSrc ? (
+                <img src={logoSrc} alt={companyName} className="h-14 w-48 object-contain object-left" />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-lg font-black text-slate-700">
                   {getInitials(companyName)}
@@ -472,13 +526,15 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
   const contractIds = [...new Set(measurement.itens.map((item) => item.contratoId).filter(Boolean))];
   const unitSummary = measurementUnitSummary(measurement.itens);
   const partialLabel = measurementPartialLabel(measurement);
-  const trackingCode = `${measurement.id}-${measurement.numero}`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 28).toUpperCase();
   const companyName = company?.razaoSocial || company?.nomeFantasia || "Empresa emissora";
   const companyDisplayName = company?.nomeFantasia || companyName;
   const snapshot = measurement.snapshotDados ?? {};
   const issuerSnapshot = typeof snapshot === "object" && snapshot && "emissor" in snapshot ? (snapshot.emissor as Record<string, unknown>) : null;
   const issuerName = textFrom(issuerSnapshot?.nome) || company?.responsavelExecucao || company?.responsavelTecnico || textFrom(emittedBy?.name) || "";
   const issuerRole = textFrom(issuerSnapshot?.cargo) || company?.cargoResponsavel || textFrom(emittedBy?.role) || "Responsável pela emissão";
+  const logoSrc = companyDocumentLogo(company);
+  const traceabilityLabel = `${measurement.numero} • Revisão ${textFrom((snapshot as Record<string, unknown>)?.revisao) || "1"} • Página 1 de 1`;
+  const issuePlaceDate = measurementIssuePlaceDate(measurement, company);
   const observationText =
     textFrom((snapshot as Record<string, unknown>)?.observacao) ||
     "Valores consolidados conforme serviços executados, contratos vigentes e período selecionado na emissão da medição.";
@@ -501,8 +557,8 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
 
         <header className="measurement-header mt-4 grid grid-cols-[1fr_0.95fr] gap-8 border-b border-slate-200 pb-4">
           <div className="min-w-0">
-            {company?.logoUrl ? (
-              <img src={company.logoUrl} alt={companyDisplayName} className="h-11 w-44 object-contain object-left" />
+            {logoSrc ? (
+              <img src={logoSrc} alt={companyDisplayName} className="h-11 w-44 object-contain object-left" />
             ) : (
               <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base font-black text-[var(--measurement-primary)]">
                 {getInitials(companyDisplayName)}
@@ -526,7 +582,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[9px] font-semibold text-slate-500">Código da medição</p>
-                  <h1 className="mt-1 break-words text-base font-black leading-snug tracking-tight">{measurement.numero}</h1>
+                  <h1 className="mt-1 whitespace-nowrap text-[15px] font-black leading-tight tracking-tight">{measurement.numero}</h1>
                 </div>
                 <span className="shrink-0 rounded-full border border-[var(--measurement-primary)]/30 bg-white px-2.5 py-1 text-[9px] font-bold uppercase text-[var(--measurement-primary)]">
                   {partialLabel || measurement.status}
@@ -653,6 +709,9 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
         </section>
 
         <section className="measurement-signatures mt-3 grid grid-cols-2 gap-4 text-[10.5px]">
+          {issuePlaceDate ? (
+            <p className="col-span-2 text-right text-[10.5px] font-medium text-slate-700">{issuePlaceDate}</p>
+          ) : null}
           <div className="measurement-signature-box min-h-24 rounded-xl border border-slate-200 p-3.5">
             <p className="font-bold text-slate-600">Responsável pela emissão</p>
             <div className="mt-7 border-t border-slate-300 pt-2 font-bold">{issuerName || "Nome do responsável"}</div>
@@ -664,8 +723,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
             <p className="text-slate-500">Conferência dos serviços e valores medidos</p>
           </div>
           <footer className="col-span-2 border-t border-slate-200 pt-2 text-[9.5px] leading-relaxed text-slate-500">
-            <p className="font-bold text-slate-700">Rastreabilidade</p>
-            <p className="mt-1"><span className="font-semibold text-slate-700">Código interno:</span> <span className="font-mono font-bold text-slate-900">{trackingCode}</span> - Código interno para conferência e rastreabilidade da medição.</p>
+            <p className="font-semibold text-slate-600">{traceabilityLabel}</p>
           </footer>
         </section>
       </section>

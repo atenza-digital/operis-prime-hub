@@ -23,7 +23,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import tenantLogoFallback from "@/assets/logo_ciperprag_sidebar.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -278,7 +277,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
 
   const currentMeta = useMemo(() => routeMeta[location.pathname] ?? routeMeta["/"], [location.pathname]);
-  const tenantLogoSrc = user?.tenant.logoInterfaceUrl || user?.tenant.logoUrl || tenantLogoFallback;
+  const tenantLogoSrc = user?.tenant.logoInterfaceUrl || user?.tenant.logoUrl || "";
   const tenantIconSrc = user?.tenant.brandIconUrl || "/favicon.png";
   const tenantLogoAlt = user?.tenant.nome ? `Logo ${user.tenant.nome}` : "Logo do tenant";
   const firstName = user?.nome?.split(" ")[0] || "usuário";
@@ -294,11 +293,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className={cn("flex min-h-[92px] items-center border-b border-white/10", collapsed ? "justify-center px-2" : "justify-between gap-3 px-4")}>
-          <img
-            src={collapsed ? tenantIconSrc : tenantLogoSrc}
-            alt={tenantLogoAlt}
-            className={cn("object-contain drop-shadow-sm", collapsed ? "h-10 w-10 rounded-full" : "max-h-12 w-[188px]")}
-          />
+          {collapsed || tenantLogoSrc ? (
+            <img
+              src={collapsed ? tenantIconSrc : tenantLogoSrc}
+              alt={tenantLogoAlt}
+              className={cn("object-contain drop-shadow-sm", collapsed ? "h-10 w-10 rounded-full" : "max-h-12 w-[188px]")}
+            />
+          ) : (
+            <div className="min-w-0 rounded-2xl border border-white/10 px-3 py-2">
+              <p className="truncate text-sm font-black text-white">{user?.tenant.nome || PRODUCT_NAME}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">Tenant</p>
+            </div>
+          )}
           {!collapsed ? (
             <button
               onClick={() => setCollapsed(true)}

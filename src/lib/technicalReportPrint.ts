@@ -1,4 +1,3 @@
-import tenantLogoFallback from "@/assets/logo_ciperprag.png";
 import { montserratDocumentFontFaces } from "@/lib/documentFontFaces";
 import { formatDateBr } from "@/lib/formatters";
 import { repairMojibake } from "@/lib/repairMojibake";
@@ -31,10 +30,14 @@ function getCompanyLogo(company?: EmpresaConfig | null) {
   return (
     company?.certificadoConfig?.documentLogoLightUrl ||
     company?.certificadoConfig?.logoPrincipalUrl ||
-    company?.certificadoConfig?.logoInterfaceUrl ||
     company?.logoUrl ||
-    tenantLogoFallback
+    ""
   );
+}
+
+function renderCompanyLogo(logoSrc: string, companyName: string) {
+  if (logoSrc) return `<img class="logo" src="${escapeHtml(logoSrc)}" alt="Logo ${escapeHtml(companyName || "da empresa emissora")}" />`;
+  return `<div class="logo-fallback">${escapeHtml(companyName || "Empresa emissora")}</div>`;
 }
 
 function getPrimaryColor(company?: EmpresaConfig | null) {
@@ -149,6 +152,20 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
       max-height: 19mm;
       object-fit: contain;
       object-position: left center;
+    }
+    .logo-fallback {
+      display: flex;
+      min-height: 14mm;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d8e1e8;
+      border-radius: 10px;
+      padding: 2mm 3mm;
+      color: #172033;
+      font-size: 9pt;
+      font-weight: 800;
+      text-align: center;
+      text-transform: uppercase;
     }
     .doc-kicker {
       color: ${primary};
@@ -315,7 +332,7 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
 <body>
   <main class="page">
     <header class="doc-header">
-      <img class="logo" src="${escapeHtml(companyLogo)}" alt="Logo ${escapeHtml(company?.nomeFantasia || company?.tenantNome || "do tenant")}" />
+      ${renderCompanyLogo(companyLogo, company?.nomeFantasia || company?.razaoSocial || company?.tenantNome || "Empresa emissora")}
       <div>
         <div class="doc-kicker">Documento operacional</div>
         <h1>${title}</h1>

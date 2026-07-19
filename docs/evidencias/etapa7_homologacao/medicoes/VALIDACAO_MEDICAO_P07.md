@@ -2,7 +2,7 @@
 
 Arquivo PDF: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2026-a4-retrato.pdf`
 
-Render PDF: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2026-pdf-render-1.png`
+Render PDF: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2026-pdf-render.png`
 
 Screenshot da tela: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2026-tela.png`
 
@@ -14,6 +14,10 @@ Screenshot da tela: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2
 - Texto selecionável: sim.
 - Página vazia ou quase vazia: não encontrada.
 - Assinaturas e rastreabilidade: permanecem na mesma página do total geral no cenário de 5 itens.
+- Código da medição: `MED-VALIDACAO/2026` permanece em uma única linha.
+- Local/data antes das assinaturas: `Parauapebas - PA, 19 de julho de 2026.`
+- Rastreabilidade visível: `MED-VALIDACAO/2026 • Revisão 1 • Página 1 de 1`.
+- IDs técnicos completos: não aparecem no rodapé visível; ficam restritos a banco, auditoria e metadados.
 
 ## Checks do complemento de medição
 
@@ -26,9 +30,23 @@ Screenshot da tela: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2
 - Usuário de homologação/Atenza: não aparece como responsável no PDF.
 - Texto `Gerado pelo Atenza FieldOps`: não aparece no documento.
 - Condição de pagamento: usa texto da medição/contrato da amostra, sem hardcode de boleto obrigatório.
+- Logo documental: resolvida por `documentLogoLightUrl`/`logoPrincipalUrl`/`logoUrl` do tenant ou snapshot, sem fallback fixo de outro tenant.
+
+## Validações executadas
+
+- `node scripts/audit-document-assets.mjs`
+- `npm run lint`
+- `npm run test`
+- `npm run build`
+- `node scripts/render-measurement-evidence.mjs` contra frontend local atualizado em `http://127.0.0.1:8091`
+- `pdfinfo` no PDF gerado
+- Renderização do PDF em PNG via `pdftoppm`
+- Inspeção visual do PNG renderizado
+- Extração de texto com `pypdf`
 
 ## Observações
 
-- A evidência foi gerada pela tela real de Medição no ambiente local de desenvolvimento, com frontend atual em `http://127.0.0.1:8091`.
+- A evidência foi gerada pela tela real de Medição no ambiente local de desenvolvimento.
+- A variável global `DATABASE_URL` da sessão apontava para a VPS e foi limpa durante a geração para usar o Postgres local do Docker (`127.0.0.1:5432`).
 - A proteção contra duplicidade foi reforçada no banco por `tenant_id + os_id`, evitando sombreamento entre medições ativas do mesmo tenant.
-- Os itens de infraestrutura de produção, como PDF server-side definitivo, R2 imutável, revisão/substituição completa e permissões granulares por valor, permanecem planejados na etapa de fundação/hardening.
+- Infraestrutura de produção, como PDF server-side definitivo, R2 imutável, revisão/substituição completa e matriz tri-tenant com assets versionados, permanece planejada na etapa de hardening SaaS.

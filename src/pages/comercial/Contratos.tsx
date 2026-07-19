@@ -10,7 +10,6 @@ import {
   type ContratoServico,
   type ContratoTemplate,
 } from "@/lib/api";
-import logoImg from "@/assets/logo_ciperprag.png";
 import { repairMojibake } from "@/lib/repairMojibake";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -131,6 +130,11 @@ function buildTenantLogoFallback(companyName: string, primaryColor: string) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function documentLogoFromCompany(company: BootstrapData["companyConfig"]) {
+  const config = company?.certificadoConfig ?? {};
+  return config.documentLogoLightUrl || config.logoPrincipalUrl || company?.logoUrl || "";
+}
+
 function resolveIssuePlace(item: { issueCity?: string | null; issueState?: string | null }, company: { endereco?: string | null } | null | undefined) {
   const address = repairMojibake(String(company?.endereco || ""));
   const stateMatch = address.match(/[-/]\s*([A-Z]{2})\b/);
@@ -196,7 +200,7 @@ function ProposalDocumentPrint({ item, client, services, company, logoSrc, docum
     <section className="mx-auto flex min-h-[297mm] w-[210mm] flex-col bg-white px-[14mm] py-[12mm] font-document text-[10px] leading-snug text-black">
       <header className="border-b-2 pb-4" style={{ borderColor: primaryColor }}>
         <div className="flex items-start justify-between gap-8">
-          <img src={logoSrc || logoImg} alt={companyName} className="h-16 w-48 object-contain object-left" />
+          <img src={logoSrc || buildTenantLogoFallback(companyName, primaryColor)} alt={companyName} className="h-16 w-48 object-contain object-left" />
           <div className="max-w-[270px] text-right text-[9px] leading-relaxed text-slate-600">
             <p className="font-bold uppercase text-black">{companyName}</p>
             {company?.cnpj ? <p>CNPJ {company.cnpj}</p> : null}
@@ -1084,7 +1088,7 @@ export default function Contratos() {
                 client={pdfClient}
                 services={services}
                 company={companyConfig}
-                logoSrc={companyConfig?.logoUrl || ""}
+                logoSrc={documentLogoFromCompany(companyConfig)}
                 documentDate={documentDate}
                 primaryColor={commercialPrimary}
                 representativeName={representativeName}
@@ -1097,7 +1101,7 @@ export default function Contratos() {
                   client={pdfClient}
                   services={services}
                   company={companyConfig}
-                  logoSrc={companyConfig?.logoUrl || ""}
+                  logoSrc={documentLogoFromCompany(companyConfig)}
                   documentDate={documentDate}
                   primaryColor={commercialPrimary}
                   representativeName={representativeName}

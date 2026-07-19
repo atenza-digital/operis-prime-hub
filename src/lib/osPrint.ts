@@ -1,4 +1,3 @@
-import logoCiperprag from "@/assets/logo_ciperprag.png";
 import { repairMojibake } from "@/lib/repairMojibake";
 import type { BootstrapData, Contrato, OSApp, ServicoCatalogo } from "@/lib/api";
 import { notoSansFontFaces } from "@/lib/documentFontFaces";
@@ -66,6 +65,16 @@ function snapshotNumber(value: unknown) {
 
 function snapshotStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function documentLogoFromCompany(company: BootstrapData["companyConfig"] | null | undefined) {
+  const config = company?.certificadoConfig ?? {};
+  return config.documentLogoLightUrl || config.logoPrincipalUrl || company?.logoUrl || "";
+}
+
+function renderDocumentLogo(logoSrc: string, companyName: string) {
+  if (logoSrc) return `<img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(companyName || "Empresa emissora")}" />`;
+  return `<div class="logo-fallback">${escapeHtml(companyName || "Empresa emissora")}</div>`;
 }
 
 function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCatalogo | undefined {
@@ -204,7 +213,7 @@ export function buildOsPrintHtml(
       ? ["Cones e correntes", "Sinalização de área", "Bloqueio e etiquetagem quando aplicável"]
       : ["Cones e correntes", "Sinalização de área", "Kit de emergência e lavagem quando aplicável"];
 
-  const logoSrc = options.logoSrc ?? company?.logoUrl ?? logoCiperprag;
+  const logoSrc = options.logoSrc ?? documentLogoFromCompany(company);
   const clienteNome = customer?.razaoSocial || os.clienteNome || contract?.cliente || "";
   const clienteCnpj = customer?.cnpj || os.clienteCnpj || contract?.cnpj || "";
   const clienteEndereco = customer
@@ -231,6 +240,7 @@ export function buildOsPrintHtml(
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
     .brand-center { text-align: center; padding-top: 6px; }
     .brand-center img { width: 330px; max-width: 100%; height: auto; }
+    .logo-fallback { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; max-width: 330px; padding: 8px 18px; border: 1px solid #d1d5db; border-radius: 10px; color: #111827; font-size: 18px; font-weight: 800; text-transform: uppercase; }
     .os-meta { padding: 16px 18px 0 0; font-size: 20px; font-weight: 700; white-space: nowrap; }
     .title { text-align: center; font-size: 22px; font-weight: 700; padding: 6px 0 10px; border-bottom: 1.2px solid #222; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -261,7 +271,7 @@ export function buildOsPrintHtml(
 <body>
   <div class="page">
     <div class="top-brand">
-      <div class="brand-center"><img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(company?.nomeFantasia || company?.razaoSocial || "Logo")}" /></div>
+      <div class="brand-center">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
       <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
     </div>
     <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>

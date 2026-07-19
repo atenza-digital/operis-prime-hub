@@ -96,6 +96,11 @@ async function prepareSampleMeasurement() {
       origem: "Evidência visual local de P0.7",
       classificacao: "parcial",
       parcialAte: "2026-07-19",
+      issueCity: "Parauapebas",
+      issueState: "PA",
+      issuedAt: "2026-07-19T13:58:00.000Z",
+      timezone: "America/Fortaleza",
+      revisao: 1,
       periodo: { inicio: "2026-07-01", fim: "2026-07-31", medidoAte: "2026-07-19" },
     };
     snapshot.emissor = { nome: "Aline Vieira", cargo: "Responsável técnica" };
@@ -172,6 +177,14 @@ async function main() {
       ...(body.companyConfig || {}),
       logoUrl: body.companyConfig?.logoUrl || fallbackLogoUrl,
       corPrimaria: body.companyConfig?.corPrimaria || "#0f7f5c",
+      certificadoConfig: {
+        ...(body.companyConfig?.certificadoConfig || {}),
+        documentLogoLightUrl: body.companyConfig?.certificadoConfig?.documentLogoLightUrl || body.companyConfig?.logoUrl || fallbackLogoUrl,
+        logoPrincipalUrl: body.companyConfig?.certificadoConfig?.logoPrincipalUrl || body.companyConfig?.logoUrl || fallbackLogoUrl,
+        issueCity: "Parauapebas",
+        issueState: "PA",
+        timezone: "America/Fortaleza",
+      },
     };
     const measurements = Array.isArray(body.measurements) ? body.measurements : [];
     const bestMeasurement = measurements

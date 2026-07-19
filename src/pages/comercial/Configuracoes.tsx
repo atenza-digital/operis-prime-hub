@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { getBootstrap, saveCompanyConfig, saveNumberingConfig, type EmpresaConfig, type NumeracaoConfig } from "@/lib/api";
-import logoDefault from "@/assets/logo_ciperprag.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +16,7 @@ const defaultEmpresa: EmpresaConfig = {
   endereco: "",
   telefone: "",
   email: "",
-  logoUrl: logoDefault,
+  logoUrl: "",
   corPrimaria: "#0b7a53",
   corSecundaria: "#64748b",
   corDestaque: "#0f5138",
@@ -154,7 +153,7 @@ export default function Configuracoes() {
     setLoading(true);
     try {
       const data = await getBootstrap();
-      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || logoDefault };
+      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || "" };
       setEmpresa(mergedEmpresa);
       setCertificadoConfigText(JSON.stringify(mergedEmpresa.certificadoConfig || {}, null, 2));
       setNumeracao({ ...defaultNumeracao, ...data.numberingConfig });
