@@ -8,7 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 7 de 8 em andamento.
 - Proxima etapa recomendada: executar validacao visual de P0.7 Medicoes e acompanhamento, consolidar evidencias do P0 e preparar a rodada final de homologacao assistida.
 - Itens de backlog mapeados apos feedback externo incorporado: 47.
-- Itens de backlog remanescentes: 46.
+- Itens de backlog remanescentes: 45.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -170,14 +170,14 @@ Entregue ate agora:
 - Bootstrap da aplicacao passou a reparar textos legados com encoding corrompido antes de alimentar Dashboard, Agenda, Equipes e demais telas, preservando hashes, URLs, base64 e chaves de storage. Teste automatizado adicionado para impedir regressao em nomes, servicos, EPIs e anexos.
 - Script operacional de saneamento controlado criado via `npm run audit:mojibake-sanitize`, com modo dry-run por padrao e escrita somente com `--apply`, cobrindo campos textuais, arrays e JSON/JSONB por tenant, preservando hashes, URLs, base64, logos e chaves de storage.
 - Dados legados de homologacao saneados na VPS para o tenant Ciperprag: 12 registros corrigidos em `ordens_servico.snapshot_dados` e `servico_pops.aplicacao`; dry-run final retornou 0 alteracoes pendentes e `npm run audit:mojibake-data -- --tenant=ciperprag` retornou `findings: 0`.
+- Residuos funcionais antigos da homologacao saneados na VPS: propostas aprovadas sem minuta foram encerradas como legado de teste, agendamentos antigos sem OS foram cancelados, OS encerradas receberam snapshot de encerramento, OS antigas sem medicao foram consolidadas em medicoes legadas canceladas e certificados emitidos receberam anexo historico imutavel; dry-run final do saneador retornou 0 acoes pendentes e `npm run audit:e2e -- --tenant=ciperprag` retornou 0 itens para verificar.
 
-Backlog da Etapa 7: 9 itens.
+Backlog da Etapa 7: 8 itens.
 
 - Executar E2E manual e documentado com usuario humano: proposta -> minuta -> contrato final -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
 - Validar multi-tenant com tenant generico e tenant Ciperprag, incluindo documentos sem logo.
 - Validar numeração automatica de OS, proposta, contrato, certificado e medicao.
 - Validar datas, horas, moeda e acentuacao em formato brasileiro.
-- Sanear residuos de dados antigos apontados pela auditoria local: proposta P0.1 sem minuta, contrato seed sem sincronizacao operacional, agendamentos antigos sem OS, OS antigas sem snapshot/medicao e certificados seed sem PDF historico imutavel.
 - Validar anexos, downloads, hashes e documentos historicos na tela de auditoria.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
@@ -272,7 +272,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos atualizacao de UI/UX e fluxo: 47.
-- Total de itens remanescentes: 46.
-- Etapa 7: 9 itens.
+- Total de itens remanescentes: 45.
+- Etapa 7: 8 itens.
 - Etapa 8: 37 itens.
 - Itens fora de etapa: 0.
