@@ -1,6 +1,6 @@
 import { repairMojibake } from "@/lib/repairMojibake";
 import type { BootstrapData, Contrato, OSApp, ServicoCatalogo } from "@/lib/api";
-import { notoSansFontFaces } from "@/lib/documentFontFaces";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 
 function escapeHtml(value: string | number | null | undefined) {
   return String(value ?? "")
@@ -231,10 +231,10 @@ export function buildOsPrintHtml(
   <meta charset="utf-8" />
   <title>${escapeHtml(os.numero)}</title>
   <style>
-    ${notoSansFontFaces}
+    ${documentTypographyCss}
     * { box-sizing: border-box; }
     @page { size: A4; margin: 6mm; }
-    body { margin: 0; font-family: "Noto Sans", Arial, Helvetica, sans-serif; color: #111; background: #fff; }
+    body { margin: 0; color: #111; background: #fff; }
     .page { width: 100%; height: 284mm; border: 1.2px solid #222; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }

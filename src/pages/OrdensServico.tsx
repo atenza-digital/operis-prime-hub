@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
-import { notoSansFontFaces } from "@/lib/documentFontFaces";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { repairMojibake } from "@/lib/repairMojibake";
 import { PageHeader } from "@/components/PageHeader";
 import { todayInputDateBr } from "@/lib/formatters";
@@ -66,7 +66,7 @@ async function downloadAttachment(anexo: EvidenciaAnexoApp) {
 function printElement(html: string, title: string) {
   const printWindow = window.open("", "_blank", "width=900,height=700");
   if (!printWindow) return;
-          printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>${notoSansFontFaces}*{box-sizing:border-box}body{font-family:"Noto Sans",Arial,sans-serif;font-size:11px;padding:10mm;color:#000}table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:bold}h2{text-align:center;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border-radius:6px}.section{border:1px solid #555;margin-bottom:8px}.section-header{background:#f0f0f0;padding:4px 8px;font-weight:bold;border-bottom:1px solid #555}.section-body{padding:6px 8px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:12px}</style></head><body>${html}<script>window.onload=function(){window.print();}</script></body></html>`);
+          printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title><style>${documentTypographyCss}*{box-sizing:border-box}body{font-size:11px;padding:10mm;color:#000}table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:bold}h2{text-align:center;margin-bottom:12px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:12px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border-radius:6px}.section{border:1px solid #555;margin-bottom:8px}.section-header{background:#f0f0f0;padding:4px 8px;font-weight:bold;border-bottom:1px solid #555}.section-body{padding:6px 8px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:12px}</style></head><body>${html}<script>window.onload=function(){window.print();}</script></body></html>`);
   printWindow.document.close();
 }
 

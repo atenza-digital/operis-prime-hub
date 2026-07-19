@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAuditLogs, registerAuditEvidence, type AuditLogApp } from "@/lib/api";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { formatDateBr, formatTimeBr } from "@/lib/formatters";
 
 const entityLabels: Record<string, string> = {
@@ -495,9 +496,10 @@ export default function AuditoriaEventos() {
           <meta charset="utf-8" />
           <title>Auditoria - Eventos</title>
           <style>
+            ${documentTypographyCss}
             @page { size: A4 landscape; margin: 12mm; }
             * { box-sizing: border-box; }
-            body { color: #101828; font-family: Arial, sans-serif; font-size: 11px; margin: 0; }
+            body { color: #101828; font-size: 11px; margin: 0; }
             h1 { font-size: 20px; margin: 0 0 4px; }
             .meta { color: #475467; margin-bottom: 14px; }
             .justification { border: 1px solid #d0d5dd; border-radius: 8px; margin-bottom: 12px; padding: 8px; }

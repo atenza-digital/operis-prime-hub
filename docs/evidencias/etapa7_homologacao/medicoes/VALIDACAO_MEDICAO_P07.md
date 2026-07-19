@@ -12,6 +12,9 @@ Screenshot da tela: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2
 - Páginas reais do PDF: 1.
 - PDF marcado: sim (`Tagged: yes`).
 - Texto selecionável: sim.
+- Fonte documental: Montserrat local incorporada ao PDF.
+- Fontes detectadas no PDF: `Montserrat-Regular`, `Montserrat-Medium`, `Montserrat-SemiBold`, `Montserrat-Bold`.
+- Fontes de fallback proibidas: não detectadas (`NotoSans`, `Arial`, `Roboto`, `Times`, `Consolas` e `Liberation Sans` ausentes).
 - Página vazia ou quase vazia: não encontrada.
 - Assinaturas e rastreabilidade: permanecem na mesma página do total geral no cenário de 5 itens.
 - Código da medição: `MED-VALIDACAO/2026` permanece em uma única linha.
@@ -40,9 +43,35 @@ Screenshot da tela: `docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2
 - `npm run build`
 - `node scripts/render-measurement-evidence.mjs` contra frontend local atualizado em `http://127.0.0.1:8091`
 - `pdfinfo` no PDF gerado
+- `python scripts/validate-document-pdf-fonts.py docs/evidencias/etapa7_homologacao/medicoes/med-validacao-2026-a4-retrato.pdf`
 - Renderização do PDF em PNG via `pdftoppm`
 - Inspeção visual do PNG renderizado
 - Extração de texto com `pypdf`
+
+## Evidência de fontes
+
+Verificação equivalente ao `pdffonts`, via `pypdf`, retornou:
+
+```json
+{
+  "fonts": [
+    "AAAAAA+Montserrat-Bold",
+    "BAAAAA+Montserrat-SemiBold",
+    "CAAAAA+Montserrat-Regular",
+    "DAAAAA+Montserrat-Medium"
+  ],
+  "normalizedFonts": [
+    "Montserrat-Bold",
+    "Montserrat-Medium",
+    "Montserrat-Regular",
+    "Montserrat-SemiBold"
+  ],
+  "ok": true,
+  "errors": []
+}
+```
+
+O script de geração aguarda `document.fonts.ready`, carrega explicitamente os pesos 400, 500, 600 e 700 de Montserrat e interrompe a emissão caso algum peso não esteja disponível.
 
 ## Observações
 

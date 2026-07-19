@@ -162,10 +162,14 @@ async function prepareSampleMeasurement() {
 async function main() {
   const password = makePassword();
   await fs.mkdir(outputDir, { recursive: true });
+  console.log("[medicao-evidence] preparando usuario de validacao");
   await prepareUser(password);
+  console.log("[medicao-evidence] preparando medicao de validacao");
   await prepareSampleMeasurement();
+  console.log("[medicao-evidence] carregando assets documentais");
   const fallbackLogoUrl = await dataUri("src/assets/logo_ciperprag.png");
 
+  console.log("[medicao-evidence] abrindo navegador");
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, deviceScaleFactor: 1 });
   let selectedMeasurementNumber = "";
@@ -200,6 +204,7 @@ async function main() {
     });
   });
 
+  console.log(`[medicao-evidence] acessando ${baseUrl}/login`);
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/senha/i).fill(password);
@@ -207,6 +212,7 @@ async function main() {
   await page.waitForURL((url) => !url.pathname.includes("login"), { timeout: 20000 });
   await page.waitForLoadState("networkidle");
 
+  console.log("[medicao-evidence] abrindo tela de medicao");
   await page.goto(`${baseUrl}/medicao`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: /histórico de medições/i }).waitFor({ timeout: 20000 });
   if (selectedMeasurementNumber) {
@@ -231,12 +237,25 @@ async function main() {
 
   await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
   await page.emulateMedia({ media: "print" });
-  await page.evaluate(() => document.fonts?.ready);
+  const fontChecks = await page.evaluate(async () => {
+    await document.fonts?.ready;
+    await Promise.all([400, 500, 600, 700].map((weight) => document.fonts?.load(`${weight} 16px Montserrat`)));
+    await document.fonts?.ready;
+    return [400, 500, 600, 700].map((weight) => ({
+      weight,
+      loaded: document.fonts?.check(`${weight} 16px Montserrat`) || false,
+    }));
+  });
+  const missingFonts = fontChecks.filter((item) => !item.loaded);
+  if (missingFonts.length) {
+    throw new Error(`Montserrat nao carregada para os pesos: ${missingFonts.map((item) => item.weight).join(", ")}`);
+  }
   await page.evaluate(() => {
     document.documentElement.lang = "pt-BR";
     document.title = "Medição de Serviços";
   });
   await page.waitForTimeout(500);
+  console.log("[medicao-evidence] gerando PDF");
   await page.pdf({
     path: pdfPath,
     format: "A4",

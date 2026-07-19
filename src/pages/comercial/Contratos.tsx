@@ -126,7 +126,7 @@ function buildTenantLogoFallback(companyName: string, primaryColor: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "TE";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="130" viewBox="0 0 420 130"><rect width="420" height="130" rx="26" fill="#ffffff"/><circle cx="68" cy="65" r="38" fill="${primaryColor}"/><text x="68" y="78" text-anchor="middle" font-family="Montserrat, Arial, sans-serif" font-size="32" font-weight="700" fill="#ffffff">${initials}</text><text x="124" y="58" font-family="Montserrat, Arial, sans-serif" font-size="24" font-weight="700" fill="#17212f">Empresa</text><text x="124" y="88" font-family="Montserrat, Arial, sans-serif" font-size="17" font-weight="500" fill="#607086">emissora</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="130" viewBox="0 0 420 130"><rect width="420" height="130" rx="26" fill="#ffffff"/><circle cx="68" cy="65" r="38" fill="${primaryColor}"/><text x="68" y="78" text-anchor="middle" font-family="Montserrat" font-size="32" font-weight="700" fill="#ffffff">${initials}</text><text x="124" y="58" font-family="Montserrat" font-size="24" font-weight="700" fill="#17212f">Empresa</text><text x="124" y="88" font-family="Montserrat" font-size="17" font-weight="500" fill="#607086">emissora</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 

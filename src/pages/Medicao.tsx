@@ -467,10 +467,10 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
                 <tbody>
                   {measurement.itens.map((item, index) => (
                     <tr key={`${item.osId}-${index}`} className={index % 2 === 0 ? "bg-slate-50" : "bg-white"}>
-                      <td className="px-3 py-3 font-mono text-slate-500">{String(index + 1).padStart(2, "0")}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-500">{String(index + 1).padStart(2, "0")}</td>
                       <td className="px-3 py-3 font-bold uppercase text-slate-900">{item.servico}</td>
-                      <td className="px-3 py-3 font-mono text-slate-700">{item.osNumero || item.osId}</td>
-                      <td className="px-3 py-3 font-mono text-slate-700">{item.contratoId || "-"}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-700">{item.osNumero || item.osId}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-700">{item.contratoId || "-"}</td>
                       <td className="px-3 py-3 text-slate-700">{fmtDate(item.dataExecucao)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{formatQuantityUnit(item.quantidade, item.unidade)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(item.valorUnitario)}</td>
@@ -505,7 +505,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
             </div>
             <div className="rounded-3xl bg-white p-4 text-[#1f2937]">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#334155]">Rastreabilidade</p>
-              <p className="mt-2 font-mono text-sm font-black">{trackingCode}</p>
+              <p className="mt-2 text-sm font-black tabular-nums">{trackingCode}</p>
               <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
                 Código interno para conferência e rastreabilidade da medição.
               </p>
@@ -682,9 +682,9 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
             <tbody>
               {measurement.itens.map((item, index) => (
                 <tr key={`${item.osId}-${index}`} className={index % 2 === 0 ? "bg-slate-50" : "bg-white"}>
-                  <td className="border-b border-slate-100 px-1.5 py-2 font-mono text-slate-500">{String(index + 1).padStart(2, "0")}</td>
+                  <td className="border-b border-slate-100 px-1.5 py-2 font-medium tabular-nums text-slate-500">{String(index + 1).padStart(2, "0")}</td>
                   <td className="border-b border-slate-100 px-2 py-2 font-semibold leading-snug text-slate-900">{item.servico}</td>
-                  <td className="border-b border-slate-100 px-1.5 py-2 font-mono leading-snug text-slate-700">
+                  <td className="border-b border-slate-100 px-1.5 py-2 font-medium leading-snug tabular-nums text-slate-700">
                     <p>{item.osNumero || item.osId}</p>
                     <p className="text-slate-500">{item.contratoId || "-"}</p>
                   </td>

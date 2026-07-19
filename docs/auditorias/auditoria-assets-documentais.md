@@ -12,6 +12,14 @@ Esta auditoria verifica a origem de logos, icones, brasoes, selos, assinaturas e
 - Arquivo estatico com marcas Ciperprag classificado como referencia historica: `src/template_certificado_preenchido.html`.
 - A geracao tri-tenant completa ainda fica pendente para a etapa de hardening SaaS/R2, porque depende de seeds isoladas e armazenamento versionado de arquivos.
 
+## Tipografia documental
+
+- Fonte padrao dos documentos emitidos: Montserrat local.
+- Pesos obrigatorios disponiveis: 400, 500, 600 e 700.
+- Carregamento: `document.fonts.ready` + `document.fonts.load` antes da impressao.
+- Numeros, codigos, datas e valores: Montserrat com `font-variant-numeric: tabular-nums lining-nums`, sem fonte monoespacada.
+- Validacao pos-PDF: `scripts/validate-document-pdf-fonts.py` bloqueia `NotoSans`, `Arial`, `Roboto`, `Times`, `Consolas`, `Liberation Sans` e qualquer fonte nao Montserrat nos PDFs validados.
+
 ## Matriz documental
 
 | Tipo de documento | Template/renderizador | Logo usada | Campo de configuracao | Origem do arquivo | Fallback | Isolamento por tenant | Snapshot | Teste executado | Resultado | Pendencia |

@@ -176,6 +176,7 @@ Entregue ate agora:
 - PDF de medicao de validacao regenerado em A4 retrato com 1 pagina real, assinatura junto ao total geral, rastreabilidade sem pagina orfa, texto selecionavel, `Tagged: yes`, sem `Gerado pelo Atenza FieldOps` e sem usuario de homologacao como responsavel documental.
 - Ajustes finais da medicao aplicados: codigo `MED-VALIDACAO/2026` mantido em uma unica linha, cidade/data dinamicas por snapshot/configuracao antes das assinaturas e rodape visivel simplificado para `MED-VALIDACAO/2026 • Revisao 1 • Pagina 1 de 1`, mantendo IDs tecnicos completos fora do documento visual.
 - Auditoria inicial de logos/assets documentais criada em `docs/auditorias/auditoria-assets-documentais.md`, com script `scripts/audit-document-assets.mjs`, matriz por familia documental e inspecao estatica dos renderizadores ativos.
+- Infraestrutura tipografica documental corrigida para Montserrat local incorporada nos documentos gerados: pesos 400, 500, 600 e 700 sao carregados antes da impressao, codigos/valores usam Montserrat com numeros tabulares e a validacao pos-PDF bloqueia fallbacks como NotoSans, Arial, Roboto, Times, Consolas e Liberation Sans.
 
 Backlog da Etapa 7: 8 itens.
 

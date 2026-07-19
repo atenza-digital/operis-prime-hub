@@ -1,4 +1,4 @@
-import { montserratDocumentFontFaces } from "@/lib/documentFontFaces";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { formatDateBr } from "@/lib/formatters";
 import { repairMojibake } from "@/lib/repairMojibake";
 import type { BootstrapData, EmpresaConfig, OSApp, ServicoCatalogo } from "@/lib/api";
@@ -122,14 +122,13 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
   <meta charset="utf-8" />
   <title>${escapeHtml(title)} - ${escapeHtml(reportNumber)}</title>
   <style>
-    ${montserratDocumentFontFaces}
+    ${documentTypographyCss}
     @page { size: A4 portrait; margin: 15mm 14mm 17mm; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: #142033;
       background: #fff;
-      font-family: "Montserrat", Arial, sans-serif;
       font-size: 10.5pt;
       line-height: 1.45;
     }

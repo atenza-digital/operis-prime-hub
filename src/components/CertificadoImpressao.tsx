@@ -1,6 +1,6 @@
 ﻿import { addDays, getBootstrap, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
 import templateCertificado from "@/template_certificado_dinamico.html?raw";
-import { montserratDocumentFontFaces } from "@/lib/documentFontFaces";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 import QRCode from "qrcode";
 
 type RecordLike = Record<string, unknown>;
@@ -466,7 +466,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const pdfTitle = [titulo, certificadoReferencia].filter(Boolean).join(" - ");
 
   const html = templateCertificado
-    .replaceAll("{{document_font_faces}}", montserratDocumentFontFaces)
+    .replaceAll("{{document_font_faces}}", documentTypographyCss)
     .replaceAll("{{pdf_title}}", escapeHtml(pdfTitle))
     .replaceAll("{{pdf_author}}", escapeHtml(empresaNome))
     .replaceAll("{{pdf_subject}}", escapeHtml(servicoTexto))
