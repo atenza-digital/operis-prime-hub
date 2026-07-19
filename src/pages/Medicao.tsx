@@ -75,6 +75,29 @@ const financeiroStatusMeta: Record<MedicaoFinanceiroStatus, { label: string; des
   },
 };
 
+const measurementFlowSteps = [
+  {
+    title: "1. Selecionar período",
+    description: "Escolha cliente e intervalo. A busca considera somente OS encerradas.",
+  },
+  {
+    title: "2. Conferir OS",
+    description: "Revise as OS disponíveis antes de consolidar. OS já medida não entra novamente.",
+  },
+  {
+    title: "3. Gerar medição",
+    description: "O sistema grava a medição, baixa os itens do contrato e libera o PDF.",
+  },
+  {
+    title: "4. Enviar NF",
+    description: "Informe número e data de envio da NF quando o faturamento externo for feito.",
+  },
+  {
+    title: "5. Baixar no ERP",
+    description: "Acompanhe cobrança e marque a baixa quando o pagamento for confirmado no ERP.",
+  },
+];
+
 type FinancialDraft = {
   financeiroStatus: MedicaoFinanceiroStatus;
   nfNumero: string;
@@ -275,7 +298,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
                       <td className="px-3 py-3 font-mono text-slate-700">{item.osNumero || item.osId}</td>
                       <td className="px-3 py-3 font-mono text-slate-700">{item.contratoId || "-"}</td>
                       <td className="px-3 py-3 text-slate-700">{fmtDate(item.dataExecucao)}</td>
-                      <td className="px-3 py-3 text-right text-slate-700">{item.quantidade} {item.unidade || ""}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{formatQuantityUnit(item.quantidade, item.unidade)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(item.valorUnitario)}</td>
                       <td className="px-3 py-3 text-right font-black text-slate-950">{money(item.valorTotal)}</td>
                     </tr>
@@ -669,10 +692,10 @@ export default function Medicao() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Operacional"
+        eyebrow="Financeiro"
         title="Medição"
         description="Consolide OS encerradas por cliente e período, gere a medição e acompanhe NF, cobrança e baixa manual no ERP."
-        crumbs={[{ label: "Operacional" }, { label: "Medição" }]}
+        crumbs={[{ label: "Financeiro" }, { label: "Medição" }]}
         actions={[
           { label: "Atualizar base", onClick: reload, variant: "outline" },
           { label: "Ver OS", to: "/ordens", variant: "default" },
@@ -680,28 +703,19 @@ export default function Medicao() {
       />
 
       <Card className="border-primary/20 bg-primary/[0.03] print:hidden">
-        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-3">
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <Receipt className="h-4 w-4 text-primary" />
-              Medição operacional
-            </p>
-            <p className="mt-2 text-muted-foreground">A base vem apenas de OS encerradas e ainda não medidas dentro do período selecionado.</p>
-          </div>
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <Send className="h-4 w-4 text-primary" />
-              NF e cobrança
-            </p>
-            <p className="mt-2 text-muted-foreground">Registre se a NF foi enviada, se está aguardando pagamento ou se precisa cobrar o cliente.</p>
-          </div>
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-              ERP permanece dono
-            </p>
-            <p className="mt-2 text-muted-foreground">O recebimento formal e a baixa financeira continuam manuais no ERP; aqui fica o acompanhamento da operação.</p>
-          </div>
+        <CardHeader>
+          <CardTitle>Fluxo da medição</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            A medição consolida o serviço executado e ajuda a acompanhar NF e pagamento, sem substituir o ERP.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm md:grid-cols-5">
+          {measurementFlowSteps.map((step) => (
+            <div key={step.title} className="rounded-2xl border bg-card p-4">
+              <p className="font-semibold text-foreground">{step.title}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
@@ -728,8 +742,21 @@ export default function Medicao() {
               {clienteSel ? (
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   {preItens.length ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span><strong>{preItens.length}</strong> OS encerrada(s), ainda não medidas, no período</span>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span><strong>{preItens.length}</strong> OS encerrada(s), ainda não medidas, no período</span>
+                        <span className="text-xs text-muted-foreground">Prévia antes de gerar a medição</span>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {preItens.slice(0, 6).map((order) => (
+                          <div key={order.id} className="rounded-lg border bg-card px-3 py-2">
+                            <p className="font-mono text-xs font-bold">{order.numero || order.id}</p>
+                            <p className="mt-1 truncate font-semibold">{order.servico}</p>
+                            <p className="text-xs text-muted-foreground">{fmtDate(order.dataExecucao || order.dataEmissao)} · {order.contratoId || "Sem contrato"}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {preItens.length > 6 ? <p className="text-xs text-muted-foreground">+{preItens.length - 6} OS adicional(is) serão consolidadas nesta medição.</p> : null}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-muted-foreground"><AlertCircle className="h-4 w-4" /><span>Nenhuma OS disponível para nova medição neste intervalo.</span></div>

@@ -109,6 +109,7 @@ describe("app smoke routes", () => {
   it.each([
     ["/agendar", /agendamentos/i],
     ["/ordens", /ordens de serviço/i],
+    ["/relatorios-tecnicos", /relatórios técnicos/i],
     ["/certificados", /certificados e histórico/i],
     ["/medicao", /medição/i],
     ["/auditoria-eventos", /eventos de auditoria/i],

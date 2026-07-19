@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em andamento.
-- Proxima etapa recomendada: validar visualmente P0.6 Relatorios tecnicos e avancar para P0.7 Medicoes e acompanhamento, consolidando a matriz P0 antes da prontidao de homologacao assistida.
+- Proxima etapa recomendada: executar validacao visual de P0.7 Medicoes e acompanhamento, consolidar evidencias do P0 e preparar a rodada final de homologacao assistida.
 - Itens de backlog mapeados apos feedback externo incorporado: 47.
 - Itens de backlog remanescentes: 47.
 - Itens fora de etapa: 0.
@@ -123,7 +123,7 @@ Entregue ate agora:
 - Roteiro formal de homologacao E2E criado em `docs/cliente/ROTEIRO_HOMOLOGACAO_E2E.md`.
 - Guia de homologacao operacional atualizado para refletir proposta, contrato, OS, medicao e ERP.
 - Pasta de evidencias da Etapa 7 criada em `docs/evidencias/etapa7_homologacao`.
-- Smoke tests ampliados para 11 testes, cobrindo rotas criticas de contratos/propostas, certificados/historico e medicao.
+- Smoke tests ampliados para 12 testes, cobrindo rotas criticas de contratos/propostas, certificados/historico, relatorios tecnicos e medicao.
 - Ficha de execucao E2E criada para rodada assistida com usuarios em `docs/evidencias/etapa7_homologacao/EXECUCAO_E2E_2026-07-07.md`.
 - Auditoria tecnica de dados de homologacao criada via `npm run audit:e2e`, gerando `docs/evidencias/etapa7_homologacao/auditoria-e2e-dados.md`.
 - Release note interna criada para a auditoria E2E da Etapa 7.
@@ -135,6 +135,7 @@ Entregue ate agora:
 - E2E tecnico de escrita aprovado na VPS via `npm run homologation:e2e-vps`, cobrindo proposta aprovada, contrato, agendamento, OS, encerramento, certificado, medicao, acompanhamento financeiro operacional e recorrencia.
 - Roteiros de homologacao por perfil gerados em DOCX/PDF para Comercial, Operacao, Qualidade e Medicao, com prints de referencia, acessos de teste e orientacao de registro de divergencias.
 - Tela de Medicao passou a exibir painel visivel da medicao selecionada, com acoes de imprimir, acompanhar e limpar selecao, evitando acao aparentemente sem retorno visual.
+- Tela de Medicao foi reforcada para P0.7: modulo identificado como Financeiro, fluxo guiado em cinco passos, previa das OS elegiveis antes da geracao e quantidade/unidade normalizada na impressao.
 - Dashboard Operacional passou a priorizar contratos criticos e recolher a lista de Contratos em Execucao, reduzindo pagina longa sem esconder o acesso ao total.
 - Ajustes de Dashboard e Medicao publicados na VPS de homologacao com imagem `atenza-fieldops:20260717-visual-etapa7`.
 - Checagem visual de Dashboard e Medicao aprovada via tunel SSH para a VPS, com prints em `docs/evidencias/etapa7_homologacao/prints_visuais`.
