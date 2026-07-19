@@ -209,6 +209,9 @@ Entregue inicialmente em homologacao:
 - Agenda recebeu filtros por mes/semana/todos, ano/mes, busca por cliente e detalhes ao clicar no agendamento.
 - Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
+- Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
+- Deploy de homologacao passou a executar smoke publico pos-deploy no dominio oficial, validando health, rotas principais e favicons sem depender de conexao direta ao PostgreSQL local.
+- Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -252,7 +255,7 @@ Backlog da Etapa 8: 37 itens.
 - Revisar todos os fluxos de abertura de telas, dialogs, drawers e modais para eliminar sensacao de tela criada por cima de outra, padronizando quando usar pagina, modal, drawer lateral, wizard ou painel contextual.
 - Reorganizar a arquitetura de informacao por modulo Comercial, Operacional e Financeiro, garantindo que cada tela tenha um objetivo claro, nomes consistentes, caminho de volta evidente e separacao correta de informacoes sensiveis como valores comerciais.
 - Avaliar se a alocacao semanal deve permanecer em Equipes e veiculos como apoio visual ou migrar/integrar ao modulo Agendamentos, ja que a programacao operacional principal deve nascer no fluxo de agendamento.
-- Corrigir definitivamente o favicon padrao Atenza em todos os ambientes e builds, eliminando fallback/cache do favicon Ciperprag no login SaaS neutro e validando asset local, `index.html`, Docker, navegador e homologacao.
+- Validar em navegador real apos deploy que o favicon Atenza substituiu caches antigos do Chrome; se necessario, documentar instrucao de limpeza de favicon/cache ou aplicar estrategia de asset versionado para cache busting.
 
 ## Itens explicitamente postergados
 

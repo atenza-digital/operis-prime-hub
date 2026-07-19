@@ -3080,7 +3080,7 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
   const item = rows[0];
   if (item && item.tipo !== "proposta") return res.status(400).json({ error: "A minuta deve ser gerada a partir de uma proposta aprovada." });
   if (item && item.status !== "aprovado") return res.status(400).json({ error: "A proposta precisa estar aprovada para gerar minuta." });
-  if (!item) return res.status(404).json({ error: "Modelo nÃ£o encontrado" });
+  if (!item) return res.status(404).json({ error: "Modelo não encontrado" });
   const newId = makeCompactId("TPL");
   await withTransaction(async (client) => {
     await client.query(

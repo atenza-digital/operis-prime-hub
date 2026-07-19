@@ -7,6 +7,10 @@ on:
         description: "Tag Docker opcional para a imagem de homologacao"
         required: false
         default: ""
+      public_url:
+        description: "URL publica da homologacao para smoke pos-deploy"
+        required: false
+        default: "https://fieldops-homologacao.atenza.digital"
 
 env:
   IMAGE_NAME: atenza-fieldops
@@ -38,6 +42,9 @@ jobs:
 
       - name: Test
         run: npm test -- --run
+
+      - name: Branding audit
+        run: npm run audit:branding
 
       - name: Build app
         run: npm run build
@@ -121,3 +128,8 @@ jobs:
 
           docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
           REMOTE
+
+      - name: Public smoke
+        env:
+          HOMOLOGATION_BASE_URL: ${{ github.event.inputs.public_url }}
+        run: npm run homologation:smoke-public
