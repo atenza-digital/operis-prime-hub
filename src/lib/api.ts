@@ -451,12 +451,18 @@ export interface MedicaoItemApp {
 
 export type MedicaoFinanceiroStatus =
   | "em_conferencia"
+  | "emitida"
+  | "enviada_ao_cliente"
+  | "aceita"
   | "aguardando_nf"
+  | "nf_registrada"
   | "nf_enviada"
   | "aguardando_pagamento"
+  | "paga"
   | "pago_no_erp"
   | "pendente_cliente"
-  | "cancelada";
+  | "cancelada"
+  | "substituida";
 
 export interface MedicaoApp {
   id: string;

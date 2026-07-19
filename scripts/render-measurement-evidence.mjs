@@ -9,6 +9,16 @@ const tenantSlug = process.env.MEASUREMENT_EVIDENCE_TENANT || "ciperprag";
 const email = normalizeEmail(process.env.MEASUREMENT_EVIDENCE_EMAIL || "homolog.medicao.visual@atenza.digital");
 const outputDir = path.resolve("docs/evidencias/etapa7_homologacao/medicoes");
 
+function normalizeEvidenceItems() {
+  return [
+    ["OS-MEDVAL-001", "OS-2670", "CT-001", "Coleta e Análise de Bebedouros", "2026-07-02", 2, "serviços", 180],
+    ["OS-MEDVAL-002", "OS-2671", "CT-001", "Controle Integrado de Pragas", "2026-07-05", 1, "visita", 480],
+    ["OS-MEDVAL-003", "OS-2672", "CT-002", "Higienização de reservatório", "2026-07-09", 1, "serviço", 620],
+    ["OS-MEDVAL-004", "OS-2673", "CT-002", "Roçagem e Limpeza de Área", "2026-07-12", 4, "horas", 150],
+    ["OS-MEDVAL-005", "OS-2674", "CT-003", "Manutenção Civil Predial", "2026-07-16", 6, "horas", 95],
+  ];
+}
+
 async function dataUri(assetPath, mime = "image/png") {
   const bytes = await fs.readFile(path.resolve(assetPath));
   return `data:${mime};base64,${bytes.toString("base64")}`;
@@ -78,12 +88,19 @@ async function prepareSampleMeasurement() {
       ["OS-2673", "CT-002", "Roçagem e Limpeza de Área", "2026-07-12", 4, "horas", 150],
       ["OS-2674", "CT-003", "Manutenção Civil Predial", "2026-07-16", 6, "horas", 95],
     ];
-    const total = items.reduce((sum, item) => sum + Number(item[4]) * Number(item[6]), 0);
+    const evidenceItems = normalizeEvidenceItems(items);
+    const total = evidenceItems.reduce((sum, item) => sum + Number(item[5]) * Number(item[7]), 0);
     const snapshot = {
       emissor: { nome: "Administrador Atenza", cargo: "Administrador da empresa" },
       observacao: "Valores consolidados conforme execução registrada nas OS do período.",
       origem: "Evidência visual local de P0.7",
+      classificacao: "parcial",
+      parcialAte: "2026-07-19",
+      periodo: { inicio: "2026-07-01", fim: "2026-07-31", medidoAte: "2026-07-19" },
     };
+    snapshot.emissor = { nome: "Aline Vieira", cargo: "Responsável técnica" };
+    snapshot.observacao = "Valores consolidados conforme execução registrada nas OS do período.";
+    snapshot.origem = "Evidência visual local de P0.7";
 
     await client.query("DELETE FROM ciperprag_hub.medicao_itens WHERE medicao_id = $1", [id]);
     await client.query(
@@ -95,7 +112,7 @@ async function prepareSampleMeasurement() {
         '2026-07-01','2026-07-31','emitida','em_conferencia',$4,
         'Pagamento via boleto bancário após aceite da medição.',
         'Departamento de Compras / Administrativo do contratante',
-        $5::jsonb,'2026-07-18T13:58:00.000Z',NOW())
+        $5::jsonb,'2026-07-19T13:58:00.000Z',NOW())
        ON CONFLICT (id) DO UPDATE SET
         numero = EXCLUDED.numero,
         cliente_id = EXCLUDED.cliente_id,
@@ -114,13 +131,24 @@ async function prepareSampleMeasurement() {
         atualizado_em = NOW()`,
       [id, tenant.id, number, total, JSON.stringify(snapshot)],
     );
+    await client.query(
+      `UPDATE ciperprag_hub.medicoes
+       SET cliente_endereco = $2,
+           forma_pagamento = $3
+       WHERE id = $1`,
+      [
+        id,
+        "Av. Serra Arqueada S/N, QD QNC 205, Nova Carajás, Parauapebas-PA",
+        "Condição conforme contrato vigente, após aceite da medição.",
+      ],
+    );
 
-    for (const [osNumber, contractId, service, executionDate, quantity, unit, unitValue] of items) {
+    for (const [osId, osNumber, contractId, service, executionDate, quantity, unit, unitValue] of evidenceItems) {
       await client.query(
         `INSERT INTO ciperprag_hub.medicao_itens
-         (medicao_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total)
-         VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [id, osNumber, contractId, service, executionDate, quantity, unit, unitValue, Number(quantity) * Number(unitValue)],
+         (medicao_id, tenant_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total, medicao_ativa)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
+        [id, tenant.id, osId, osNumber, contractId, service, executionDate, quantity, unit, unitValue, Number(quantity) * Number(unitValue)],
       );
     }
   });

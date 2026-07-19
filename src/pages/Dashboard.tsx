@@ -56,6 +56,10 @@ function contractPriority(item: DashboardContract) {
   return 4;
 }
 
+function pluralizeCount(count: number, singular: string, plural: string) {
+  return `${count.toLocaleString("pt-BR")} ${Math.abs(count) === 1 ? singular : plural}`;
+}
+
 export default function Dashboard() {
   const { user, hasPermission } = useAuth();
   const [data, setData] = useState<BootstrapData | null>(null);
@@ -140,7 +144,7 @@ export default function Dashboard() {
       ));
       alerts.push(`${propostasEmAndamento.length} proposta(s) em negociação`);
     }
-    if (hasPermission("agenda.manage")) alerts.push(`${agendados} agendamento(s) pendente(s)`);
+    if (hasPermission("agenda.manage")) alerts.push(`${pluralizeCount(agendados, "agendamento pendente", "agendamentos pendentes")}`);
     if (hasPermission("os.manage", "os.close")) alerts.push(`${osAbertas} OS aberta(s)`);
     if (hasPermission("certificados.manage")) alerts.push(`${ordens.filter((item) => item.status === "encerrada" && !item.certificadoHash).length} certificado(s) possível(is)`);
     if (hasPermission("medicoes.manage")) alerts.push(`${medicoes.filter((item) => item.financeiroStatus !== "pago_no_erp" && item.status !== "cancelada").length} medição(ões) em acompanhamento`);

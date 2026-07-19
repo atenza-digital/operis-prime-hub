@@ -513,7 +513,21 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.medicoes
     ADD CONSTRAINT medicoes_financeiro_status_check
-    CHECK (financeiro_status IN ('em_conferencia','aguardando_nf','nf_enviada','aguardando_pagamento','pago_no_erp','pendente_cliente','cancelada'))
+    CHECK (financeiro_status IN (
+      'em_conferencia',
+      'emitida',
+      'enviada_ao_cliente',
+      'aceita',
+      'aguardando_nf',
+      'nf_registrada',
+      'nf_enviada',
+      'aguardando_pagamento',
+      'paga',
+      'pago_no_erp',
+      'pendente_cliente',
+      'cancelada',
+      'substituida'
+    ))
   `);
 
   await query(`
@@ -528,6 +542,7 @@ export async function ensureDatabaseShape() {
     CREATE TABLE IF NOT EXISTS ciperprag_hub.medicao_itens (
       id BIGSERIAL PRIMARY KEY,
       medicao_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.medicoes(id) ON DELETE CASCADE,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
       os_id VARCHAR(30) NOT NULL,
       os_numero VARCHAR(30),
       contrato_id VARCHAR(20),
@@ -537,7 +552,27 @@ export async function ensureDatabaseShape() {
       unidade VARCHAR(30),
       valor_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
       valor_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+      medicao_ativa BOOLEAN NOT NULL DEFAULT TRUE,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.medicao_itens ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id)");
+  await query(`
+    UPDATE ciperprag_hub.medicao_itens mi
+    SET tenant_id = m.tenant_id
+    FROM ciperprag_hub.medicoes m
+    WHERE m.id = mi.medicao_id
+      AND mi.tenant_id IS DISTINCT FROM m.tenant_id
+  `);
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.medicao_itens ADD COLUMN IF NOT EXISTS medicao_ativa BOOLEAN NOT NULL DEFAULT TRUE");
+  await query(`
+    UPDATE ciperprag_hub.medicao_itens mi
+    SET medicao_ativa = EXISTS (
+      SELECT 1
+      FROM ciperprag_hub.medicoes m
+      WHERE m.id = mi.medicao_id
+        AND m.status <> 'cancelada'
     )
   `);
 
@@ -549,6 +584,8 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_tenant ON ciperprag_hub.medicoes(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_medicao ON ciperprag_hub.medicao_itens(medicao_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_os ON ciperprag_hub.medicao_itens(os_id)");
+  await query("DROP INDEX IF EXISTS ciperprag_hub.ux_medicao_itens_os_ativa");
+  await query("CREATE UNIQUE INDEX IF NOT EXISTS ux_medicao_itens_tenant_os_ativa ON ciperprag_hub.medicao_itens(tenant_id, os_id) WHERE medicao_ativa IS TRUE AND tenant_id IS NOT NULL");
 
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.evidencias_anexos (

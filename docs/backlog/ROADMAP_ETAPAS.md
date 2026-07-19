@@ -7,8 +7,8 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em andamento.
 - Proxima etapa recomendada: preparar a rodada final de homologacao assistida com Tarcisio/equipe, usando os roteiros atualizados e coletando divergencias por perfil.
-- Itens de backlog mapeados apos feedback externo incorporado: 47.
-- Itens de backlog remanescentes: 45.
+- Itens de backlog mapeados apos feedback externo incorporado: 48.
+- Itens de backlog remanescentes: 46.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -172,6 +172,8 @@ Entregue ate agora:
 - Dados legados de homologacao saneados na VPS para o tenant Ciperprag: 12 registros corrigidos em `ordens_servico.snapshot_dados` e `servico_pops.aplicacao`; dry-run final retornou 0 alteracoes pendentes e `npm run audit:mojibake-data -- --tenant=ciperprag` retornou `findings: 0`.
 - Residuos funcionais antigos da homologacao saneados na VPS: propostas aprovadas sem minuta foram encerradas como legado de teste, agendamentos antigos sem OS foram cancelados, OS encerradas receberam snapshot de encerramento, OS antigas sem medicao foram consolidadas em medicoes legadas canceladas e certificados emitidos receberam anexo historico imutavel; dry-run final do saneador retornou 0 acoes pendentes e `npm run audit:e2e -- --tenant=ciperprag` retornou 0 itens para verificar.
 - Validacao visual de P0.7 Medicoes executada no ambiente local Docker: script `scripts/render-measurement-evidence.mjs` gera usuario tecnico temporario, cria amostra local `MED-VALIDACAO/2026`, renderiza a tela real de medicao, exporta PDF A4 retrato e registra validacao tecnica em `docs/evidencias/etapa7_homologacao/medicoes/VALIDACAO_MEDICAO_P07.md`.
+- Complemento de Medicao aplicado no escopo seguro de homologacao: removido indicador de quantidade total quando ha unidades diferentes, adicionada composicao por unidade, pluralizacao pt-BR sem `item(ns)`, classificacao parcial quando o periodo ainda esta aberto, calculo de linha/total no backend em centavos, bloqueio de duplicidade por `tenant_id + os_id`, status financeiro-operacionais ampliados e responsavel documental priorizado no PDF.
+- PDF de medicao de validacao regenerado em A4 retrato com 1 pagina real, assinatura junto ao total geral, rastreabilidade sem pagina orfa, texto selecionavel, `Tagged: yes`, sem `Gerado pelo Atenza FieldOps` e sem usuario de homologacao como responsavel documental.
 
 Backlog da Etapa 7: 8 itens.
 
@@ -216,7 +218,7 @@ Entregue inicialmente em homologacao:
 - Deploy de homologacao passou a executar smoke obrigatorio dentro da VPS (health, login e favicons) e smoke publico best-effort no dominio oficial, registrando quando o GitHub Actions for bloqueado pelo desafio do Cloudflare.
 - Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 
-Backlog da Etapa 8: 37 itens.
+Backlog da Etapa 8: 38 itens.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -234,6 +236,7 @@ Backlog da Etapa 8: 37 itens.
 - Parametrizar textos executivos da proposta por tenant e por tipo de servico.
 - Implementar assinatura eletronica/digital ou trilha formal de aceite.
 - Implementar revogacao/substituicao formal de certificados e documentos.
+- Concluir hardening de medicao para producao: PDF server-side imutavel em R2 por ambiente/tenant, revisao/substituicao formal com vinculo historico e motivo, snapshot definitivo com cidade/data/responsavel/condicoes de contrato, separacao ou subtotal de contratos com condicoes incompatíveis, protecao contra duplicidade em nivel de item/saldo executado, permissões granulares no backend para valores e acoes financeiras, e matriz automatizada com 1, 5, 15, 30 e 100 itens validando paginacao, cabecalho repetido, total somente na ultima pagina e assinatura sem orfandade.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
 - Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa. Incluir descricoes curtas e acessiveis para usuarios nao tecnicos explicando POP, EPIs, normas, checklist e campos tecnicos; permitir upload de POP em PDF/DOCX/imagem para clientes que ja possuem documentos prontos e querem apenas controlar versoes/anexos pelo sistema, sem obrigar cadastro estruturado completo no primeiro uso.
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
@@ -272,8 +275,8 @@ Todos os itens abaixo estao alocados na Etapa 8:
 
 ## Controle de backlog
 
-- Total de itens mapeados apos atualizacao de UI/UX e fluxo: 47.
-- Total de itens remanescentes: 45.
+- Total de itens mapeados apos atualizacao de UI/UX, fluxo e complemento de medicao: 48.
+- Total de itens remanescentes: 46.
 - Etapa 7: 8 itens.
-- Etapa 8: 37 itens.
+- Etapa 8: 38 itens.
 - Itens fora de etapa: 0.

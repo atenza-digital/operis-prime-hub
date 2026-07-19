@@ -254,59 +254,64 @@
   }
 
   .measurement-document {
-    padding: 8mm 13mm 7mm !important;
+    min-height: auto !important;
+    padding: 6mm 13mm 5mm !important;
   }
 
   .measurement-header {
-    margin-top: 3mm !important;
-    padding-bottom: 3mm !important;
+    margin-top: 2mm !important;
+    padding-bottom: 2mm !important;
     gap: 7mm !important;
   }
 
+  .measurement-header img {
+    height: 8.5mm !important;
+  }
+
   .measurement-summary {
-    margin-top: 3mm !important;
+    margin-top: 2mm !important;
   }
 
   .measurement-summary > div {
-    padding-top: 2mm !important;
-    padding-bottom: 2mm !important;
-  }
-
-  .measurement-block {
-    margin-top: 3.2mm !important;
-  }
-
-  .measurement-services {
-    margin-top: 4mm !important;
-  }
-
-  .measurement-table {
-    font-size: 8.5px !important;
-  }
-
-  .measurement-table th {
     padding-top: 1.5mm !important;
     padding-bottom: 1.5mm !important;
   }
 
+  .measurement-block {
+    margin-top: 2.4mm !important;
+  }
+
+  .measurement-services {
+    margin-top: 2.8mm !important;
+  }
+
+  .measurement-table {
+    font-size: 8.1px !important;
+  }
+
+  .measurement-table th {
+    padding-top: 1.15mm !important;
+    padding-bottom: 1.15mm !important;
+  }
+
   .measurement-table td {
-    padding-top: 1.45mm !important;
-    padding-bottom: 1.45mm !important;
+    padding-top: 1.05mm !important;
+    padding-bottom: 1.05mm !important;
   }
 
   .measurement-table tfoot td {
-    padding-top: 2mm !important;
-    padding-bottom: 1.5mm !important;
+    padding-top: 1.4mm !important;
+    padding-bottom: 1mm !important;
   }
 
   .measurement-signatures {
     break-inside: avoid;
     page-break-inside: avoid;
-    margin-top: 2.5mm !important;
+    margin-top: 1.6mm !important;
   }
 
   .measurement-signature-box {
-    min-height: 20mm !important;
-    padding: 3mm !important;
+    min-height: 16mm !important;
+    padding: 2.3mm !important;
   }
 }

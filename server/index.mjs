@@ -12,12 +12,18 @@ const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const MEASUREMENT_FINANCIAL_STATUSES = new Set([
   "em_conferencia",
+  "emitida",
+  "enviada_ao_cliente",
+  "aceita",
   "aguardando_nf",
+  "nf_registrada",
   "nf_enviada",
   "aguardando_pagamento",
+  "paga",
   "pago_no_erp",
   "pendente_cliente",
   "cancelada",
+  "substituida",
 ]);
 const COMMERCIAL_DOCUMENT_TEMPLATES = {
   proposta: { code: "proposta-comercial", version: "p0-ciperprag-v1" },
@@ -118,6 +124,27 @@ async function generateUniqueCertificateHash(db = { query }) {
     if (!rows.length) return hash;
   }
   throw new Error("Nao foi possivel gerar um hash unico para o certificado.");
+}
+
+function currentTenantDate(timeZone = "America/Fortaleza") {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function minIsoDate(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  return left <= right ? left : right;
+}
+
+function moneyLineTotal(quantity, unitValue) {
+  const normalizedQuantity = Number(quantity || 0);
+  const unitValueCents = Math.round(Number(unitValue || 0) * 100);
+  return Math.round(normalizedQuantity * unitValueCents) / 100;
 }
 
 function buildShortPublicCertificateCode(hash) {
@@ -3342,9 +3369,20 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
   if (!clienteNome || !dataInicio || !dataFim) return res.status(400).json({ error: "Cliente e periodo sao obrigatorios." });
   const tenantId = req.auth.user.tenant.id;
 
-  const measurement = await withTransaction(async (client) => {
+  let measurement;
+  try {
+    measurement = await withTransaction(async (client) => {
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
+    const timezone = company?.timezone || "America/Fortaleza";
+    const issuedDate = currentTenantDate(timezone);
+    const effectiveEnd = minIsoDate(dataFim, issuedDate);
+    const classification = dataFim > issuedDate ? "parcial" : "definitiva";
+    if (effectiveEnd < dataInicio) {
+      const error = new Error("Nao e possivel gerar medicao: o periodo informado ainda nao possui dias encerrados.");
+      error.status = 400;
+      throw error;
+    }
     const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE tenant_id = $2 AND (razao_social = $1 OR nome_fantasia = $1) LIMIT 1", [clienteNome, tenantId]);
     const customer = clientRows[0];
     const { rows: numRows } = await client.query(
@@ -3374,9 +3412,10 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
            WHERE mi.os_id = o.id
              AND m_exist.tenant_id = $4
              AND m_exist.status <> 'cancelada'
+             AND COALESCE(mi.medicao_ativa, TRUE) IS TRUE
          )
        ORDER BY COALESCE(o.data_execucao, o.data_emissao), o.numero`,
-      [clienteNome, dataInicio, dataFim, tenantId],
+      [clienteNome, dataInicio, effectiveEnd, tenantId],
     );
 
     if (!orderRows.length) {
@@ -3388,6 +3427,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     const items = orderRows.map((order) => {
       const quantidade = Number(order.quantidade || 0);
       const valorUnitario = Number(order.valor_unitario || 0);
+      const valorTotal = moneyLineTotal(quantidade, valorUnitario);
       return {
         osId: order.id,
         osNumero: order.numero,
@@ -3397,21 +3437,25 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
         quantidade,
         unidade: order.unidade,
         valorUnitario,
-        valorTotal: quantidade * valorUnitario,
+        valorTotal,
       };
     });
-    const total = items.reduce((sum, item) => sum + item.valorTotal, 0);
+    const total = Math.round(items.reduce((sum, item) => sum + Math.round(item.valorTotal * 100), 0)) / 100;
     const id = makeId("MED");
     const endereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null;
     const snapshot = {
       numero: number,
+      classificacao: classification,
+      parcialAte: classification === "parcial" ? effectiveEnd : null,
+      emitidoEm: new Date().toISOString(),
+      timezone,
       cliente: {
         id: customer?.id || null,
         nome: clienteNome,
         cnpj: customer?.cnpj || orderRows[0]?.cnpj || null,
         endereco,
       },
-      periodo: { inicio: dataInicio, fim: dataFim },
+      periodo: { inicio: dataInicio, fim: dataFim, medidoAte: effectiveEnd },
       empresa: {
         razaoSocial: company?.razao_social || null,
         nomeFantasia: company?.nome_fantasia || null,
@@ -3435,9 +3479,9 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     for (const item of items) {
       await client.query(
         `INSERT INTO ciperprag_hub.medicao_itens
-         (medicao_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
+         (medicao_id, tenant_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total, medicao_ativa)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
+        [id, tenantId, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
       );
     }
     await saveImmutableDocumentAttachment(client, {
@@ -3481,7 +3525,13 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       criadoEm: new Date().toISOString(),
       itens: items,
     };
-  });
+    });
+  } catch (error) {
+    if (error?.code === "23505" && String(error?.constraint || "").includes("ux_medicao_itens_tenant_os_ativa")) {
+      return res.status(409).json({ error: "Uma ou mais OS ja estao vinculadas a uma medicao ativa. Cancele ou substitua formalmente a medicao anterior antes de medir novamente." });
+    }
+    throw error;
+  }
 
   res.json({ ok: true, measurement });
 });
@@ -3550,17 +3600,23 @@ app.patch("/api/measurements/:id/financial", requirePermission("medicoes.manage"
 });
 
 app.patch("/api/measurements/:id/cancel", requirePermission("medicoes.manage"), async (req, res) => {
-  const { rowCount } = await query(
-    "UPDATE ciperprag_hub.medicoes SET status = 'cancelada', financeiro_status = 'cancelada', financeiro_atualizado_em = NOW(), atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2",
-    [req.params.id, req.auth.user.tenant.id],
-  );
-  if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
-  await logAuditEvent(null, req, {
-    entityType: "medicao",
-    entityId: req.params.id,
-    action: "measurement_cancelled",
-    summary: `Medicao ${req.params.id} cancelada`,
+  const rowCount = await withTransaction(async (client) => {
+    const result = await client.query(
+      "UPDATE ciperprag_hub.medicoes SET status = 'cancelada', financeiro_status = 'cancelada', financeiro_atualizado_em = NOW(), atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2",
+      [req.params.id, req.auth.user.tenant.id],
+    );
+    if (result.rowCount) {
+      await client.query("UPDATE ciperprag_hub.medicao_itens SET medicao_ativa = FALSE WHERE medicao_id = $1", [req.params.id]);
+      await logAuditEvent(client, req, {
+        entityType: "medicao",
+        entityId: req.params.id,
+        action: "measurement_cancelled",
+        summary: `Medicao ${req.params.id} cancelada`,
+      });
+    }
+    return result.rowCount;
   });
+  if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
   res.json({ ok: true });
 });
 
