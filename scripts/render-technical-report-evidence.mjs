@@ -1,22 +1,65 @@
 import { chromium } from "playwright";
-import { createServer } from "vite";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import * as esbuild from "esbuild";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "docs", "cliente", "relatorios_tecnicos");
 const outPdf = path.join(outDir, "relatorio-tecnico-ciperprag-amostra.pdf");
 const outPng = path.join(outDir, "relatorio-tecnico-ciperprag-amostra.png");
+const tmpDir = path.join(root, "tmp");
+
+async function resolveSourceAlias(importPath) {
+  const candidate = path.join(root, "src", importPath.slice(2));
+  const paths = [candidate, `${candidate}.ts`, `${candidate}.tsx`, `${candidate}.js`, `${candidate}.jsx`];
+  for (const filePath of paths) {
+    try {
+      await fs.access(filePath);
+      return filePath;
+    } catch {
+      // Try next extension.
+    }
+  }
+  return candidate;
+}
+
+async function loadTechnicalReportBuilder() {
+  await fs.mkdir(tmpDir, { recursive: true });
+  const result = await esbuild.build({
+    entryPoints: [path.join(root, "src/lib/technicalReportPrint.ts")],
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "browser",
+    loader: { ".png": "dataurl", ".jpg": "dataurl", ".jpeg": "dataurl", ".ttf": "dataurl", ".woff": "dataurl", ".woff2": "dataurl" },
+    plugins: [{
+      name: "local-at-alias",
+      setup(build) {
+        build.onResolve({ filter: /^@\// }, async (args) => ({ path: await resolveSourceAlias(args.path) }));
+      },
+    }],
+  });
+  const bundlePath = path.join(tmpDir, "evidence-technical-report.bundle.mjs");
+  await fs.writeFile(bundlePath, result.outputFiles[0].text, "utf8");
+  const module = await import(`${pathToFileURL(bundlePath).href}?v=${Date.now()}`);
+  return module.buildTechnicalReportHtml;
+}
+
+async function dataUriFromFile(assetPath, mime = "image/png") {
+  const bytes = await fs.readFile(path.join(root, assetPath));
+  return `data:${mime};base64,${bytes.toString("base64")}`;
+}
 
 function svgPhoto(label, color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
     <rect width="900" height="600" fill="${color}"/>
     <circle cx="720" cy="115" r="70" fill="rgba(255,255,255,0.24)"/>
     <path d="M95 440 C240 320 305 390 405 305 C520 206 652 276 808 172 L808 520 L95 520 Z" fill="rgba(255,255,255,0.35)"/>
-    <text x="64" y="92" font-family="Arial" font-size="42" font-weight="700" fill="#fff">Evidência de campo</text>
-    <text x="64" y="148" font-family="Arial" font-size="28" fill="#fff">${label}</text>
+    <rect x="64" y="72" width="420" height="32" rx="16" fill="rgba(255,255,255,0.18)"/>
+    <rect x="64" y="124" width="300" height="22" rx="11" fill="rgba(255,255,255,0.16)"/>
+    <title>${label}</title>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -118,23 +161,26 @@ const sampleOs = {
 
 await fs.mkdir(outDir, { recursive: true });
 
-const server = await createServer({
-  root,
-  configFile: path.join(root, "vite.config.ts"),
-  server: { host: "127.0.0.1", port: 5181, strictPort: false },
-  logLevel: "error",
-});
+const logoDataUri = await dataUriFromFile("src/assets/logo_ciperprag.png");
+sampleBootstrap.companyConfig.logoUrl = logoDataUri;
+sampleBootstrap.companyConfig.certificadoConfig.documentLogoLightUrl = logoDataUri;
 
-await server.listen();
-const baseUrl = server.resolvedUrls?.local?.[0] ?? "http://127.0.0.1:5181/";
-
+const buildTechnicalReportHtml = await loadTechnicalReportBuilder();
+const html = buildTechnicalReportHtml(sampleOs, sampleBootstrap);
+const browser = await chromium.launch();
 try {
-  const { buildTechnicalReportHtml } = await server.ssrLoadModule("/src/lib/technicalReportPrint.ts");
-  const html = buildTechnicalReportHtml(sampleOs, sampleBootstrap).replace("<head>", `<head><base href="${baseUrl}">`);
-
-  const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1240, height: 1754 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: "networkidle" });
+  const fontChecks = await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Montserrat`)));
+    await document.fonts.ready;
+    return [400, 500, 600, 700].map((weight) => ({ weight, loaded: document.fonts.check(`${weight} 16px Montserrat`) }));
+  });
+  const missingFonts = fontChecks.filter((item) => !item.loaded);
+  if (missingFonts.length) {
+    throw new Error(`Montserrat nao carregada no relatorio tecnico: ${missingFonts.map((item) => item.weight).join(", ")}`);
+  }
   await page.pdf({
     path: outPdf,
     format: "A4",
@@ -144,9 +190,9 @@ try {
     displayHeaderFooter: false,
   });
   await page.screenshot({ path: outPng, fullPage: true });
-  await browser.close();
-
-  console.log(JSON.stringify({ pdf: outPdf, png: outPng }, null, 2));
+  await page.close();
 } finally {
-  await server.close();
+  await browser.close();
 }
+
+console.log(JSON.stringify({ pdf: outPdf, png: outPng }, null, 2));

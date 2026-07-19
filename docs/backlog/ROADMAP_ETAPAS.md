@@ -177,6 +177,7 @@ Entregue ate agora:
 - Ajustes finais da medicao aplicados: codigo `MED-VALIDACAO/2026` mantido em uma unica linha, cidade/data dinamicas por snapshot/configuracao antes das assinaturas e rodape visivel simplificado para `MED-VALIDACAO/2026 • Revisao 1 • Pagina 1 de 1`, mantendo IDs tecnicos completos fora do documento visual.
 - Auditoria inicial de logos/assets documentais criada em `docs/auditorias/auditoria-assets-documentais.md`, com script `scripts/audit-document-assets.mjs`, matriz por familia documental e inspecao estatica dos renderizadores ativos.
 - Infraestrutura tipografica documental corrigida para Montserrat local incorporada nos documentos gerados: pesos 400, 500, 600 e 700 sao carregados antes da impressao, codigos/valores usam Montserrat com numeros tabulares e a validacao pos-PDF bloqueia fallbacks como NotoSans, Arial, Roboto, Times, Consolas e Liberation Sans.
+- Auditoria final de fontes documentais por lote aprovada para os PDFs representativos de proposta, contrato, OS, certificado, relatorio tecnico e medicao, com relatorio em `docs/evidencias/etapa7_homologacao/auditoria-fontes-documentais.md`.
 
 Backlog da Etapa 7: 8 itens.
 

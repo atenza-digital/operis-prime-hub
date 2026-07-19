@@ -19,6 +19,7 @@ Esta auditoria verifica a origem de logos, icones, brasoes, selos, assinaturas e
 - Carregamento: `document.fonts.ready` + `document.fonts.load` antes da impressao.
 - Numeros, codigos, datas e valores: Montserrat com `font-variant-numeric: tabular-nums lining-nums`, sem fonte monoespacada.
 - Validacao pos-PDF: `scripts/validate-document-pdf-fonts.py` bloqueia `NotoSans`, `Arial`, `Roboto`, `Times`, `Consolas`, `Liberation Sans` e qualquer fonte nao Montserrat nos PDFs validados.
+- Evidencia final por lote: `docs/evidencias/etapa7_homologacao/auditoria-fontes-documentais.md`.
 
 ## Matriz documental
 

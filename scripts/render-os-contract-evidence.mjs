@@ -9,17 +9,24 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const outDir = path.join(rootDir, "docs/evidencias/qa_fluxo_visual");
 const tmpDir = path.join(rootDir, "tmp");
 
-async function embeddedNotoSansCss() {
-  const weights = [400, 600, 700, 900];
-  const faces = await Promise.all(weights.map(async (weight) => {
-    const fontPath = path.join(rootDir, "node_modules/@fontsource/noto-sans/files", `noto-sans-latin-ext-${weight}-normal.woff2`);
+async function embeddedMontserratCss() {
+  const weights = [
+    [400, "Montserrat-Regular.ttf"],
+    [500, "Montserrat-Medium.ttf"],
+    [600, "Montserrat-SemiBold.ttf"],
+    [700, "Montserrat-Bold.ttf"],
+    [800, "Montserrat-Bold.ttf"],
+    [900, "Montserrat-Bold.ttf"],
+  ];
+  const faces = await Promise.all(weights.map(async ([weight, fileName]) => {
+    const fontPath = path.join(rootDir, "src/assets/fonts/documentos/montserrat", fileName);
     const contents = await fs.readFile(fontPath);
-    return `@font-face{font-family:"Noto Sans";src:url(data:font/woff2;base64,${contents.toString("base64")}) format("woff2");font-style:normal;font-weight:${weight};}`;
+    return `@font-face{font-family:"Montserrat";src:url(data:font/truetype;base64,${contents.toString("base64")}) format("truetype");font-style:normal;font-weight:${weight};font-display:block;}`;
   }));
   return faces.join("\n");
 }
 
-const notoSansFontFaces = await embeddedNotoSansCss();
+const montserratFontFaces = await embeddedMontserratCss();
 
 async function resolveSourceAlias(importPath) {
   const candidate = path.join(rootDir, "src", importPath.slice(2));
@@ -72,7 +79,7 @@ async function loadOsPrintBuilder() {
     write: false,
     format: "esm",
     platform: "browser",
-    loader: { ".png": "dataurl", ".jpg": "dataurl", ".jpeg": "dataurl", ".woff": "dataurl", ".woff2": "dataurl" },
+    loader: { ".png": "dataurl", ".jpg": "dataurl", ".jpeg": "dataurl", ".ttf": "dataurl", ".woff": "dataurl", ".woff2": "dataurl" },
     plugins: [{
       name: "local-at-alias",
       setup(build) {
@@ -369,10 +376,11 @@ function commercialEvidenceHtml({ item, services, company, logoSrc }) {
   <meta charset="utf-8" />
   <title>${escapeHtml(title)} ${escapeHtml(item.numero)}</title>
   <style>
-    ${notoSansFontFaces}
+    ${montserratFontFaces}
     @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #fff; color: #0f172a; font-family: "Noto Sans", Arial, sans-serif; }
+    html, body, *, *::before, *::after { font-family: "Montserrat", sans-serif; font-variant-numeric: tabular-nums lining-nums; }
+    body { margin: 0; background: #fff; color: #0f172a; }
     .doc { min-height: 297mm; width: 210mm; background: #fff; padding: 9mm 14mm; display: flex; flex-direction: column; }
     .header { border-bottom: 2px solid ${primary}; padding-bottom: 8px; }
     .header-inner { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
@@ -381,7 +389,7 @@ function commercialEvidenceHtml({ item, services, company, logoSrc }) {
     .logo-box img { max-width: 100%; max-height: 34px; object-fit: contain; }
     .text-brand { font-size: 12px; font-weight: 900; text-transform: uppercase; color: ${primary}; line-height: 1.05; }
     h1 { margin: 0; font-size: 19px; line-height: 1.1; text-transform: uppercase; font-weight: 900; }
-    .number { margin-top: 4px; font-family: monospace; font-size: 11px; color: ${secondary}; font-weight: 800; }
+    .number { margin-top: 4px; font-size: 11px; color: ${secondary}; font-weight: 800; }
     .company { max-width: 285px; text-align: right; color: #475569; font-size: 9px; }
     .company strong { display: block; color: #0f172a; text-transform: uppercase; line-height: 1.15; }
     section { margin-top: 8px; break-inside: avoid; }
@@ -480,6 +488,16 @@ function commercialEvidenceHtml({ item, services, company, logoSrc }) {
 async function renderPdfAndPng(browser, html, baseName, pdfOptions = {}) {
   const page = await browser.newPage({ viewport: { width: 1240, height: 1754 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: "networkidle" });
+  const fontChecks = await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([400, 500, 600, 700].map((weight) => document.fonts.load(`${weight} 16px Montserrat`)));
+    await document.fonts.ready;
+    return [400, 500, 600, 700].map((weight) => ({ weight, loaded: document.fonts.check(`${weight} 16px Montserrat`) }));
+  });
+  const missingFonts = fontChecks.filter((item) => !item.loaded);
+  if (missingFonts.length) {
+    throw new Error(`Montserrat nao carregada em ${baseName}: ${missingFonts.map((item) => item.weight).join(", ")}`);
+  }
   const pdfPath = path.join(outDir, `${baseName}.pdf`);
   const pngPath = path.join(outDir, `${baseName}.png`);
   await page.pdf({
