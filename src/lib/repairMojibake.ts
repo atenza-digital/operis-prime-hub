@@ -45,6 +45,10 @@ const legacyQuestionMarkReplacements: Array<[string, string]> = [
   ["t??cnicos", "técnicos"],
   ["espec??ficos", "específicos"],
   ["Aplicavel", "Aplicável"],
+  ["servico", "serviço"],
+  ["Servico", "Serviço"],
+  ["tecnico", "técnico"],
+  ["Tecnico", "Técnico"],
 ];
 
 export function repairMojibake(value: string) {

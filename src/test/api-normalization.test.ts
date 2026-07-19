@@ -28,6 +28,7 @@ describe("api text normalization", () => {
       services: [
         {
           nome: "Higieniza????o de Cx. D????gua",
+          aplicacao: "Aplicavel ao servico Tecnico",
           epis: ["M??scara PFF2", "Luva Nitr??lica"],
         },
       ],
@@ -44,6 +45,7 @@ describe("api text normalization", () => {
 
     expect(data.clients[0].razaoSocial).toBe("Metalúrgica Sigma");
     expect(data.services[0].nome).toBe("Higienização de Cx. D'água");
+    expect(data.services[0].aplicacao).toBe("Aplicável ao serviço Técnico");
     expect(data.services[0].epis).toEqual(["Máscara PFF2", "Luva Nitrílica"]);
     expect(data.clients[0].logoUrl).toBe("https://cdn.exemplo.com/logo??tenant=ciperprag");
     expect(data.attachments[0].conteudoBase64).toBe(base64);

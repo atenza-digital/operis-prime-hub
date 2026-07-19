@@ -95,6 +95,10 @@ const replacements = [
   ["t??cnicos", "técnicos"],
   ["espec??ficos", "específicos"],
   ["Aplicavel", "Aplicável"],
+  ["servico", "serviço"],
+  ["Servico", "Serviço"],
+  ["tecnico", "técnico"],
+  ["Tecnico", "Técnico"],
 ];
 
 const suspiciousPatterns = ["%??%", "%Ã%", "%Â%", "%�%", "%ï¿½%"];
