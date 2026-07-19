@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em andamento.
-- Proxima etapa recomendada: executar validacao visual de P0.7 Medicoes e acompanhamento, consolidar evidencias do P0 e preparar a rodada final de homologacao assistida.
+- Proxima etapa recomendada: preparar a rodada final de homologacao assistida com Tarcisio/equipe, usando os roteiros atualizados e coletando divergencias por perfil.
 - Itens de backlog mapeados apos feedback externo incorporado: 47.
 - Itens de backlog remanescentes: 45.
 - Itens fora de etapa: 0.
@@ -171,6 +171,7 @@ Entregue ate agora:
 - Script operacional de saneamento controlado criado via `npm run audit:mojibake-sanitize`, com modo dry-run por padrao e escrita somente com `--apply`, cobrindo campos textuais, arrays e JSON/JSONB por tenant, preservando hashes, URLs, base64, logos e chaves de storage.
 - Dados legados de homologacao saneados na VPS para o tenant Ciperprag: 12 registros corrigidos em `ordens_servico.snapshot_dados` e `servico_pops.aplicacao`; dry-run final retornou 0 alteracoes pendentes e `npm run audit:mojibake-data -- --tenant=ciperprag` retornou `findings: 0`.
 - Residuos funcionais antigos da homologacao saneados na VPS: propostas aprovadas sem minuta foram encerradas como legado de teste, agendamentos antigos sem OS foram cancelados, OS encerradas receberam snapshot de encerramento, OS antigas sem medicao foram consolidadas em medicoes legadas canceladas e certificados emitidos receberam anexo historico imutavel; dry-run final do saneador retornou 0 acoes pendentes e `npm run audit:e2e -- --tenant=ciperprag` retornou 0 itens para verificar.
+- Validacao visual de P0.7 Medicoes executada no ambiente local Docker: script `scripts/render-measurement-evidence.mjs` gera usuario tecnico temporario, cria amostra local `MED-VALIDACAO/2026`, renderiza a tela real de medicao, exporta PDF A4 retrato e registra validacao tecnica em `docs/evidencias/etapa7_homologacao/medicoes/VALIDACAO_MEDICAO_P07.md`.
 
 Backlog da Etapa 7: 8 itens.
 

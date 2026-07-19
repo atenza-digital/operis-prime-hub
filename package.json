@@ -18,6 +18,7 @@
     "homologation:smoke-public": "node scripts/smoke-public-homologation.mjs",
     "homologation:e2e-vps": "node --env-file=.env scripts/run-homologation-e2e-flow.mjs",
     "homologation:visual-check": "node scripts/run-local-visual-check.mjs",
+    "evidence:measurement": "node --env-file-if-exists=.env scripts/render-measurement-evidence.mjs",
     "audit:branding": "node scripts/audit-branding-assets.mjs",
     "audit:mojibake-data": "node --env-file-if-exists=.env scripts/audit-mojibake-data.mjs",
     "audit:mojibake-sanitize": "node --env-file-if-exists=.env scripts/sanitize-mojibake-data.mjs",
