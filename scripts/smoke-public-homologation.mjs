@@ -12,17 +12,43 @@ async function request(pathname, options = {}) {
   return { pathname, status: response.status, ok: response.ok, contentType, body };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestWithRetry(pathname, options = {}) {
+  const attempts = Number(process.env.HOMOLOGATION_SMOKE_ATTEMPTS || 8);
+  const delayMs = Number(process.env.HOMOLOGATION_SMOKE_DELAY_MS || 3000);
+  let last;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      last = await request(pathname, options);
+      if (last.ok) return last;
+    } catch (error) {
+      last = { pathname, status: 0, ok: false, contentType: "", body: error.message };
+    }
+
+    if (attempt < attempts) await sleep(delayMs);
+  }
+
+  return last;
+}
+
 function assertOk(check, message) {
-  if (!check) throw new Error(message);
+  if (!check) {
+    console.error(JSON.stringify({ baseUrl, checks }, null, 2));
+    throw new Error(message);
+  }
 }
 
 const checks = [];
 
-checks.push(await request("/api/health"));
-checks.push(await request("/login"));
-checks.push(await request("/medicao"));
-checks.push(await request("/favicon.png"));
-checks.push(await request("/favicon.ico"));
+checks.push(await requestWithRetry("/api/health"));
+checks.push(await requestWithRetry("/login"));
+checks.push(await requestWithRetry("/medicao"));
+checks.push(await requestWithRetry("/favicon.png"));
+checks.push(await requestWithRetry("/favicon.ico"));
 
 const health = checks.find((check) => check.pathname === "/api/health");
 assertOk(health?.ok && health.body.includes('"ok":true'), "Health publico indisponivel.");
