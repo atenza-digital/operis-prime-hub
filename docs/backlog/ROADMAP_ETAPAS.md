@@ -168,6 +168,7 @@ Entregue ate agora:
 - Evidencia visual de P0.6 gerada em `docs/cliente/relatorios_tecnicos/relatorio-tecnico-ciperprag-amostra.pdf`, com renders `relatorio-tecnico-ciperprag-amostra-render-1.png` e `relatorio-tecnico-ciperprag-amostra-render-2.png`.
 - Validacao tecnica do relatorio confirmou PDF A4 retrato com 2 paginas, texto selecionavel, acentuacao correta e PDF marcado como Tagged.
 - Bootstrap da aplicacao passou a reparar textos legados com encoding corrompido antes de alimentar Dashboard, Agenda, Equipes e demais telas, preservando hashes, URLs, base64 e chaves de storage. Teste automatizado adicionado para impedir regressao em nomes, servicos, EPIs e anexos.
+- Script operacional de saneamento controlado criado via `npm run audit:mojibake-sanitize`, com modo dry-run por padrao e escrita somente com `--apply`, cobrindo campos textuais, arrays e JSON/JSONB por tenant, preservando hashes, URLs, base64, logos e chaves de storage.
 
 Backlog da Etapa 7: 10 itens.
 
