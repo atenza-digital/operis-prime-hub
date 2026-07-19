@@ -405,8 +405,8 @@ async function main() {
     if (candidates.orphanProposals.length) {
       await client.query(
         `UPDATE ciperprag_hub.contratos_templates
-            SET status = 'cancelado',
-                observacoes = CONCAT(COALESCE(observacoes, ''), CASE WHEN COALESCE(observacoes, '') = '' THEN '' ELSE E'\n' END, '[Saneamento homologação] Proposta aprovada antiga cancelada por não possuir minuta vinculada.'),
+            SET status = 'encerrado',
+                observacoes = CONCAT(COALESCE(observacoes, ''), CASE WHEN COALESCE(observacoes, '') = '' THEN '' ELSE E'\n' END, '[Saneamento homologação] Proposta aprovada antiga encerrada por não possuir minuta vinculada.'),
                 atualizado_em = NOW()
           WHERE tenant_id = $1
             AND id = ANY($2::text[])`,
