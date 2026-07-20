@@ -68,8 +68,10 @@ async function main() {
       ? `, ${quoteIdent(target.discriminator)}`
       : "";
     const discriminatorGroup = discriminatorSelect ? `, ${quoteIdent(target.discriminator)}` : "";
+    const statusSelect = await hasColumn(target.table, "status") ? `, STRING_AGG(COALESCE(${quoteIdent("status")}::text, ''), ' | ') AS statuses` : "";
+    const idSelect = await hasColumn(target.table, "id") ? `, STRING_AGG(${quoteIdent("id")}::text, ' | ') AS ids` : "";
     const { rows } = await query(
-      `SELECT tenant_id, ${quoteIdent(target.numberColumn)} AS numero${discriminatorSelect}, COUNT(*)::int AS total
+      `SELECT tenant_id, ${quoteIdent(target.numberColumn)} AS numero${discriminatorSelect}, COUNT(*)::int AS total${statusSelect}${idSelect}
          FROM ${quoteIdent(schemaName)}.${quoteIdent(target.table)}
         WHERE tenant_id = ANY($1::uuid[])
           AND NULLIF(BTRIM(${quoteIdent(target.numberColumn)}::text), '') IS NOT NULL
