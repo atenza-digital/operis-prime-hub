@@ -136,6 +136,15 @@ jobs:
           docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
           REMOTE
 
+      - name: Attachment integrity smoke on VPS
+        shell: bash
+        run: |
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "docker exec -e HOMOLOGATION_BASE_URL='http://127.0.0.1' '${CONTAINER_NAME}' npm run homologation:attachments"
+
       - name: Public smoke
         env:
           HOMOLOGATION_BASE_URL: ${{ github.event.inputs.public_url }}

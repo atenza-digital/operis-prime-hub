@@ -243,6 +243,7 @@ Entregue inicialmente em homologacao:
 - Politicas de upload foram ampliadas para POP aprovado, documentos do cliente, documentos contratuais e documentos historicos gerados, com metadados de seguranca preparando antivirus/quarentena sem bloquear a homologacao.
 - Tela de Auditoria de Anexos revisada para exibir acentuacao correta, status de storage, plano R2, politica de upload aplicada, validacao de seguranca e quarentena planejada, dando visibilidade administrativa antes da migracao real de anexos.
 - Auditoria de Anexos recebeu painel lateral de detalhes por arquivo, com IDs, origem, politica aplicada, limites, storage ativo/planejado, seguranca, quarentena, hashes, template, metadados brutos e acoes de copiar/abrir/baixar para apoio de suporte e homologacao.
+- Validacao automatizada de anexos em homologacao criada, cobrindo login tecnico, bootstrap, visualizacao, download, provedor de armazenamento e conferencia do SHA-256 persistido.
 
 Backlog da Etapa 8: 37 itens.
 
