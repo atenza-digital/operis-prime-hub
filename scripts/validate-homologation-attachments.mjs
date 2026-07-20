@@ -187,6 +187,21 @@ async function main() {
   await fs.mkdir(evidenceDir, { recursive: true });
   await fs.writeFile(reportPath, report, "utf8");
   console.log(JSON.stringify({ reportPath, attachments: attachments.length, samples: checks.length, failed: failed.length }, null, 2));
+  if (failed.length > 0) {
+    console.error(JSON.stringify(failed.map(({ attachment, view, download, validHash }) => ({
+      id: attachment.id,
+      entity: attachment.entidadeTipo,
+      category: attachment.categoria,
+      provider: attachment.storageProvider || "n/d",
+      expectedHashLength: String(attachment.hashSha256 || "").length,
+      viewStatus: view.status,
+      downloadStatus: download.status,
+      viewBytes: view.bytes,
+      downloadBytes: download.bytes,
+      headerHashPresent: Boolean(view.hashHeader),
+      validHash,
+    })), null, 2));
+  }
   if (failed.length > 0) throw new Error(`Attachment validation failed for ${failed.length} sample(s).`);
 }
 
