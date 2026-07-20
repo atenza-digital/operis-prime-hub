@@ -1,39 +1,38 @@
 # Validacao tri-tenant de isolamento SaaS
 
-Gerado em: 19/07/2026, 20:57
+Gerado em: 19/07/2026, 21:10
 Modo: somente leitura
 
 ## Resultado
 
 - Tenants avaliados: 1.
 - Falhas bloqueantes: 0.
-- Alertas: 2.
+- Alertas: 1.
 - Status tecnico: APROVADO COM ALERTAS CONTROLADOS.
 
 ## Tenants avaliados
 
 | Slug | Nome | Status | Empresa config | Assets | Comportamento visual |
 | --- | --- | --- | --- | --- | --- |
-| ciperprag | Ciperprag | ativo | sim | 0 | fallback neutro |
+| ciperprag | Ciperprag | ativo | sim | 2 | configurado |
 
 ## Contagens por tenant
 
 | Tenant | Tabela | Total |
 | --- | --- | --- |
-| ciperprag | clientes | 6 |
-| ciperprag | contratos_templates | 10 |
-| ciperprag | agendamentos | 5 |
-| ciperprag | ordens_servico | 7 |
-| ciperprag | certificados | 6 |
-| ciperprag | medicoes | 2 |
-| ciperprag | evidencias_anexos | 26 |
+| ciperprag | clientes | 8 |
+| ciperprag | contratos_templates | 16 |
+| ciperprag | agendamentos | 13 |
+| ciperprag | ordens_servico | 16 |
+| ciperprag | certificados | 10 |
+| ciperprag | medicoes | 5 |
+| ciperprag | evidencias_anexos | 40 |
 
 ## Achados
 
 | Severidade | Escopo | Mensagem | Detalhes |
 | --- | --- | --- | --- |
 | alerta | tri-tenant | Base ainda nao possui tres tenants para matriz completa. | {"tenantsEncontrados":1,"tenantsAvaliados":"ciperprag"} |
-| alerta | ciperprag | Tenant Ciperprag sem assets documentais configurados. | {} |
 
 ## Criterios verificados
 
