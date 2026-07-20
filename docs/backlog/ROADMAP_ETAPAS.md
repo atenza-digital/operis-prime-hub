@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando criacao/configuracao dos tenants de demonstracao e sem identidade visual para fechar a validacao tri-tenant antes da migracao real para R2.
+- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando aplicacao da matriz tri-tenant completa em homologacao e, depois, migracao real controlada de anexos para R2 com lote pequeno.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 45.
 - Itens fora de etapa: 0.
@@ -231,6 +231,7 @@ Entregue inicialmente em homologacao:
 - Rotina controlada de migracao de anexos antigos base64 para R2 criada via `scripts/migrate-attachments-to-r2.mjs` e comando `storage:migrate-r2`, com dry-run por padrao, filtro por tenant/tipo/categoria/limite, bloqueio de `--apply` sem R2 ativo, preservacao de hash/metadados e opcao de manter copia no banco durante rollout assistido.
 - Workflow manual `Storage R2 Migration Homologacao` criado para executar dry-run/aplicacao controlada da migracao dentro do container da VPS, reaproveitando os secrets de SSH e exigindo secrets R2 completos antes de permitir `apply`.
 - Auditoria tri-tenant de isolamento SaaS criada via `scripts/validate-tri-tenant-isolation.mjs` e comando `saas:tri-tenant`, com validacao somente leitura de `tenant_id`, assets documentais, chaves R2/plano R2, duplicidade de storage entre tenants e vazamento de snapshots/metadados entre Ciperprag, tenants genericos e tenant sem identidade visual. Evidencia de homologacao real gerada em `docs/evidencias/etapa8_infra_saas/TRI_TENANT_ISOLATION_2026-07-19.md` com 0 falhas e 1 alerta controlado por existir apenas o tenant Ciperprag; um veiculo legado sem `tenant_id` foi saneado na VPS e revalidado.
+- Preparador de matriz tri-tenant criado via `scripts/prepare-tri-tenant-validation.mjs` e comando `saas:prepare-tri-tenant`, com dry-run por padrao e gravacao somente com `--apply`/`TRI_TENANT_APPLY=true`. O script cria/configura os tenants `empresa-demonstracao` e `tenant-sem-logo`, empresa_config, numeracao e perfis padrao por tenant, sem alterar dados Ciperprag e sem criar usuarios por padrao.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -240,7 +241,7 @@ Backlog da Etapa 8: 37 itens.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
-- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado, a rotina de migracao controlada, o workflow manual de migracao e a auditoria automatizada tri-tenant ja foram implementados; falta configurar secrets R2, criar/configurar tenants de demonstracao e sem identidade visual, executar a migracao real em homologacao, testar download pos-migracao e rodar a matriz tri-tenant completa.
+- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado, a rotina de migracao controlada, o workflow manual de migracao, a auditoria automatizada tri-tenant e o preparador de tenants de validacao ja foram implementados; falta configurar secrets R2, aplicar/revalidar a matriz tri-tenant completa em homologacao, executar a migracao real em lote pequeno, testar download pos-migracao e depois ampliar a migracao.
 - Adicionar validacao de arquivo/antivirus antes de aceitar uploads em producao.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.
