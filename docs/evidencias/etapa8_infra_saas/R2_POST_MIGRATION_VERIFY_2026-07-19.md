@@ -1,6 +1,6 @@
 # Verificacao pos-migracao R2
 
-Gerado em: 19/07/2026, 22:07
+Gerado em: 19/07/2026, 22:20
 Tenant: ciperprag
 Modo: somente leitura
 
@@ -18,7 +18,7 @@ Modo: somente leitura
 
 | Provider | Total |
 | --- | --- |
-| database | 26 |
+| database | 40 |
 
 ## Registros avaliados
 
