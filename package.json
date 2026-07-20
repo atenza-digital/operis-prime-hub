@@ -22,6 +22,7 @@
     "saas:tri-tenant": "node --env-file-if-exists=.env scripts/validate-tri-tenant-isolation.mjs",
     "saas:prepare-tri-tenant": "node --env-file-if-exists=.env scripts/prepare-tri-tenant-validation.mjs",
     "storage:r2-readiness": "node --env-file-if-exists=.env scripts/audit-r2-readiness.mjs",
+    "storage:r2-verify": "node --env-file-if-exists=.env scripts/verify-r2-migration.mjs",
     "evidence:measurement": "node --env-file-if-exists=.env scripts/render-measurement-evidence.mjs",
     "audit:branding": "node scripts/audit-branding-assets.mjs",
     "audit:mojibake-data": "node --env-file-if-exists=.env scripts/audit-mojibake-data.mjs",
