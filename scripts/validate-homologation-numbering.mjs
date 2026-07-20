@@ -141,6 +141,9 @@ async function main() {
   console.log(`Validacao de numeracao: ${failures.length ? "falha" : "aprovada"}`);
   console.log(`Tenants avaliados: ${tenants.map((tenant) => tenant.slug).join(", ")}`);
   console.log(`Achados bloqueantes: ${failures.reduce((total, check) => total + check.total, 0)}`);
+  for (const check of failures) {
+    console.log(`${check.area}: ${JSON.stringify(check.rows || [])}`);
+  }
   if (failures.length) process.exitCode = 1;
 }
 
