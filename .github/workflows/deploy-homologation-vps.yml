@@ -143,7 +143,7 @@ jobs:
             -i ~/.ssh/homolog_vps_key \
             -o StrictHostKeyChecking=accept-new \
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
-            "docker exec -e HOMOLOGATION_BASE_URL='http://127.0.0.1' '${CONTAINER_NAME}' npm run homologation:attachments"
+            "docker exec -e HOMOLOGATION_BASE_URL='${{ github.event.inputs.public_url }}' '${CONTAINER_NAME}' npm run homologation:attachments"
 
       - name: Public smoke
         env:
