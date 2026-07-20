@@ -48,7 +48,7 @@ async function main() {
       if (apply) {
         await client.query(
           `UPDATE ciperprag_hub.evidencias_anexos
-              SET hash_sha256 = $2,
+              SET hash_sha256 = $2::text,
                   metadados = COALESCE(metadados, '{}'::jsonb) || jsonb_build_object(
                     'hashSha256', $2::text,
                     'hashRecalculadoHomologacaoEm', NOW()::text,
