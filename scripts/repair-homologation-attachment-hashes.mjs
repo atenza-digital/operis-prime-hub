@@ -50,9 +50,9 @@ async function main() {
           `UPDATE ciperprag_hub.evidencias_anexos
               SET hash_sha256 = $2,
                   metadados = COALESCE(metadados, '{}'::jsonb) || jsonb_build_object(
-                    'hashSha256', $2,
+                    'hashSha256', $2::text,
                     'hashRecalculadoHomologacaoEm', NOW()::text,
-                    'hashAnteriorHomologacao', $3
+                    'hashAnteriorHomologacao', $3::text
                   )
             WHERE id = $1 AND tenant_id = $4`,
           [row.id, actualHash, row.hash_sha256 || null, tenant.id],
@@ -60,7 +60,7 @@ async function main() {
         await client.query(
           `INSERT INTO ciperprag_hub.audit_logs
            (tenant_id, entidade_tipo, entidade_id, acao, resumo, after)
-           VALUES ($1,'anexo',$2,'homologation_attachment_hash_repaired',
+           VALUES ($1,'anexo',$2::text,'homologation_attachment_hash_repaired',
                    'Hash SHA-256 recalculado a partir do conteudo persistido em homologacao', $3::jsonb)`,
           [tenant.id, row.id, JSON.stringify({ previousHash: row.hash_sha256 || null, hashSha256: actualHash })],
         );
