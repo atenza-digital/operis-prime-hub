@@ -628,6 +628,11 @@ export async function ensureDatabaseShape() {
 
   await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates DROP CONSTRAINT IF EXISTS contratos_templates_tipo_check");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates ADD CONSTRAINT contratos_templates_tipo_check CHECK (tipo IN ('contrato','proposta','minuta'))");
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates_servicos
+    ADD COLUMN IF NOT EXISTS descricao_comercial TEXT,
+    ADD COLUMN IF NOT EXISTS unidade_comercial TEXT
+  `);
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos DROP CONSTRAINT IF EXISTS evidencias_anexos_entidade_check");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos ADD CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta','minuta'))");
 
