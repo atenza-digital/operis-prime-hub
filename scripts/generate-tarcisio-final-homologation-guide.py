@@ -20,8 +20,8 @@ OUT_DIR = ROOT / "docs" / "cliente" / "homologacao_roteiros"
 QA_DIR = ROOT / "docs" / "evidencias" / "etapa7_homologacao" / "roteiro_final_tarcisio"
 PRINTS_DIR = ROOT / "docs" / "evidencias" / "etapa7_homologacao" / "prints_roteiros"
 
-DOCX_OUT = OUT_DIR / "Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.3.docx"
-WHATSAPP_OUT = OUT_DIR / "MENSAGEM_WHATSAPP_HOMOLOGACAO_TARCISIO_v1.3.md"
+DOCX_OUT = OUT_DIR / "Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.4.docx"
+WHATSAPP_OUT = OUT_DIR / "MENSAGEM_WHATSAPP_HOMOLOGACAO_TARCISIO_v1.4.md"
 
 VERSION = "0.6.3"
 COMMIT = "5df8ccc"
@@ -124,12 +124,22 @@ VISUAL_GUIDE = [
         "O historico permite localizar servicos com ou sem certificado; o certificado usa dados da mesma OS e do mesmo tenant.",
     ),
     (
-        "5.10 Financeiro operacional: medicao",
+        "5.10 Qualidade: relatorio tecnico - pagina 1",
+        "docs/cliente/relatorios_tecnicos/relatorio-tecnico-ciperprag-amostra-render-1.png",
+        "O relatorio apresenta dados da OS, checklist, produtos, EPIs, normas e evidencias, sem valores comerciais.",
+    ),
+    (
+        "5.11 Qualidade: relatorio tecnico - pagina 2",
+        "docs/cliente/relatorios_tecnicos/relatorio-tecnico-ciperprag-amostra-render-2.png",
+        "A continuidade do relatorio permanece legivel, com fotos/observacoes e identificacao coerente da OS.",
+    ),
+    (
+        "5.12 Financeiro operacional: medicao",
         "docs/evidencias/etapa7_homologacao/prints_roteiros/07-medicao.png",
         "A medicao consolida OS encerradas por periodo e acompanha NF, cobranca, pagamento e baixa manual no ERP.",
     ),
     (
-        "5.11 Integridade de anexos",
+        "5.13 Integridade de anexos",
         "docs/evidencias/etapa7_homologacao/prints_roteiros/08-auditoria-anexos.png",
         "Anexos e fotos podem ser consultados com rastreabilidade, sem alterar o conteudo apos o registro.",
     ),
@@ -465,18 +475,18 @@ def build() -> None:
         doc,
         ["Versão", "Data", "Responsável", "Descrição"],
         [
-            ["v1.3", DATE_BR, RESP_ATENZA, "Roteiro ampliado com prints reais, resultado esperado por tela e cobertura administrativa, comercial, operacional, qualidade e medicao."],
+            ["v1.4", DATE_BR, RESP_ATENZA, "Inclusao das duas paginas renderizadas do relatorio tecnico no guia visual, completando a cobertura documental do P0."],
         ],
         [2.0, 2.8, 4.2, 7.0],
     )
 
     doc.save(DOCX_OUT)
 
-    message = """Pessoal, segue o roteiro v1.3 para a validação final da homologação do Atenza FieldOps.
+    message = """Pessoal, segue o roteiro v1.4 para a validação final da homologação do Atenza FieldOps.
 
 Por favor, usem o DOCX para registrar tudo: OK, ressalvas, erros, prints e números de proposta/contrato/OS/certificado/medição. Evitem mandar ocorrências soltas no grupo, porque fica mais difícil consolidar e priorizar.
 
-A senha deve ser usada apenas pelo canal seguro combinado. O DOCX agora traz prints, instrucoes e resultado esperado desde a administracao ate a medicao. O CI/CD ja validou a base tecnica; concentrem-se nos cinco testes finais indicados no documento. Ao finalizar, devolvam o proprio documento preenchido."""
+A senha deve ser usada apenas pelo canal seguro combinado. O DOCX traz prints, instrucoes e resultado esperado desde a administracao ate a medicao, incluindo as duas paginas do relatorio tecnico. O CI/CD ja validou a base tecnica; concentrem-se nos cinco testes finais indicados no documento. Ao finalizar, devolvam o proprio documento preenchido."""
     WHATSAPP_OUT.write_text(message, encoding="utf-8")
     print(DOCX_OUT)
     print(WHATSAPP_OUT)
