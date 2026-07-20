@@ -46,7 +46,54 @@ async function main() {
 
       const referenced = enriched.filter((row) => row.references > 0);
       if (referenced.length > 1) {
-        blocked.push({ numero: duplicate.numero, tipo: duplicate.tipo, reason: "Mais de um registro duplicado possui contratos operacionais vinculados.", rows: enriched });
+        const keeper = referenced[0];
+        const match = String(duplicate.numero).match(/^(.*?)(\d+)(\/\d{4})$/);
+        if (!match) {
+          blocked.push({ numero: duplicate.numero, tipo: duplicate.tipo, reason: "Numero duplicado nao possui formato que permita renumeracao segura.", rows: enriched });
+          continue;
+        }
+        const { rows: existingNumbers } = await client.query(
+          `SELECT numero FROM ciperprag_hub.contratos_templates WHERE tenant_id = $1 AND tipo = $2`,
+          [tenant.id, duplicate.tipo],
+        );
+        const usedNumbers = new Set(existingNumbers.map((row) => String(row.numero)));
+        let nextValue = Number(match[2]) + 1;
+        let replacementNumber = `${match[1]}${nextValue}${match[3]}`;
+        while (usedNumbers.has(replacementNumber)) {
+          nextValue += 1;
+          replacementNumber = `${match[1]}${nextValue}${match[3]}`;
+        }
+        for (const row of referenced.filter((item) => item.id !== keeper.id)) {
+          if (apply) {
+            await client.query(
+              `UPDATE ciperprag_hub.contratos_templates
+                  SET numero = $1, atualizado_em = NOW()
+                WHERE id = $2 AND tenant_id = $3`,
+              [replacementNumber, row.id, tenant.id],
+            );
+            await client.query(
+              `UPDATE ciperprag_hub.contratos
+                  SET numero_comercial = $1
+                WHERE tenant_id = $2 AND contrato_template_id = $3`,
+              [replacementNumber, tenant.id, row.id],
+            );
+            await client.query(
+              `INSERT INTO ciperprag_hub.audit_logs
+               (tenant_id, entidade_tipo, entidade_id, acao, resumo, dados_depois)
+               VALUES ($1, 'contratos_template', $2::text, 'homologation_duplicate_number_renumbered',
+                       'Registro duplicado de numeracao renumerado em homologacao', $3::jsonb)`,
+              [tenant.id, row.id, JSON.stringify({ previousNumber: duplicate.numero, nextNumber: replacementNumber, keeperId: keeper.id, references: row.references })],
+            );
+          }
+          actions.push({ numero: duplicate.numero, tipo: duplicate.tipo, keeper, renumbered: { ...row, nextNumber: replacementNumber } });
+          usedNumbers.add(replacementNumber);
+          nextValue += 1;
+          replacementNumber = `${match[1]}${nextValue}${match[3]}`;
+          while (usedNumbers.has(replacementNumber)) {
+            nextValue += 1;
+            replacementNumber = `${match[1]}${nextValue}${match[3]}`;
+          }
+        }
         continue;
       }
 
