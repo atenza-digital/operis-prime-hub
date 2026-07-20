@@ -134,7 +134,10 @@ async function main() {
   const authHeaders = { Authorization: `Bearer ${login.body.token}` };
   const bootstrap = await requestJson("/api/bootstrap", { headers: authHeaders });
   if (!bootstrap.ok || !Array.isArray(bootstrap.body?.attachments)) {
-    throw new Error(`Bootstrap attachments unavailable: HTTP ${bootstrap.status}`);
+    const detail = typeof bootstrap.body === "string"
+      ? bootstrap.body.slice(0, 500)
+      : JSON.stringify(bootstrap.body || {}).slice(0, 500);
+    throw new Error(`Bootstrap attachments unavailable: HTTP ${bootstrap.status}; detail: ${detail}`);
   }
   const attachments = bootstrap.body.attachments;
   if (attachments.length === 0) throw new Error("No attachments available in homologation for validation.");
