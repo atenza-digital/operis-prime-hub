@@ -81,3 +81,9 @@ Atualizado em 19/07/2026 para incluir validacao automatica antes e depois da mig
 3. Verificacao pos-migracao (`storage:r2-verify`).
 
 Estado dos secrets no GitHub nesta verificacao: apenas os secrets da VPS estao cadastrados. Ainda faltam `HOMOLOG_R2_BUCKET_DOCUMENTS`, `HOMOLOG_R2_ACCOUNT_ID`, `HOMOLOG_R2_ACCESS_KEY_ID` e `HOMOLOG_R2_SECRET_ACCESS_KEY`.
+
+## Limite operacional atual do GitHub
+
+Foi tentado executar o workflow manual pela branch `homologacao/p0-relatorios-tecnicos`, mas o GitHub retornou que o workflow ainda nao existe na branch padrao. Portanto, a validacao manual do workflow `Storage R2 Migration Homologacao` so podera ser disparada depois que o arquivo entrar na branch padrao, ou depois de uma liberacao equivalente que torne o workflow visivel para o GitHub Actions.
+
+Enquanto isso, os scripts `storage:r2-readiness` e `storage:r2-verify` ja estao publicados e validados no container de homologacao pelo workflow de deploy da aplicacao.
