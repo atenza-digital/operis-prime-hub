@@ -43,6 +43,8 @@ Para executar `apply`, tambem exige:
 - `apply` e bloqueado se os secrets R2 nao estiverem completos.
 - O primeiro `apply` exige `keep_database_copy=true`, evitando remover base64 do banco antes de validacao manual dos downloads.
 - O script roda dentro do container `atenza-fieldops`, usando a mesma rede e credenciais de banco da aplicacao.
+- A esteira executa `storage:r2-readiness` antes da migracao, registrando provider ativo, credenciais, bucket e pendencias reais.
+- A esteira executa `storage:r2-verify` depois da migracao, validando leitura dos objetos R2, hash SHA-256, tamanho e fallback no banco.
 
 ## Estado atual verificado
 
@@ -69,3 +71,13 @@ Provider reportado pelo script:
 Nenhum dado foi alterado.
 
 Proxima acao segura: configurar os quatro secrets R2 no ambiente `homologation`, executar `dry-run` pelo workflow e depois um lote pequeno com `apply` mantendo copia no banco.
+
+## Atualizacao da esteira
+
+Atualizado em 19/07/2026 para incluir validacao automatica antes e depois da migracao:
+
+1. Preflight R2 (`storage:r2-readiness`).
+2. Migracao em `dry-run` ou `apply` (`storage:migrate-r2`).
+3. Verificacao pos-migracao (`storage:r2-verify`).
+
+Estado dos secrets no GitHub nesta verificacao: apenas os secrets da VPS estao cadastrados. Ainda faltam `HOMOLOG_R2_BUCKET_DOCUMENTS`, `HOMOLOG_R2_ACCOUNT_ID`, `HOMOLOG_R2_ACCESS_KEY_ID` e `HOMOLOG_R2_SECRET_ACCESS_KEY`.

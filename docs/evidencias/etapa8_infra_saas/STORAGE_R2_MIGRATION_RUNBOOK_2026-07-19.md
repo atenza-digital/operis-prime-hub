@@ -68,10 +68,11 @@ Para executar em homologacao com seguranca, usar preferencialmente o workflow/ru
 
 ## Sequencia recomendada para aplicar
 
-1. Configurar `DOCUMENT_STORAGE_PROVIDER=r2` e credenciais R2 no ambiente de homologacao.
-2. Rodar dry-run com lote pequeno.
-3. Rodar `--apply --keep-database-copy --limit=3`.
-4. Validar download dos anexos migrados pela tela/API.
-5. Rodar novo lote sem `--keep-database-copy`.
-6. Conferir `storage_provider`, `storage_key`, hash e ausencia de conteudo base64 nos itens migrados.
-7. Repetir por categoria ate zerar pendencias.
+1. Cadastrar no GitHub os secrets `HOMOLOG_R2_BUCKET_DOCUMENTS`, `HOMOLOG_R2_ACCOUNT_ID`, `HOMOLOG_R2_ACCESS_KEY_ID` e `HOMOLOG_R2_SECRET_ACCESS_KEY` no ambiente `homologation`.
+2. Rodar o workflow `Storage R2 Migration Homologacao` em `dry-run`, com `tenant=ciperprag`, `entity_type=os`, `category=foto`, `limit=3` e `keep_database_copy=true`.
+3. Conferir no log o preflight `storage:r2-readiness`, validando que `Provider ativo` esta como `r2` e `R2 pronto` como `sim`.
+4. Rodar o mesmo workflow em `apply`, mantendo `keep_database_copy=true` e `limit=3`.
+5. Conferir no log o `storage:r2-verify`, validando leitura real dos objetos R2, hash SHA-256, tamanho e ausencia de falhas.
+6. Validar download dos anexos migrados pela tela/API, incluindo OS, certificado/relatorio que use essas fotos e auditoria de anexos.
+7. Repetir novo lote pequeno por categoria. Somente depois da validacao funcional, avaliar remover `conteudo_base64` dos proximos lotes.
+8. Repetir por categoria ate zerar pendencias.

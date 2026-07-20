@@ -120,6 +120,19 @@ jobs:
           echo "Executando migracao de storage em modo $MIGRATION_MODE para tenant $MIGRATION_TENANT."
           echo "Provider efetivo esperado: $PROVIDER."
 
+          echo "Preflight R2 antes da migracao."
+          docker exec \
+            -e RUNTIME_ENV="homologacao" \
+            -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
+            -e R2_BUCKET_DOCUMENTS="$HOMOLOG_R2_BUCKET_DOCUMENTS" \
+            -e R2_ACCOUNT_ID="$HOMOLOG_R2_ACCOUNT_ID" \
+            -e R2_ACCESS_KEY_ID="$HOMOLOG_R2_ACCESS_KEY_ID" \
+            -e R2_SECRET_ACCESS_KEY="$HOMOLOG_R2_SECRET_ACCESS_KEY" \
+            -e STORAGE_MIGRATION_TENANT="$MIGRATION_TENANT" \
+            "$CONTAINER_NAME" \
+            npm run storage:r2-readiness
+
+          echo "Executando migracao R2."
           docker exec \
             -e RUNTIME_ENV="homologacao" \
             -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
@@ -135,4 +148,19 @@ jobs:
             -e STORAGE_MIGRATION_KEEP_DATABASE_COPY="$MIGRATION_KEEP_DATABASE_COPY" \
             "$CONTAINER_NAME" \
             npm run storage:migrate-r2
+
+          echo "Verificacao R2 apos migracao."
+          docker exec \
+            -e RUNTIME_ENV="homologacao" \
+            -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
+            -e R2_BUCKET_DOCUMENTS="$HOMOLOG_R2_BUCKET_DOCUMENTS" \
+            -e R2_ACCOUNT_ID="$HOMOLOG_R2_ACCOUNT_ID" \
+            -e R2_ACCESS_KEY_ID="$HOMOLOG_R2_ACCESS_KEY_ID" \
+            -e R2_SECRET_ACCESS_KEY="$HOMOLOG_R2_SECRET_ACCESS_KEY" \
+            -e STORAGE_VERIFY_TENANT="$MIGRATION_TENANT" \
+            -e STORAGE_VERIFY_ENTITY_TYPE="$MIGRATION_ENTITY_TYPE" \
+            -e STORAGE_VERIFY_CATEGORY="$MIGRATION_CATEGORY" \
+            -e STORAGE_VERIFY_LIMIT="$MIGRATION_LIMIT" \
+            "$CONTAINER_NAME" \
+            npm run storage:r2-verify
           REMOTE
