@@ -58,11 +58,17 @@ const defaultNumeracao: NumeracaoConfig = {
   medicaoUltimo: 0,
 };
 
-type UploadPolicyKey = "os.foto" | "minuta.documento";
+type UploadPolicyKey = "os.foto" | "minuta.documento" | "servico_pop.pop_aprovado" | "cliente.documento" | "contrato.documento" | "documento.pdf_historico";
 type UploadPolicy = {
   maxFiles: number;
   maxBytes: number;
   allowedMimeTypes: string[];
+  securityScan?: {
+    required?: boolean;
+    provider?: string;
+    quarantineMode?: string;
+    blockingMode?: string;
+  };
 };
 
 const uploadPolicyOptions = {
@@ -101,6 +107,87 @@ const uploadPolicyOptions = {
       { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
       { value: "image/png", label: "PNG" },
       { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "servico_pop.pop_aprovado": {
+    title: "POP aprovado",
+    description: "Controla arquivos de POP enviados prontos pelo cliente para versionamento e consulta.",
+    defaults: {
+      maxFiles: 1,
+      maxBytes: 12 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "cliente.documento": {
+    title: "Documentos do cliente",
+    description: "Arquivos cadastrais, evidências administrativas ou documentos de apoio vinculados ao cliente.",
+    defaults: {
+      maxFiles: 10,
+      maxBytes: 10 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "contrato.documento": {
+    title: "Documentos contratuais",
+    description: "Arquivos auxiliares de proposta, minuta, contrato assinado ou anexos comerciais.",
+    defaults: {
+      maxFiles: 5,
+      maxBytes: 12 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/msword", label: "DOC" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "documento.pdf_historico": {
+    title: "Documentos históricos gerados",
+    description: "PDF/HTML imutável gerado pelo sistema para auditoria, hash e histórico documental.",
+    defaults: {
+      maxFiles: 1,
+      maxBytes: 20 * 1024 * 1024,
+      allowedMimeTypes: ["application/pdf", "text/html"],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "text/html", label: "HTML histórico" },
     ],
   },
 } satisfies Record<UploadPolicyKey, {
@@ -647,6 +734,11 @@ export default function Configuracoes() {
                       <p className="text-[11px] text-muted-foreground">
                         Chave técnica: <code className="rounded bg-muted px-1">{policyKey}</code>
                       </p>
+                      <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-[11px] text-muted-foreground">
+                        <p className="font-semibold text-foreground">Segurança do upload</p>
+                        <p>Validação ativa: base64, MIME, tamanho e assinatura do arquivo.</p>
+                        <p>Antivírus/quarentena: preparado em metadados, pendente de integração com provedor externo.</p>
+                      </div>
                     </div>
                   );
                 })}

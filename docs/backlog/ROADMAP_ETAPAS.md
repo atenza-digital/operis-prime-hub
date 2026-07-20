@@ -223,7 +223,7 @@ Entregue inicialmente em homologacao:
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 - Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
 - Deploy de homologacao passou a executar smoke obrigatorio dentro da VPS (health, login e favicons) e smoke publico best-effort no dominio oficial, registrando quando o GitHub Actions for bloqueado pelo desafio do Cloudflare.
-- Script de auditoria de dados com encoding suspeito criado para localizar `??`, `Ã`, `Â` e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
+- Script de auditoria de dados com encoding suspeito criado para localizar padroes de mojibake e caractere de substituicao em campos textuais do tenant antes de qualquer saneamento com escrita.
 - Renderizadores ativos de documentos passaram a resolver logo documental por configuracao/snapshot do tenant, sem fallback fixo da Ciperprag: propostas, contratos/minutas, OS, certificados, medicoes e relatorios tecnicos.
 - Auditoria de dependencias concluida em duas rodadas controladas: `npm audit fix` reduziu os achados sem `--force`; depois o toolchain foi atualizado para Vite 8.1.5, Vitest 4.1.10 e plugin React SWC 4.3.1; Browserslist/caniuse-lite foi atualizado via `npm update`; `npm audit` completo ficou zerado.
 - Fundacao de storage documental por tenant criada: anexos e documentos imutaveis passam a registrar plano R2 deterministico por ambiente/tenant/entidade/categoria/hash, mantendo o banco como provider ativo em homologacao ate existir upload/download real validado.
@@ -240,6 +240,7 @@ Entregue inicialmente em homologacao:
 - Politica tecnica de uploads por familia documental criada, com defaults seguros para `os.foto` e `minuta.documento` e possibilidade de sobrescrita futura por `certificado_config.uploadPolicies` do tenant.
 - Workflow manual de migracao R2 reforcado para executar preflight antes da migracao e verificacao pos-migracao depois do lote, garantindo evidencia automatica de readiness, upload, leitura, hash e tamanho.
 - Tela de Parametros do tenant passou a expor politicas guiadas de upload por familia documental, inicialmente para fotos da OS e arquivo de minuta/contrato do cliente, gravando em `certificado_config.uploadPolicies` e usando os mesmos limites aplicados pelo backend.
+- Politicas de upload foram ampliadas para POP aprovado, documentos do cliente, documentos contratuais e documentos historicos gerados, com metadados de seguranca preparando antivirus/quarentena sem bloquear a homologacao.
 
 Backlog da Etapa 8: 37 itens.
 
@@ -250,7 +251,7 @@ Backlog da Etapa 8: 37 itens.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
 - Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado, a rotina de migracao controlada, o workflow manual com preflight/verificacao, a auditoria automatizada tri-tenant, o preparador de tenants de validacao, o preflight R2 e o verificador pos-migracao ja foram implementados e publicados em homologacao; falta configurar secrets R2, executar a migracao real em lote pequeno, testar download pos-migracao e depois ampliar a migracao.
-- Concluir hardening de upload para producao com varredura antivirus/antimalware, quarentena opcional, inspecao profunda de DOCX/ODT e ampliacao gradual das politicas para novas familias documentais.
+- Concluir hardening de upload para producao com varredura antivirus/antimalware, quarentena opcional e inspecao profunda de DOCX/ODT conectadas a provedor externo ou rotina dedicada.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.
 - Parametrizar clausulas comerciais/juridicas por tenant.

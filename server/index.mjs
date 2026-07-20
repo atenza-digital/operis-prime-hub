@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
-import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
+import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -3377,7 +3377,12 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
       mimeType,
       hashSha256: hash,
       fileName,
-      metadata: { origem: "arquivo_original_cliente", numero: template.numero, hashSha256: hash },
+      metadata: {
+        origem: "arquivo_original_cliente",
+        numero: template.numero,
+        hashSha256: hash,
+        ...buildAttachmentSecurityMetadata(uploadPolicy),
+      },
     });
     await client.query(
       `INSERT INTO ciperprag_hub.evidencias_anexos
@@ -3886,7 +3891,13 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         mimeType: parsed.mimeType,
         hashSha256: fotoHash,
         fileName: fotoFileName,
-        metadata: { origem: "encerramento_os", posicao: index + 1, dataExecucao, hashSha256: fotoHash },
+        metadata: {
+          origem: "encerramento_os",
+          posicao: index + 1,
+          dataExecucao,
+          hashSha256: fotoHash,
+          ...buildAttachmentSecurityMetadata(uploadPolicy),
+        },
       });
       await client.query(
         `INSERT INTO ciperprag_hub.evidencias_anexos

@@ -402,6 +402,12 @@ export interface EmpresaConfig {
       maxFiles?: number;
       maxBytes?: number;
       allowedMimeTypes?: string[];
+      securityScan?: {
+        required?: boolean;
+        provider?: string;
+        quarantineMode?: string;
+        blockingMode?: string;
+      };
     }>;
   };
 }

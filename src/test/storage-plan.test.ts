@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveAttachmentPolicy, resolveDocumentStorageConfig, sanitizeStorageSegment, validateAttachmentPayload } from "../../server/storage.mjs";
+import { buildAttachmentSecurityMetadata, buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveAttachmentPolicy, resolveDocumentStorageConfig, sanitizeStorageSegment, validateAttachmentPayload } from "../../server/storage.mjs";
 
 describe("document storage planning", () => {
   it("normaliza segmentos para chaves seguras e previsiveis", () => {
@@ -160,6 +160,17 @@ describe("document storage planning", () => {
       maxFiles: 1,
       maxBytes: 8 * 1024 * 1024,
     });
+
+    expect(resolveAttachmentPolicy("servico_pop.pop_aprovado")).toMatchObject({
+      key: "servico_pop.pop_aprovado",
+      maxFiles: 1,
+      maxBytes: 12 * 1024 * 1024,
+    });
+
+    expect(resolveAttachmentPolicy("documento.pdf_historico")).toMatchObject({
+      key: "documento.pdf_historico",
+      allowedMimeTypes: ["application/pdf", "text/html"],
+    });
   });
 
   it("permite sobrescrever politica de upload pela configuracao do tenant", () => {
@@ -178,6 +189,37 @@ describe("document storage planning", () => {
       maxFiles: 2,
       maxBytes: 1024,
       allowedMimeTypes: ["image/jpeg"],
+      securityScan: {
+        required: false,
+        provider: "not_configured",
+        quarantineMode: "disabled",
+        blockingMode: "metadata_only",
+      },
+    });
+  });
+
+  it("prepara metadados de seguranca para auditoria futura de uploads", () => {
+    const policy = resolveAttachmentPolicy("cliente.documento", {
+      uploadPolicies: {
+        "cliente.documento": {
+          securityScan: {
+            required: true,
+            provider: "cloudflare_or_external_av",
+            quarantineMode: "enabled",
+            blockingMode: "future_blocking",
+          },
+        },
+      },
+    });
+
+    expect(buildAttachmentSecurityMetadata(policy)).toMatchObject({
+      uploadPolicyKey: "cliente.documento",
+      securityScanRequired: true,
+      securityScanProvider: "cloudflare_or_external_av",
+      securityScanStatus: "pending_provider",
+      quarantineMode: "enabled",
+      quarantineStatus: "planned",
+      securityBlockingMode: "future_blocking",
     });
   });
 });

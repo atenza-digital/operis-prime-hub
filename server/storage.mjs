@@ -22,6 +22,48 @@ const DEFAULT_ATTACHMENT_POLICIES = {
       "image/jpeg",
     ],
   },
+  "servico_pop.pop_aprovado": {
+    maxFiles: 1,
+    maxBytes: 12 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.oasis.opendocument.text",
+      "image/png",
+      "image/jpeg",
+    ],
+  },
+  "cliente.documento": {
+    maxFiles: 10,
+    maxBytes: 10 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.oasis.opendocument.text",
+      "image/png",
+      "image/jpeg",
+    ],
+  },
+  "contrato.documento": {
+    maxFiles: 5,
+    maxBytes: 12 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.oasis.opendocument.text",
+      "image/png",
+      "image/jpeg",
+    ],
+  },
+  "documento.pdf_historico": {
+    maxFiles: 1,
+    maxBytes: 20 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "text/html",
+    ],
+  },
 };
 
 export function sanitizeStorageSegment(value, fallback = "item") {
@@ -88,6 +130,28 @@ export function resolveAttachmentPolicy(policyKey, tenantConfig = {}) {
     maxFiles: Math.floor(normalizePositiveNumber(override.maxFiles, fallback.maxFiles)),
     maxBytes: Math.floor(normalizePositiveNumber(override.maxBytes, fallback.maxBytes)),
     allowedMimeTypes: normalizeMimeTypes(override.allowedMimeTypes, fallback.allowedMimeTypes),
+    securityScan: {
+      required: Boolean(override.securityScan?.required || false),
+      provider: String(override.securityScan?.provider || "not_configured"),
+      quarantineMode: String(override.securityScan?.quarantineMode || "disabled"),
+      blockingMode: String(override.securityScan?.blockingMode || "metadata_only"),
+    },
+  };
+}
+
+export function buildAttachmentSecurityMetadata(policy) {
+  const scan = policy?.securityScan || {};
+  return {
+    uploadPolicyKey: policy?.key || null,
+    uploadPolicyMaxFiles: policy?.maxFiles || null,
+    uploadPolicyMaxBytes: policy?.maxBytes || null,
+    uploadPolicyAllowedMimeTypes: policy?.allowedMimeTypes || [],
+    securityScanRequired: Boolean(scan.required),
+    securityScanProvider: scan.provider || "not_configured",
+    securityScanStatus: scan.required ? "pending_provider" : "not_required",
+    quarantineMode: scan.quarantineMode || "disabled",
+    quarantineStatus: scan.quarantineMode && scan.quarantineMode !== "disabled" ? "planned" : "not_applicable",
+    securityBlockingMode: scan.blockingMode || "metadata_only",
   };
 }
 
