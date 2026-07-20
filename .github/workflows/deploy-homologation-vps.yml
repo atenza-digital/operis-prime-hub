@@ -73,13 +73,15 @@ jobs:
           chmod 700 ~/.ssh
           echo "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
           chmod 600 ~/.ssh/homolog_vps_key
-          ssh-keyscan -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 20 -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts \
+            || echo "::warning::Nao foi possivel pre-carregar known_hosts; os comandos SSH usarao StrictHostKeyChecking=accept-new."
 
       - name: Upload Docker image
         shell: bash
         run: |
           scp -P "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
             -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
             "/tmp/${IMAGE_NAME}-${{ steps.image.outputs.tag }}.tar" \
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}:/tmp/${IMAGE_NAME}-${{ steps.image.outputs.tag }}.tar"
 
@@ -88,6 +90,7 @@ jobs:
         run: |
           ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
             -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
             "IMAGE_NAME='${IMAGE_NAME}' CONTAINER_NAME='${CONTAINER_NAME}' TAG='${{ steps.image.outputs.tag }}' APP_PORT='${APP_PORT}' CONTAINER_PORT='${CONTAINER_PORT}' DOCKER_NETWORK='${DOCKER_NETWORK}' bash -s" <<'REMOTE'
           set -euo pipefail
