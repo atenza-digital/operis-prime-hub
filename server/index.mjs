@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
-import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage } from "./storage.mjs";
+import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, validateAttachmentPayload } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -214,18 +214,6 @@ function normalizeJsonArray(value) {
       }
     })
     .filter(Boolean);
-}
-
-function parseDataUrl(dataUrl) {
-  const value = String(dataUrl || "");
-  const match = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return { mimeType: null, base64Data: value, bytes: null };
-  const base64Data = match[2];
-  return {
-    mimeType: match[1],
-    base64Data,
-    bytes: Math.floor((base64Data.length * 3) / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0),
-  };
 }
 
 function htmlEscape(value) {
@@ -3350,13 +3338,19 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
     "image/png",
     "image/jpeg",
   ]);
-  if (!allowedTypes.has(mimeType)) return res.status(400).json({ error: "Formato de minuta nao suportado." });
-  const parsed = parseDataUrl(req.body.contentBase64);
-  if (!parsed.base64Data || !parsed.bytes || parsed.bytes > 8 * 1024 * 1024) {
-    return res.status(400).json({ error: "O arquivo da minuta deve ter no maximo 8 MB." });
+  let parsed;
+  try {
+    parsed = validateAttachmentPayload({
+      contentBase64: req.body.contentBase64,
+      declaredMimeType: mimeType,
+      allowedMimeTypes: allowedTypes,
+      maxBytes: 8 * 1024 * 1024,
+      label: "arquivo da minuta",
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
   }
-  const dataUrl = parsed.mimeType ? String(req.body.contentBase64) : `data:${mimeType};base64,${parsed.base64Data}`;
-  const hash = sha256Hex(Buffer.from(parsed.base64Data, "base64"));
+  const hash = sha256Hex(parsed.buffer);
   const attachment = await withTransaction(async (client) => {
     const { rows: templates } = await client.query(
       "SELECT id, tipo, numero FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2 LIMIT 1",
@@ -3384,8 +3378,8 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
     });
     const persisted = await persistAttachmentContent({
       storagePlan: storageTarget,
-      buffer: Buffer.from(parsed.base64Data, "base64"),
-      contentBase64: dataUrl,
+      buffer: parsed.buffer,
+      contentBase64: parsed.dataUrl,
       mimeType,
       hashSha256: hash,
       fileName,
@@ -3837,6 +3831,19 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const technician = techRows[0];
     const qty = Number(quantidade || 1);
     const isNotExecuted = Boolean(naoExecutada);
+    const rawFotos = Array.isArray(fotos) ? fotos : [];
+    if (rawFotos.length > 3) {
+      const error = new Error("Anexe no maximo 3 fotos de evidencia.");
+      error.status = 400;
+      throw error;
+    }
+    const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
+      contentBase64: foto,
+      declaredMimeType: null,
+      allowedMimeTypes: new Set(["image/png", "image/jpeg"]),
+      maxBytes: 5 * 1024 * 1024,
+      label: `foto ${index + 1}`,
+    }));
 
     if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
       const error = new Error("Informe o motivo da nao execucao.");
@@ -3844,7 +3851,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       throw error;
     }
 
-    if (!isNotExecuted && service?.exige_foto && (!Array.isArray(fotos) || fotos.length === 0)) {
+    if (!isNotExecuted && service?.exige_foto && validatedFotos.length === 0) {
       const error = new Error("Este servico exige ao menos uma foto de evidencia.");
       error.status = 400;
       throw error;
@@ -3861,14 +3868,14 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
            nao_executada = $7,
            motivo_nao_execucao = $8
        WHERE id = $1 AND tenant_id = $9`,
-      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, fotos || [], JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null, tenantId],
+      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, validatedFotos.map((foto) => foto.dataUrl), JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null, tenantId],
     );
 
     await client.query("DELETE FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND categoria = 'foto' AND tenant_id = $2", [orderId, tenantId]);
-    for (const [index, foto] of (Array.isArray(fotos) ? fotos : []).entries()) {
-      const parsed = parseDataUrl(foto);
-      const fotoHash = parsed.base64Data ? sha256Hex(Buffer.from(parsed.base64Data, "base64")) : sha256Hex(String(foto));
-      const fotoFileName = `evidencia-${String(index + 1).padStart(2, "0")}.jpg`;
+    for (const [index, parsed] of validatedFotos.entries()) {
+      const fotoHash = sha256Hex(parsed.buffer);
+      const extension = parsed.mimeType === "image/png" ? "png" : "jpg";
+      const fotoFileName = `evidencia-${String(index + 1).padStart(2, "0")}.${extension}`;
       const storageTarget = createAttachmentStoragePlan({
         tenantSlug: req.auth.user.tenant.slug,
         entityType: "os",
@@ -3877,14 +3884,11 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         fileName: fotoFileName,
         hashSha256: fotoHash,
       });
-      const fotoBuffer = parsed.base64Data && parsed.mimeType
-        ? Buffer.from(parsed.base64Data, "base64")
-        : Buffer.from(String(foto), "utf8");
       const persisted = await persistAttachmentContent({
         storagePlan: storageTarget,
-        buffer: fotoBuffer,
-        contentBase64: foto,
-        mimeType: parsed.mimeType || "image/jpeg",
+        buffer: parsed.buffer,
+        contentBase64: parsed.dataUrl,
+        mimeType: parsed.mimeType,
         hashSha256: fotoHash,
         fileName: fotoFileName,
         metadata: { origem: "encerramento_os", posicao: index + 1, dataExecucao, hashSha256: fotoHash },
@@ -3898,8 +3902,8 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
           tenantId,
           orderId,
           fotoFileName,
-          parsed.mimeType || "image/jpeg",
-          parsed.bytes || fotoBuffer.length,
+          parsed.mimeType,
+          parsed.bytes,
           persisted.contentBase64,
           JSON.stringify(persisted.metadata),
           fotoHash,
@@ -3969,7 +3973,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
       certificateHash = await issueCertificateForOrder(
         client,
-        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] },
+        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
         { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
       );
       await logAuditEvent(client, req, {
@@ -4001,7 +4005,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         dataExecucao,
         quantidade: isNotExecuted ? 0 : qty,
         naoExecutada: isNotExecuted,
-        fotos: Array.isArray(fotos) ? fotos.length : 0,
+        fotos: validatedFotos.length,
         certificateHash,
       },
     });

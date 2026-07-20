@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveDocumentStorageConfig, sanitizeStorageSegment } from "../../server/storage.mjs";
+import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveDocumentStorageConfig, sanitizeStorageSegment, validateAttachmentPayload } from "../../server/storage.mjs";
 
 describe("document storage planning", () => {
   it("normaliza segmentos para chaves seguras e previsiveis", () => {
@@ -99,5 +99,42 @@ describe("document storage planning", () => {
     expect(persisted.contentBase64).toBe("data:text/html;base64,PGgxPk9LPC9oMT4=");
     expect(persisted.metadata.storageUpload).toBe("database");
     expect(persisted.metadata.plannedStorageProvider).toBe("r2");
+  });
+
+  it("valida anexo base64, mime permitido e tamanho real", () => {
+    const payload = validateAttachmentPayload({
+      contentBase64: "data:image/png;base64,aGVsbG8=",
+      allowedMimeTypes: new Set(["image/png"]),
+      maxBytes: 10,
+      label: "foto",
+    });
+
+    expect(payload.mimeType).toBe("image/png");
+    expect(payload.bytes).toBe(5);
+    expect(payload.dataUrl).toBe("data:image/png;base64,aGVsbG8=");
+  });
+
+  it("bloqueia anexos com mime divergente, formato invalido ou tamanho acima do limite", () => {
+    expect(() => validateAttachmentPayload({
+      contentBase64: "data:image/png;base64,aGVsbG8=",
+      declaredMimeType: "image/jpeg",
+      allowedMimeTypes: new Set(["image/jpeg"]),
+      maxBytes: 10,
+      label: "foto",
+    })).toThrow(/divergente/);
+
+    expect(() => validateAttachmentPayload({
+      contentBase64: "nao-e-base64",
+      allowedMimeTypes: new Set(["image/png"]),
+      maxBytes: 10,
+      label: "foto",
+    })).toThrow(/base64/);
+
+    expect(() => validateAttachmentPayload({
+      contentBase64: "data:image/png;base64,aGVsbG8=",
+      allowedMimeTypes: new Set(["image/png"]),
+      maxBytes: 4,
+      label: "foto",
+    })).toThrow(/maximo/);
   });
 });

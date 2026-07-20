@@ -16,6 +16,70 @@ export function sanitizeStorageSegment(value, fallback = "item") {
   return normalized.slice(0, 96) || fallback;
 }
 
+export function parseBase64DataUrl(value) {
+  const rawValue = String(value || "").trim();
+  const match = rawValue.match(/^data:([^;,\s]+);base64,([A-Za-z0-9+/=\r\n]+)$/);
+  const mimeType = match ? match[1].trim().toLowerCase() : null;
+  const base64Data = match ? match[2].replace(/\s+/g, "") : rawValue.replace(/\s+/g, "");
+
+  if (!base64Data || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64Data) || base64Data.length % 4 !== 0) {
+    const error = new Error("Arquivo invalido. Envie um conteudo base64 valido.");
+    error.status = 400;
+    throw error;
+  }
+
+  const buffer = Buffer.from(base64Data, "base64");
+  if (!buffer.length || buffer.toString("base64").replace(/=+$/, "") !== base64Data.replace(/=+$/, "")) {
+    const error = new Error("Arquivo invalido. O conteudo base64 nao pode ser lido.");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    mimeType,
+    base64Data,
+    buffer,
+    bytes: buffer.length,
+  };
+}
+
+export function validateAttachmentPayload({
+  contentBase64,
+  declaredMimeType,
+  allowedMimeTypes,
+  maxBytes,
+  label = "arquivo",
+}) {
+  const parsed = parseBase64DataUrl(contentBase64);
+  const declared = String(declaredMimeType || parsed.mimeType || "application/octet-stream").trim().toLowerCase();
+  const allowed = new Set([...allowedMimeTypes].map((item) => String(item).toLowerCase()));
+
+  if (!allowed.has(declared)) {
+    const error = new Error(`Formato de ${label} nao suportado.`);
+    error.status = 400;
+    throw error;
+  }
+
+  if (parsed.mimeType && parsed.mimeType !== declared) {
+    const error = new Error(`Formato de ${label} divergente do conteudo enviado.`);
+    error.status = 400;
+    throw error;
+  }
+
+  if (parsed.bytes > maxBytes) {
+    const maxMb = Math.floor(maxBytes / (1024 * 1024));
+    const error = new Error(`O ${label} deve ter no maximo ${maxMb} MB.`);
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    ...parsed,
+    mimeType: declared,
+    dataUrl: `data:${declared};base64,${parsed.base64Data}`,
+  };
+}
+
 function resolveStorageEnvironment(env = process.env) {
   return sanitizeStorageSegment(env.RUNTIME_ENV || env.APP_ENV || env.NODE_ENV || DEFAULT_ENVIRONMENT, DEFAULT_ENVIRONMENT);
 }
