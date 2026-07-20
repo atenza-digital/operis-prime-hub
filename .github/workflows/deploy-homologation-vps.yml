@@ -136,6 +136,15 @@ jobs:
           docker ps --filter "name=${CONTAINER_NAME}" --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
           REMOTE
 
+      - name: Repair legacy attachment hashes on VPS
+        shell: bash
+        run: |
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "docker exec '${CONTAINER_NAME}' npm run homologation:repair-attachment-hashes -- --apply"
+
       - name: Attachment integrity smoke on VPS
         shell: bash
         run: |
