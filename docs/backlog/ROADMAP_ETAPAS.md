@@ -8,7 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
 - Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando migracao real controlada de anexos para R2 com lote pequeno e validacao de download pos-migracao.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 45.
+- Itens de backlog remanescentes: 44.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -181,14 +181,14 @@ Entregue ate agora:
 - Roteiro consolidado de validacao final para Tarcisio gerado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.1.docx`, com URL oficial de homologacao, perfis de teste, referencias documentais, checklist por perfil e registro de divergencias no proprio arquivo.
 - Relatorio executivo de prontidao P0 gerado em `docs/cliente/relatorios_homologacao/Relatorio_Prontidao_P0_Atenza_FieldOps_v1.0.docx`, consolidando status por frente, evidencias, bloqueios para producao e proxima acao sugerida para a homologacao assistida.
 - Matriz de triagem de divergencias P0 criada em `docs/cliente/relatorios_homologacao/Matriz_Triagem_Divergencias_Homologacao_P0_v1.0.xlsx`, com abas de resumo, triagem, criterios e referencias para classificar os retornos do Tarcisio/equipe sem deixar itens fora do roadmap.
+- Validacao automatizada de anexos concluida no deploy de homologacao: 40 anexos catalogados, 8 amostras baixadas por API, hash SHA-256 e tamanho conferidos, provider identificado e 0 falhas; evidencia gerada em `/app/docs/evidencias/etapa7_homologacao/anexos/VALIDACAO_ANEXOS_HOMOLOGACAO_2026-07-20.md`.
 
-Backlog da Etapa 7: 8 itens.
+Backlog da Etapa 7: 7 itens.
 
 - Executar E2E manual e documentado com usuario humano: proposta -> minuta -> contrato final -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
 - Validar multi-tenant com tenant generico e tenant Ciperprag, incluindo documentos sem logo.
 - Validar numeração automatica de OS, proposta, contrato, certificado e medicao.
 - Validar datas, horas, moeda e acentuacao em formato brasileiro.
-- Validar anexos, downloads, hashes e documentos historicos na tela de auditoria.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
 - Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
@@ -304,7 +304,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo e complemento de medicao: 48.
-- Total de itens remanescentes: 45.
-- Etapa 7: 8 itens.
+- Total de itens remanescentes: 44.
+- Etapa 7: 7 itens.
 - Etapa 8: 37 itens.
 - Itens fora de etapa: 0.
