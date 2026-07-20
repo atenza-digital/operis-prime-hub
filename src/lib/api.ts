@@ -398,6 +398,11 @@ export interface EmpresaConfig {
     licencas?: Array<{ titulo?: string; valor?: string }>;
     textoLegalPadrao?: string;
     textoTecnicoPorServico?: Record<string, string>;
+    uploadPolicies?: Record<string, {
+      maxFiles?: number;
+      maxBytes?: number;
+      allowedMimeTypes?: string[];
+    }>;
   };
 }
 
