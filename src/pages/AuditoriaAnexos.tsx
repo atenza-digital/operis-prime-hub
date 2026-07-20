@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, Download, ExternalLink, FileSearch, FileText, Image as ImageIcon, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  Cloud,
+  Copy,
+  Download,
+  ExternalLink,
+  FileSearch,
+  FileText,
+  Image as ImageIcon,
+  Info,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp } from "@/lib/api";
 import { formatDateBr, formatTimeBr } from "@/lib/formatters";
@@ -50,8 +62,18 @@ function metadataText(anexo: EvidenciaAnexoApp, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
+function metadataNumber(anexo: EvidenciaAnexoApp, key: string) {
+  const value = anexo.metadados?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function metadataBoolean(anexo: EvidenciaAnexoApp, key: string) {
   return anexo.metadados?.[key] === true;
+}
+
+function metadataList(anexo: EvidenciaAnexoApp, key: string) {
+  const value = anexo.metadados?.[key];
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
 function storageStatus(anexo: EvidenciaAnexoApp): { label: string; detail: string; tone: StatusTone } {
@@ -100,6 +122,50 @@ function toneClass(tone: StatusTone) {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function detailRows(anexo: EvidenciaAnexoApp) {
+  const storage = storageStatus(anexo);
+  const security = securityStatus(anexo);
+  return [
+    ["ID do anexo", anexo.id],
+    ["Origem", `${entityLabels[anexo.entidadeTipo]} · ${anexo.entidadeId}`],
+    ["Categoria", categoryLabels[anexo.categoria]],
+    ["Arquivo", anexo.nomeArquivo],
+    ["MIME", anexo.mimeType || "Não informado"],
+    ["Tamanho", formatBytes(anexo.tamanhoBytes)],
+    ["Imutável", anexo.imutavel ? "Sim" : "Não"],
+    ["Storage", `${storage.label} · ${storage.detail}`],
+    ["Provider ativo", anexo.storageProvider || metadataText(anexo, "storageProvider") || "database"],
+    ["Bucket ativo", anexo.storageBucket || metadataText(anexo, "storageBucket") || "Não configurado"],
+    ["Chave ativa", anexo.storageKey || metadataText(anexo, "storageKey") || "Não configurada"],
+    ["Provider planejado", metadataText(anexo, "plannedStorageProvider") || "Não informado"],
+    ["Bucket planejado", metadataText(anexo, "plannedStorageBucket") || "Não informado"],
+    ["Chave planejada", metadataText(anexo, "plannedStorageKey") || "Não informada"],
+    ["Política", policyLabel(anexo)],
+    ["Limite de arquivos", metadataNumber(anexo, "uploadPolicyMaxFiles")?.toString() || "Não informado"],
+    ["Limite de tamanho", formatBytes(metadataNumber(anexo, "uploadPolicyMaxBytes"))],
+    ["Tipos permitidos", metadataList(anexo, "uploadPolicyAllowedMimeTypes").join(", ") || "Não informado"],
+    ["Segurança", `${security.label} · ${security.detail}`],
+    ["Quarentena", security.quarantine],
+    ["Hash SHA-256", anexo.hashSha256 || "Sem hash"],
+    ["Hash do snapshot", anexo.snapshotHashSha256 || "Sem hash"],
+    ["Template", [anexo.templateCodigo, anexo.templateVersao].filter(Boolean).join(" · ") || "Não informado"],
+    ["Criado em", `${formatDateBr(anexo.criadoEm)} às ${formatTimeBr(anexo.criadoEm)}`],
+  ];
+}
+
+function metadataJson(anexo: EvidenciaAnexoApp) {
+  return JSON.stringify(anexo.metadados || {}, null, 2);
+}
+
+async function copyText(value: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copiado.`);
+  } catch {
+    toast.error("Não foi possível copiar para a área de transferência.");
+  }
+}
+
 async function openAttachment(anexo: EvidenciaAnexoApp) {
   const result = await fetchAttachmentBlob(anexo.id);
   const url = URL.createObjectURL(result.blob);
@@ -129,6 +195,7 @@ export default function AuditoriaAnexos() {
   const [storageFilter, setStorageFilter] = useState("todos");
   const [securityFilter, setSecurityFilter] = useState("todos");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedAttachment, setSelectedAttachment] = useState<EvidenciaAnexoApp | null>(null);
 
   useEffect(() => {
     getBootstrap()
@@ -436,6 +503,10 @@ export default function AuditoriaAnexos() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setSelectedAttachment(anexo)}>
+                            <Info className="mr-1 h-3.5 w-3.5" />
+                            Detalhes
+                          </Button>
                           <Button
                             type="button"
                             variant="outline"
@@ -466,6 +537,77 @@ export default function AuditoriaAnexos() {
           </div>
         </CardContent>
       </Card>
+
+      <Sheet open={Boolean(selectedAttachment)} onOpenChange={(open) => !open && setSelectedAttachment(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {selectedAttachment ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Detalhes do anexo</SheetTitle>
+                <SheetDescription>Metadados úteis para conferência, suporte, segurança e futura migração R2.</SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-5">
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold">{selectedAttachment.nomeArquivo}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {entityLabels[selectedAttachment.entidadeTipo]} · {selectedAttachment.entidadeId} · {categoryLabels[selectedAttachment.categoria]}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="outline" className={toneClass(storageStatus(selectedAttachment).tone)}>
+                      {storageStatus(selectedAttachment).label}
+                    </Badge>
+                    <Badge variant="outline" className={toneClass(securityStatus(selectedAttachment).tone)}>
+                      {securityStatus(selectedAttachment).label}
+                    </Badge>
+                    {selectedAttachment.imutavel ? <Badge variant="outline">Imutável</Badge> : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {detailRows(selectedAttachment).map(([label, value]) => (
+                    <div key={label} className="grid gap-1 rounded-xl border p-3 sm:grid-cols-[160px_1fr]">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                      <div className="break-all text-sm">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border">
+                  <div className="flex items-center justify-between border-b p-3">
+                    <div>
+                      <p className="text-sm font-semibold">Metadados brutos</p>
+                      <p className="text-xs text-muted-foreground">Use apenas para suporte técnico e auditoria.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => copyText(metadataJson(selectedAttachment), "Metadados")}>
+                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all p-3 text-xs text-muted-foreground">
+                    {metadataJson(selectedAttachment)}
+                  </pre>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => copyText(selectedAttachment.id, "ID do anexo")}>
+                    <Copy className="mr-1 h-4 w-4" />
+                    Copiar ID
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => runAttachmentAction(selectedAttachment, "open")}>
+                    <ExternalLink className="mr-1 h-4 w-4" />
+                    Abrir
+                  </Button>
+                  <Button type="button" onClick={() => runAttachmentAction(selectedAttachment, "download")}>
+                    <Download className="mr-1 h-4 w-4" />
+                    Baixar
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
