@@ -37,6 +37,10 @@ Preparar a base de homologacao para validar isolamento SaaS sem depender apenas 
 - `npm run saas:tri-tenant`: avaliou `ciperprag`, `empresa-demonstracao` e `tenant-sem-logo`.
 - Resultado local: 0 falhas bloqueantes e 1 alerta controlado por falta de assets documentais na Ciperprag local.
 
-## Proxima validacao
+## Validacao em homologacao
 
-Aplicar o preparador na VPS de homologacao apos publicacao via CI/CD e rodar `npm run saas:tri-tenant` novamente. O esperado na VPS e 0 falhas bloqueantes e 0 alertas, porque a Ciperprag ja possui assets configurados na base de homologacao.
+- Deploy publicado via CI/CD.
+- Preparador aplicado na VPS com `TRI_TENANT_APPLY=true npm run saas:prepare-tri-tenant`.
+- Tenants criados/configurados: `empresa-demonstracao` e `tenant-sem-logo`.
+- Auditoria final na VPS: `npm run saas:tri-tenant`.
+- Resultado final: 3 tenants avaliados, 0 falhas bloqueantes e 0 alertas.

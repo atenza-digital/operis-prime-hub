@@ -1,20 +1,20 @@
 # Validacao tri-tenant de isolamento SaaS
 
-Gerado em: 19/07/2026, 21:18
+Gerado em: 19/07/2026, 21:29
 Modo: somente leitura
 
 ## Resultado
 
 - Tenants avaliados: 3.
 - Falhas bloqueantes: 0.
-- Alertas: 1.
-- Status tecnico: APROVADO COM ALERTAS CONTROLADOS.
+- Alertas: 0.
+- Status tecnico: APROVADO.
 
 ## Tenants avaliados
 
 | Slug | Nome | Status | Empresa config | Assets | Comportamento visual |
 | --- | --- | --- | --- | --- | --- |
-| ciperprag | Ciperprag | ativo | sim | 0 | fallback neutro |
+| ciperprag | Ciperprag | ativo | sim | 2 | configurado |
 | empresa-demonstracao | Empresa Demonstracao | ativo | sim | 4 | configurado |
 | tenant-sem-logo | Tenant Sem Logo | ativo | sim | 0 | fallback neutro |
 
@@ -22,13 +22,13 @@ Modo: somente leitura
 
 | Tenant | Tabela | Total |
 | --- | --- | --- |
-| ciperprag | clientes | 6 |
-| ciperprag | contratos_templates | 10 |
-| ciperprag | agendamentos | 5 |
-| ciperprag | ordens_servico | 7 |
-| ciperprag | certificados | 6 |
-| ciperprag | medicoes | 2 |
-| ciperprag | evidencias_anexos | 26 |
+| ciperprag | clientes | 8 |
+| ciperprag | contratos_templates | 16 |
+| ciperprag | agendamentos | 13 |
+| ciperprag | ordens_servico | 16 |
+| ciperprag | certificados | 10 |
+| ciperprag | medicoes | 5 |
+| ciperprag | evidencias_anexos | 40 |
 | empresa-demonstracao | clientes | 0 |
 | empresa-demonstracao | contratos_templates | 0 |
 | empresa-demonstracao | agendamentos | 0 |
@@ -48,7 +48,7 @@ Modo: somente leitura
 
 | Severidade | Escopo | Mensagem | Detalhes |
 | --- | --- | --- | --- |
-| alerta | ciperprag | Tenant Ciperprag sem assets documentais configurados. | {} |
+_Sem registros._
 
 ## Criterios verificados
 

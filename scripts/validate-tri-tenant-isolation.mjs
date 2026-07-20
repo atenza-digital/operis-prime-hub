@@ -393,6 +393,11 @@ async function getCounters(tenants) {
 function buildReport({ tenants, companies, findings, counters }) {
   const failures = findings.filter((finding) => finding.severity === "falha");
   const warnings = findings.filter((finding) => finding.severity === "alerta");
+  const technicalStatus = failures.length
+    ? "REPROVADO"
+    : warnings.length
+      ? "APROVADO COM ALERTAS CONTROLADOS"
+      : "APROVADO";
   const tenantRows = tenants.map((tenant) => {
     const company = companies.get(String(tenant.id));
     const assets = extractAssetStrings(company);
@@ -424,7 +429,7 @@ function buildReport({ tenants, companies, findings, counters }) {
     `- Tenants avaliados: ${tenants.length}.`,
     `- Falhas bloqueantes: ${failures.length}.`,
     `- Alertas: ${warnings.length}.`,
-    `- Status tecnico: ${failures.length ? "REPROVADO" : "APROVADO COM ALERTAS CONTROLADOS"}.`,
+    `- Status tecnico: ${technicalStatus}.`,
     "",
     "## Tenants avaliados",
     "",
