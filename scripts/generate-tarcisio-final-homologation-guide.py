@@ -20,11 +20,11 @@ OUT_DIR = ROOT / "docs" / "cliente" / "homologacao_roteiros"
 QA_DIR = ROOT / "docs" / "evidencias" / "etapa7_homologacao" / "roteiro_final_tarcisio"
 PRINTS_DIR = ROOT / "docs" / "evidencias" / "etapa7_homologacao" / "prints_roteiros"
 
-DOCX_OUT = OUT_DIR / "Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.1.docx"
-WHATSAPP_OUT = OUT_DIR / "MENSAGEM_WHATSAPP_HOMOLOGACAO_TARCISIO_v1.1.md"
+DOCX_OUT = OUT_DIR / "Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.2.docx"
+WHATSAPP_OUT = OUT_DIR / "MENSAGEM_WHATSAPP_HOMOLOGACAO_TARCISIO_v1.2.md"
 
 VERSION = "0.6.3"
-COMMIT = "9ac22f2"
+COMMIT = "5df8ccc"
 URL = "https://fieldops-homologacao.atenza.digital/login"
 DATE_BR = datetime.now().strftime("%d/%m/%Y")
 PROJECT = "Atenza FieldOps"
@@ -287,7 +287,48 @@ def build() -> None:
             [2.1, 5.2, 5.4, 2.2, 2.9],
         )
 
-    heading(doc, "5. Checklist final da rodada", 2)
+    heading(doc, "5. Situação técnica antes da rodada assistida", 2)
+    paragraph(
+        doc,
+        "A validação automatizada e o smoke test de homologação foram executados pelo CI/CD no workflow de deploy. Os itens abaixo não precisam ser repetidos manualmente, mas devem ser considerados como evidência de que a base técnica está pronta para o aceite do usuário.",
+    )
+    table(
+        doc,
+        ["Verificação", "Resultado", "Evidência"],
+        [
+            ["Deploy em homologação", "Aprovado", "Workflow CI/CD 29756006104"],
+            ["Auditoria E2E e isolamento SaaS", "Aprovado", "audit:e2e e saas:tri-tenant"],
+            ["Integridade de anexos", "Aprovado", "Hashes reparados e download autenticado validado"],
+            ["Numeração documental", "Aprovado", "Duplicidades corrigidas e auditoria executada"],
+            ["Dados com acentuação corrompida", "Aprovado", "auditoria de dados sem ocorrências"],
+            ["Smoke público", "Aprovado", "Rotas públicas e validação de certificado"],
+        ],
+        [4.8, 3.0, 8.1],
+    )
+
+    heading(doc, "6. Cinco validações manuais restantes", 2)
+    paragraph(
+        doc,
+        "Esta é a última rodada manual da Etapa 7. Execute os cinco itens abaixo com usuário humano, sem pular etapas. Para cada item, registre Aprovado, Aprovado com ressalva ou Reprovado e anexe o print no próprio DOCX quando houver qualquer dúvida.",
+    )
+    table(
+        doc,
+        ["ID", "Como executar", "Resultado esperado", "Registro"],
+        [
+            ["FINAL-01", "Percorrer o fluxo completo: proposta, minuta, contrato final, contrato operacional, agenda, OS, encerramento, certificado, medição e recorrência.", "O fluxo avança sem retrabalho indevido; cada etapa reaproveita os dados corretos da etapa anterior.", "Status: ____\nObservação: ____"],
+            ["FINAL-02", "Conferir datas, horas, moeda, acentos e textos em todas as telas e PDFs usados no fluxo.", "Formato brasileiro consistente: dd/mm/aaaa, hora local, valores em R$ e acentuação legível.", "Status: ____\nPrint: ____"],
+            ["FINAL-03", "Pedir a um usuário que execute o fluxo sem orientação externa e observar cliques, mensagens, estados vazios e confirmações.", "A próxima ação fica clara; mensagens explicam o que ocorreu; não há telas sobrepostas ou etapas confusas.", "Status: ____\nObservação: ____"],
+            ["FINAL-04", "Na OS, selecionar tags/equipamentos cadastrados e verificar o uso do dado no encerramento, certificado, relatório e histórico.", "A tag/ativo permanece coerente em todos os documentos e não gera texto cortado ou campo ilegível.", "Status: ____\nOS: ____"],
+            ["FINAL-05", "Abrir um certificado em tela e impresso em A4; ler o QR Code com dois celulares e conferir a rota pública.", "Cada QR Code abre exatamente o certificado correspondente e mostra tenant, OS, cliente, serviço, execução, validade e hash.", "Status: ____\nCert.: ____"],
+        ],
+        [1.4, 6.2, 5.7, 2.7],
+    )
+    paragraph(
+        doc,
+        "Critério de encerramento: a Etapa 7 só pode ser considerada aprovada depois que os cinco itens estiverem preenchidos. Se houver ressalva, descreva o impacto e a evidência; a Atenza consolidará a decisão no roadmap sem perder o item.",
+    )
+
+    heading(doc, "7. Checklist final da rodada", 2)
     table(
         doc,
         ["Item", "Critério", "Status"],
@@ -303,7 +344,7 @@ def build() -> None:
         [3.8, 9.0, 3.0],
     )
 
-    heading(doc, "6. Evidências para conferência", 2)
+    heading(doc, "8. Evidências para conferência", 2)
     paragraph(
         doc,
         "Use a tabela de documentos de referência da seção 3 para abrir os PDFs aprovados diretamente no computador. Evitei inserir miniaturas dos documentos neste roteiro porque elas ficam pequenas e podem induzir avaliação incorreta; a validação visual deve ser feita nos próprios PDFs.",
@@ -319,7 +360,7 @@ def build() -> None:
         [4.0, 11.8],
     )
 
-    heading(doc, "7. Registro de divergências", 2)
+    heading(doc, "9. Registro de divergências", 2)
     paragraph(
         doc,
         "Preencha uma linha para cada divergência encontrada. Se não houver problema, registre 'Sem divergências' na primeira linha.",
@@ -337,7 +378,7 @@ def build() -> None:
         [1.7, 2.2, 3.0, 4.5, 2.6, 2.1, 1.9],
     )
 
-    heading(doc, "8. Resultado final", 2)
+    heading(doc, "10. Resultado final", 2)
     table(
         doc,
         ["Campo", "Preenchimento"],
@@ -356,18 +397,18 @@ def build() -> None:
         doc,
         ["Versão", "Data", "Responsável", "Descrição"],
         [
-            ["v1.1", DATE_BR, RESP_ATENZA, "Atualização para a rodada final assistida, com domínio oficial, documentos Montserrat e senhas por canal seguro."],
+            ["v1.2", DATE_BR, RESP_ATENZA, "Consolidação das evidências CI/CD e dos cinco testes manuais restantes para aceite da Etapa 7."],
         ],
         [2.0, 2.8, 4.2, 7.0],
     )
 
     doc.save(DOCX_OUT)
 
-    message = """Pessoal, segue o roteiro atualizado para a validação final da homologação do Atenza FieldOps.
+    message = """Pessoal, segue o roteiro v1.2 para a validação final da homologação do Atenza FieldOps.
 
 Por favor, usem o DOCX para registrar tudo: OK, ressalvas, erros, prints e números de proposta/contrato/OS/certificado/medição. Evitem mandar ocorrências soltas no grupo, porque fica mais difícil consolidar e priorizar.
 
-A senha deve ser usada apenas pelo canal seguro combinado. Ao finalizar, devolvam o próprio documento preenchido."""
+A senha deve ser usada apenas pelo canal seguro combinado. O CI/CD já validou a base técnica; concentrem-se nos cinco testes finais indicados no DOCX. Ao finalizar, devolvam o próprio documento preenchido."""
     WHATSAPP_OUT.write_text(message, encoding="utf-8")
     print(DOCX_OUT)
     print(WHATSAPP_OUT)
