@@ -17,6 +17,7 @@
     "homologation:smoke-vps": "node --env-file=.env scripts/smoke-vps-homologation.mjs",
     "homologation:attachments": "node --env-file-if-exists=.env scripts/validate-homologation-attachments.mjs",
     "homologation:repair-attachment-hashes": "node --env-file-if-exists=.env scripts/repair-homologation-attachment-hashes.mjs",
+    "homologation:numbering": "node --env-file-if-exists=.env scripts/validate-homologation-numbering.mjs",
     "homologation:smoke-public": "node scripts/smoke-public-homologation.mjs",
     "homologation:e2e-vps": "node --env-file=.env scripts/run-homologation-e2e-flow.mjs",
     "homologation:visual-check": "node scripts/run-local-visual-check.mjs",

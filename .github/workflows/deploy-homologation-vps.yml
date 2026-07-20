@@ -154,6 +154,15 @@ jobs:
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
             "docker exec -e HOMOLOGATION_BASE_URL='${{ github.event.inputs.public_url }}' '${CONTAINER_NAME}' npm run homologation:attachments"
 
+      - name: Homologation data consistency audits on VPS
+        shell: bash
+        run: |
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "docker exec '${CONTAINER_NAME}' npm run audit:e2e && docker exec '${CONTAINER_NAME}' npm run saas:tri-tenant && docker exec '${CONTAINER_NAME}' npm run audit:mojibake-data && docker exec '${CONTAINER_NAME}' npm run homologation:numbering"
+
       - name: Public smoke
         env:
           HOMOLOGATION_BASE_URL: ${{ github.event.inputs.public_url }}
