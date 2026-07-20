@@ -59,7 +59,7 @@ async function main() {
         );
         await client.query(
           `INSERT INTO ciperprag_hub.audit_logs
-           (tenant_id, entidade_tipo, entidade_id, acao, resumo, after)
+           (tenant_id, entidade_tipo, entidade_id, acao, resumo, dados_depois)
            VALUES ($1,'anexo',$2::text,'homologation_attachment_hash_repaired',
                    'Hash SHA-256 recalculado a partir do conteudo persistido em homologacao', $3::jsonb)`,
           [tenant.id, row.id, JSON.stringify({ previousHash: row.hash_sha256 || null, hashSha256: actualHash })],
