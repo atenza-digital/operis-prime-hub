@@ -43,6 +43,23 @@ export function parseBase64DataUrl(value) {
   };
 }
 
+function bufferStartsWith(buffer, signature) {
+  return buffer.length >= signature.length && signature.every((byte, index) => buffer[index] === byte);
+}
+
+function detectAttachmentMimeTypes(buffer) {
+  const detected = new Set();
+  if (bufferStartsWith(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) detected.add("image/png");
+  if (bufferStartsWith(buffer, [0xff, 0xd8, 0xff])) detected.add("image/jpeg");
+  if (bufferStartsWith(buffer, [0x25, 0x50, 0x44, 0x46, 0x2d])) detected.add("application/pdf");
+  if (bufferStartsWith(buffer, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) detected.add("application/msword");
+  if (bufferStartsWith(buffer, [0x50, 0x4b, 0x03, 0x04]) || bufferStartsWith(buffer, [0x50, 0x4b, 0x05, 0x06]) || bufferStartsWith(buffer, [0x50, 0x4b, 0x07, 0x08])) {
+    detected.add("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    detected.add("application/vnd.oasis.opendocument.text");
+  }
+  return detected;
+}
+
 export function validateAttachmentPayload({
   contentBase64,
   declaredMimeType,
@@ -62,6 +79,19 @@ export function validateAttachmentPayload({
 
   if (parsed.mimeType && parsed.mimeType !== declared) {
     const error = new Error(`Formato de ${label} divergente do conteudo enviado.`);
+    error.status = 400;
+    throw error;
+  }
+
+  const detectedMimeTypes = detectAttachmentMimeTypes(parsed.buffer);
+  if (detectedMimeTypes.size > 0 && !detectedMimeTypes.has(declared)) {
+    const error = new Error(`Assinatura do ${label} nao corresponde ao formato informado.`);
+    error.status = 400;
+    throw error;
+  }
+
+  if (detectedMimeTypes.size === 0) {
+    const error = new Error(`Nao foi possivel validar a assinatura do ${label}.`);
     error.status = 400;
     throw error;
   }

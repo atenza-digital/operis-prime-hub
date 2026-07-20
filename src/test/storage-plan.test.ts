@@ -103,20 +103,20 @@ describe("document storage planning", () => {
 
   it("valida anexo base64, mime permitido e tamanho real", () => {
     const payload = validateAttachmentPayload({
-      contentBase64: "data:image/png;base64,aGVsbG8=",
+      contentBase64: "data:image/png;base64,iVBORw0KGgo=",
       allowedMimeTypes: new Set(["image/png"]),
       maxBytes: 10,
       label: "foto",
     });
 
     expect(payload.mimeType).toBe("image/png");
-    expect(payload.bytes).toBe(5);
-    expect(payload.dataUrl).toBe("data:image/png;base64,aGVsbG8=");
+    expect(payload.bytes).toBe(8);
+    expect(payload.dataUrl).toBe("data:image/png;base64,iVBORw0KGgo=");
   });
 
   it("bloqueia anexos com mime divergente, formato invalido ou tamanho acima do limite", () => {
     expect(() => validateAttachmentPayload({
-      contentBase64: "data:image/png;base64,aGVsbG8=",
+      contentBase64: "data:image/png;base64,iVBORw0KGgo=",
       declaredMimeType: "image/jpeg",
       allowedMimeTypes: new Set(["image/jpeg"]),
       maxBytes: 10,
@@ -131,10 +131,19 @@ describe("document storage planning", () => {
     })).toThrow(/base64/);
 
     expect(() => validateAttachmentPayload({
-      contentBase64: "data:image/png;base64,aGVsbG8=",
+      contentBase64: "data:image/png;base64,iVBORw0KGgo=",
       allowedMimeTypes: new Set(["image/png"]),
       maxBytes: 4,
       label: "foto",
     })).toThrow(/maximo/);
+  });
+
+  it("bloqueia arquivo com base64 valido mas assinatura incompativel", () => {
+    expect(() => validateAttachmentPayload({
+      contentBase64: "data:image/png;base64,aGVsbG8=",
+      allowedMimeTypes: new Set(["image/png"]),
+      maxBytes: 10,
+      label: "foto",
+    })).toThrow(/assinatura/);
   });
 });
