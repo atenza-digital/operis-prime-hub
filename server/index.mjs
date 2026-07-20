@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
-import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, validateAttachmentPayload } from "./storage.mjs";
+import { createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -3330,21 +3330,15 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
   const tenantSlug = req.auth.user.tenant.slug;
   const fileName = safeFileNamePart(req.body.fileName || "minuta-cliente");
   const mimeType = String(req.body.mimeType || "application/octet-stream").toLowerCase();
-  const allowedTypes = new Set([
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.oasis.opendocument.text",
-    "image/png",
-    "image/jpeg",
-  ]);
+  const { rows: companyRows } = await query("SELECT certificado_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const uploadPolicy = resolveAttachmentPolicy("minuta.documento", companyRows[0]?.certificado_config || {});
   let parsed;
   try {
     parsed = validateAttachmentPayload({
       contentBase64: req.body.contentBase64,
       declaredMimeType: mimeType,
-      allowedMimeTypes: allowedTypes,
-      maxBytes: 8 * 1024 * 1024,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
       label: "arquivo da minuta",
     });
   } catch (error) {
@@ -3831,17 +3825,18 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const technician = techRows[0];
     const qty = Number(quantidade || 1);
     const isNotExecuted = Boolean(naoExecutada);
+    const uploadPolicy = resolveAttachmentPolicy("os.foto", company?.certificado_config || {});
     const rawFotos = Array.isArray(fotos) ? fotos : [];
-    if (rawFotos.length > 3) {
-      const error = new Error("Anexe no maximo 3 fotos de evidencia.");
+    if (rawFotos.length > uploadPolicy.maxFiles) {
+      const error = new Error(`Anexe no maximo ${uploadPolicy.maxFiles} fotos de evidencia.`);
       error.status = 400;
       throw error;
     }
     const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
       contentBase64: foto,
       declaredMimeType: null,
-      allowedMimeTypes: new Set(["image/png", "image/jpeg"]),
-      maxBytes: 5 * 1024 * 1024,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
       label: `foto ${index + 1}`,
     }));
 

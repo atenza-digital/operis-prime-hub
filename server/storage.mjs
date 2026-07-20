@@ -4,6 +4,26 @@ const DEFAULT_ENVIRONMENT = "homologacao";
 const DEFAULT_PROVIDER = "database";
 const EXTERNAL_PROVIDER = "r2";
 
+const DEFAULT_ATTACHMENT_POLICIES = {
+  "os.foto": {
+    maxFiles: 3,
+    maxBytes: 5 * 1024 * 1024,
+    allowedMimeTypes: ["image/png", "image/jpeg"],
+  },
+  "minuta.documento": {
+    maxFiles: 1,
+    maxBytes: 8 * 1024 * 1024,
+    allowedMimeTypes: [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.oasis.opendocument.text",
+      "image/png",
+      "image/jpeg",
+    ],
+  },
+};
+
 export function sanitizeStorageSegment(value, fallback = "item") {
   const normalized = String(value || fallback)
     .trim()
@@ -40,6 +60,34 @@ export function parseBase64DataUrl(value) {
     base64Data,
     buffer,
     bytes: buffer.length,
+  };
+}
+
+function normalizePositiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function normalizeMimeTypes(value, fallback) {
+  const source = Array.isArray(value) ? value : [];
+  const normalized = source
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+  return normalized.length ? normalized : fallback;
+}
+
+export function resolveAttachmentPolicy(policyKey, tenantConfig = {}) {
+  const fallback = DEFAULT_ATTACHMENT_POLICIES[policyKey] || DEFAULT_ATTACHMENT_POLICIES["minuta.documento"];
+  const uploadPolicies = tenantConfig && typeof tenantConfig === "object" && tenantConfig.uploadPolicies && typeof tenantConfig.uploadPolicies === "object"
+    ? tenantConfig.uploadPolicies
+    : {};
+  const override = uploadPolicies[policyKey] && typeof uploadPolicies[policyKey] === "object" ? uploadPolicies[policyKey] : {};
+
+  return {
+    key: policyKey,
+    maxFiles: Math.floor(normalizePositiveNumber(override.maxFiles, fallback.maxFiles)),
+    maxBytes: Math.floor(normalizePositiveNumber(override.maxBytes, fallback.maxBytes)),
+    allowedMimeTypes: normalizeMimeTypes(override.allowedMimeTypes, fallback.allowedMimeTypes),
   };
 }
 

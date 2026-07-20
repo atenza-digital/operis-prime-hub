@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveDocumentStorageConfig, sanitizeStorageSegment, validateAttachmentPayload } from "../../server/storage.mjs";
+import { buildTenantObjectKey, createAttachmentStoragePlan, persistAttachmentContent, resolveAttachmentPolicy, resolveDocumentStorageConfig, sanitizeStorageSegment, validateAttachmentPayload } from "../../server/storage.mjs";
 
 describe("document storage planning", () => {
   it("normaliza segmentos para chaves seguras e previsiveis", () => {
@@ -145,5 +145,39 @@ describe("document storage planning", () => {
       maxBytes: 10,
       label: "foto",
     })).toThrow(/assinatura/);
+  });
+
+  it("resolve politicas padrao de upload por familia documental", () => {
+    expect(resolveAttachmentPolicy("os.foto")).toMatchObject({
+      key: "os.foto",
+      maxFiles: 3,
+      maxBytes: 5 * 1024 * 1024,
+      allowedMimeTypes: ["image/png", "image/jpeg"],
+    });
+
+    expect(resolveAttachmentPolicy("minuta.documento")).toMatchObject({
+      key: "minuta.documento",
+      maxFiles: 1,
+      maxBytes: 8 * 1024 * 1024,
+    });
+  });
+
+  it("permite sobrescrever politica de upload pela configuracao do tenant", () => {
+    const policy = resolveAttachmentPolicy("os.foto", {
+      uploadPolicies: {
+        "os.foto": {
+          maxFiles: 2,
+          maxBytes: 1024,
+          allowedMimeTypes: ["image/jpeg"],
+        },
+      },
+    });
+
+    expect(policy).toEqual({
+      key: "os.foto",
+      maxFiles: 2,
+      maxBytes: 1024,
+      allowedMimeTypes: ["image/jpeg"],
+    });
   });
 });
