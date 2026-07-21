@@ -226,6 +226,7 @@ Entregue inicialmente em homologacao:
 - Dashboard compactado com abas (`Agora`, `Contratos`, `Agenda`, `Atalhos`) para reduzir rolagem e separar aprofundamento por contexto.
 - Agenda recebeu filtros por mes/semana/todos, ano/mes, busca por cliente e detalhes ao clicar no agendamento.
 - Evoluir a agenda para visualizacoes dedicadas mensal e anual, preservando os filtros e o detalhe de equipe/veiculo aprovados na Etapa 7.
+- Visões mensal e anual da agenda implementadas com calendário de eventos clicáveis, resumo dos 12 meses e evidências em `docs/evidencias/etapa8_agenda/VALIDACAO_AGENDA_VISAOES_2026-07-21.md`; aguardando publicação e smoke em homologação.
 - Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 - Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
@@ -254,7 +255,7 @@ Entregue inicialmente em homologacao:
 - Corrigido drift de schema identificado pelo smoke: `ensureDatabaseShape` agora garante as colunas comerciais de servicos de templates antes das consultas do bootstrap.
 - Saneamento controlado de hashes legados de anexos preparado no CI/CD para homologacao: recalcula somente conteudo local persistido, registra auditoria e mantem o smoke bloqueando divergencias remanescentes.
 
-Backlog da Etapa 8: 37 itens.
+Backlog da Etapa 8: 36 itens.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.

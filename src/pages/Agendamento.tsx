@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { printOsDocument } from "@/lib/osPrint";
@@ -92,6 +92,23 @@ const STATUS_CFG = {
   cancelado: { label: "Cancelado", icon: XCircle, cls: "bg-destructive/5 text-destructive border-destructive/20" },
 } as const;
 
+const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthCalendarDays(year: number, month: number) {
+  const first = new Date(year, month - 1, 1, 12);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const start = new Date(year, month - 1, 1 - mondayOffset, 12);
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+}
+
 export default function Agendamento() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,15 +176,23 @@ export default function Agendamento() {
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
-  const agFiltrados = useMemo(() => {
+  const agendamentosBase = useMemo(() => {
     let list = [...agendamentos].reverse();
     if (filtroStatus !== "todos") list = list.filter((item) => item.status === filtroStatus);
     if (filtroCliente) list = list.filter((item) => item.clienteNome.toLowerCase().includes(filtroCliente.toLowerCase()));
+    return list;
+  }, [agendamentos, filtroCliente, filtroStatus]);
+
+  const agFiltrados = useMemo(() => {
+    let list = agendamentosBase;
     if (filtroPeriodo === "mes") {
       list = list.filter((item) => {
         const date = new Date(`${item.dataAgendada}T12:00:00`);
         return String(date.getFullYear()) === filtroAno && String(date.getMonth() + 1).padStart(2, "0") === filtroMes;
       });
+    }
+    if (filtroPeriodo === "ano") {
+      list = list.filter((item) => String(new Date(`${item.dataAgendada}T12:00:00`).getFullYear()) === filtroAno);
     }
     if (filtroPeriodo === "semana") {
       const start = startOfWeek(new Date(`${filtroSemanaBase}T12:00:00`));
@@ -179,7 +204,22 @@ export default function Agendamento() {
       });
     }
     return list;
-  }, [agendamentos, filtroAno, filtroCliente, filtroMes, filtroPeriodo, filtroSemanaBase, filtroStatus]);
+  }, [agendamentosBase, filtroAno, filtroMes, filtroPeriodo, filtroSemanaBase]);
+
+  const calendarioMes = useMemo(() => monthCalendarDays(Number(filtroAno), Number(filtroMes)), [filtroAno, filtroMes]);
+  const eventosPorDia = useMemo(() => {
+    const grouped = new Map<string, AgendamentoApp[]>();
+    agFiltrados.forEach((item) => grouped.set(item.dataAgendada, [...(grouped.get(item.dataAgendada) ?? []), item]));
+    return grouped;
+  }, [agFiltrados]);
+  const resumoAnual = useMemo(() => monthOptions.map(([value, label]) => ({
+    value,
+    label,
+    items: agendamentosBase.filter((item) => {
+      const date = new Date(`${item.dataAgendada}T12:00:00`);
+      return String(date.getFullYear()) === filtroAno && String(date.getMonth() + 1).padStart(2, "0") === value;
+    }),
+  })), [agendamentosBase, filtroAno]);
 
   const counts = useMemo(() => {
     const result: Record<string, number> = { todos: agendamentos.length };
@@ -511,17 +551,20 @@ export default function Agendamento() {
                 <SelectContent>
                   <SelectItem value="mes">Mês</SelectItem>
                   <SelectItem value="semana">Semana</SelectItem>
+                  <SelectItem value="ano">Ano</SelectItem>
                   <SelectItem value="todos">Todos</SelectItem>
                 </SelectContent>
               </Select>
-              {filtroPeriodo === "mes" ? (
+              {filtroPeriodo === "mes" || filtroPeriodo === "ano" ? (
                 <>
-                  <Select value={filtroMes} onValueChange={setFiltroMes}>
-                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {monthOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {filtroPeriodo === "mes" ? (
+                    <Select value={filtroMes} onValueChange={setFiltroMes}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : <div className="hidden sm:block" />}
                   <Select value={filtroAno} onValueChange={setFiltroAno}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -548,9 +591,90 @@ export default function Agendamento() {
         </CardContent>
       </Card>
 
-      {!loading && agFiltrados.length === 0 ? (
+      {!loading && filtroPeriodo === "mes" ? (
+        <Card className="overflow-hidden">
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 font-semibold"><CalendarDays className="h-4 w-4 text-primary" /> Calendário mensal</p>
+                <p className="text-sm text-muted-foreground">{monthOptions.find(([value]) => value === filtroMes)?.[1]} de {filtroAno}. Clique em um evento para abrir os detalhes.</p>
+              </div>
+              <Badge variant="secondary">{agFiltrados.length} agendamento(s)</Badge>
+            </div>
+            <div className="overflow-x-auto rounded-xl border">
+              <div className="min-w-[760px]">
+                <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-xs font-semibold text-muted-foreground">
+                  {WEEKDAY_LABELS.map((day) => <div key={day} className="px-2 py-2">{day}</div>)}
+                </div>
+                <div className="grid grid-cols-7">
+                  {calendarioMes.map((day) => {
+                    const key = dateKey(day);
+                    const eventos = eventosPorDia.get(key) ?? [];
+                    const isCurrentMonth = day.getMonth() + 1 === Number(filtroMes);
+                    return (
+                      <div key={key} className={cn("min-h-[112px] border-b border-r p-1.5 align-top", !isCurrentMonth && "bg-muted/20 text-muted-foreground")}>
+                        <div className="flex items-center justify-between px-1 text-xs font-semibold">
+                          <span>{day.getDate()}</span>
+                          {eventos.length > 0 ? <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{eventos.length}</span> : null}
+                        </div>
+                        <div className="mt-1 space-y-1">
+                          {eventos.slice(0, 3).map((item) => {
+                            const status = STATUS_CFG[item.status];
+                            return (
+                              <button key={item.id} type="button" onClick={() => setDetalheAgendamentoId(item.id)} className={cn("block w-full truncate rounded-md border px-1.5 py-1 text-left text-[10px] leading-tight transition-colors hover:border-primary hover:bg-primary/5", status?.cls)} title={`${item.clienteNome} — ${item.servico}`}>
+                                <span className="block truncate font-semibold">{item.clienteNome}</span>
+                                <span className="block truncate opacity-80">{item.servico}</span>
+                              </button>
+                            );
+                          })}
+                          {eventos.length > 3 ? <p className="px-1 text-[10px] font-semibold text-muted-foreground">+{eventos.length - 3} outro(s)</p> : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && filtroPeriodo === "ano" ? (
+        <Card>
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 font-semibold"><CalendarDays className="h-4 w-4 text-primary" /> Visão anual</p>
+                <p className="text-sm text-muted-foreground">Distribuição dos agendamentos de {filtroAno}. Selecione um mês para abrir o calendário detalhado.</p>
+              </div>
+              <Badge variant="secondary">{agendamentosBase.filter((item) => new Date(`${item.dataAgendada}T12:00:00`).getFullYear() === Number(filtroAno)).length} agendamento(s)</Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {resumoAnual.map((month) => {
+                const statusCount = Object.entries(STATUS_CFG).filter(([status]) => month.items.some((item) => item.status === status));
+                return (
+                  <button key={month.value} type="button" onClick={() => { setFiltroMes(month.value); setFiltroPeriodo("mes"); }} className="rounded-2xl border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">{month.label}</span>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{month.items.length}</span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, month.items.length * 18)}%` }} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {statusCount.length > 0 ? statusCount.map(([status, config]) => <span key={status} className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{config.label}</span>) : <span className="text-xs text-muted-foreground">Sem agendamentos</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && filtroPeriodo !== "mes" && filtroPeriodo !== "ano" && agFiltrados.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-14 text-muted-foreground"><Clock className="h-10 w-10 mb-3 opacity-20" /><p className="text-sm font-medium">Nenhum agendamento encontrado</p></CardContent></Card>
-      ) : !loading ? (
+      ) : !loading && filtroPeriodo !== "mes" && filtroPeriodo !== "ano" ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {agFiltrados.map((agendamento) => {
             const status = STATUS_CFG[agendamento.status];
