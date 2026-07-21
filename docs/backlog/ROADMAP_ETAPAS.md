@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: publicar esta rodada em homologacao, repetir os cenarios reprovados pelo Tarcisio e fechar a matriz assistida antes de iniciar novas alteracoes de fluxo.
+- Proxima etapa recomendada: enviar o roteiro de revalidacao v1.5 ao Tarcisio, repetir somente os cenarios corrigidos e fechar a matriz assistida antes de iniciar novas alteracoes de fluxo.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 42.
 - Itens fora de etapa: 0.
@@ -179,6 +179,7 @@ Entregue ate agora:
 - Infraestrutura tipografica documental corrigida para Montserrat local incorporada nos documentos gerados: pesos 400, 500, 600 e 700 sao carregados antes da impressao, codigos/valores usam Montserrat com numeros tabulares e a validacao pos-PDF bloqueia fallbacks como NotoSans, Arial, Roboto, Times, Consolas e Liberation Sans.
 - Auditoria final de fontes documentais por lote aprovada para os PDFs representativos de proposta, contrato, OS, certificado, relatorio tecnico e medicao, com relatorio em `docs/evidencias/etapa7_homologacao/auditoria-fontes-documentais.md`.
 - Roteiro consolidado de validacao final para Tarcisio atualizado para v1.4 em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Final_Atenza_FieldOps_Tarcisio_v1.4.docx`, com 13 prints reais, incluindo as duas paginas do relatorio tecnico, resultado esperado por tela e cobertura da administracao ao fluxo completo.
+- Roteiro dirigido de revalidacao v1.5 criado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Regressao_Atenza_FieldOps_Tarcisio_v1.5.docx`, com texto UTF-8 revisado, prints das telas impactadas, criterios objetivos e teste do QR Code em tela e impressao A4.
 - Relatorio executivo de prontidao P0 gerado em `docs/cliente/relatorios_homologacao/Relatorio_Prontidao_P0_Atenza_FieldOps_v1.0.docx`, consolidando status por frente, evidencias, bloqueios para producao e proxima acao sugerida para a homologacao assistida.
 - Matriz de triagem de divergencias P0 criada em `docs/cliente/relatorios_homologacao/Matriz_Triagem_Divergencias_Homologacao_P0_v1.0.xlsx`, com abas de resumo, triagem, criterios e referencias para classificar os retornos do Tarcisio/equipe sem deixar itens fora do roadmap.
 - Validacao automatizada de anexos concluida no deploy de homologacao: 40 anexos catalogados, 8 amostras baixadas por API, hash SHA-256 e tamanho conferidos, provider identificado e 0 falhas; evidencia gerada em `/app/docs/evidencias/etapa7_homologacao/anexos/VALIDACAO_ANEXOS_HOMOLOGACAO_2026-07-20.md`.
