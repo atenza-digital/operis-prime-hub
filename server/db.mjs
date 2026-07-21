@@ -85,6 +85,20 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS pop_versao VARCHAR(20)
   `);
 
+  // Keep databases created from older SQL snapshots compatible with the
+  // current commercial flow. These fields are part of the proposal/minuta
+  // payload and must exist before the first template is saved.
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates
+    ADD COLUMN IF NOT EXISTS titulo TEXT,
+    ADD COLUMN IF NOT EXISTS objeto TEXT,
+    ADD COLUMN IF NOT EXISTS validade_dias INTEGER DEFAULT 30,
+    ADD COLUMN IF NOT EXISTS modalidade TEXT,
+    ADD COLUMN IF NOT EXISTS locais_execucao JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS escopo_tecnico TEXT,
+    ADD COLUMN IF NOT EXISTS condicoes_comerciais TEXT
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.servico_pops (
       id VARCHAR(30) PRIMARY KEY,
