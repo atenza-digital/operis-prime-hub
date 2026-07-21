@@ -136,7 +136,9 @@ function buildVerificationUrl(publicCode: string, publicBaseUrl: string) {
 function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const safeOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(origin) ? "" : origin;
-  return firstText(config.publicBaseUrl, snapshotCertificado.publicBaseUrl, safeOrigin);
+  // When printing from the tenant's public URL, prefer that origin over an
+  // older snapshot so QR codes remain valid after a deployment or domain move.
+  return firstText(safeOrigin, config.publicBaseUrl, snapshotCertificado.publicBaseUrl);
 }
 
 function toBase64Img(url: string): Promise<string> {

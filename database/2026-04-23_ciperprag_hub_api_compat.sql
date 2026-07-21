@@ -114,6 +114,9 @@ CREATE TABLE IF NOT EXISTS ciperprag_hub.certificados (
   produtos_detalhados JSONB DEFAULT '[]'::JSONB
 );
 
+ALTER TABLE IF EXISTS ciperprag_hub.certificados
+  ADD COLUMN IF NOT EXISTS tag_equipamento_servico TEXT;
+
 CREATE TABLE IF NOT EXISTS ciperprag_hub.recorrencia_sugestoes (
   id VARCHAR(30) PRIMARY KEY,
   cliente_id VARCHAR(20),

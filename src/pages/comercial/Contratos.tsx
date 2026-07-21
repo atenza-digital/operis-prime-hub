@@ -361,21 +361,21 @@ function ProposalReferencePrint({ item, client, services, company, logoSrc, docu
     `Validade desta proposta: ${item.validadeDias || 30} dias corridos a contar da data de emissão.`,
   ];
   const DocumentSignatureBlock = () => (
-      <section className="mt-[18pt] break-inside-avoid text-center text-[8.8pt]">
-        <div className="grid grid-cols-2 items-start gap-[18mm]">
-          <div className="flex min-h-[32mm] flex-col">
-            <div className="h-[15mm] border-b border-slate-700" />
-            <div className="pt-[7pt]">
-              <p className="mx-auto flex h-[10mm] max-w-[72mm] items-start justify-center font-semibold leading-[1.18]">{companyName}</p>
+      <section className="mt-[18pt] break-inside-avoid text-center text-[8.8pt]" style={{ pageBreakInside: "avoid" }}>
+        <div className="grid grid-cols-2 items-stretch gap-[18mm]">
+          <div className="flex min-w-0 min-h-[38mm] flex-col break-inside-avoid">
+            <div className="h-[15mm] shrink-0 border-b border-slate-700" />
+            <div className="min-h-[18mm] pt-[7pt]">
+              <p className="mx-auto flex min-h-[10mm] max-w-[72mm] items-start justify-center break-words font-semibold leading-[1.18]">{companyName}</p>
               <p className="mt-[3pt] h-[4mm]">Responsável: {cleanText(representativeName)}</p>
               <p className="h-[4mm]">{cleanText(representativeRole)}</p>
             </div>
             <p className="mt-[4pt] text-slate-500">Assinatura e carimbo</p>
           </div>
-          <div className="flex min-h-[32mm] flex-col">
-            <div className="h-[15mm] border-b border-slate-700" />
-            <div className="pt-[7pt]">
-              <p className="mx-auto flex h-[10mm] max-w-[72mm] items-start justify-center font-semibold leading-[1.18]">{cleanText(client?.razaoSocial || "Contratante")}</p>
+          <div className="flex min-w-0 min-h-[38mm] flex-col break-inside-avoid">
+            <div className="h-[15mm] shrink-0 border-b border-slate-700" />
+            <div className="min-h-[18mm] pt-[7pt]">
+              <p className="mx-auto flex min-h-[10mm] max-w-[72mm] items-start justify-center break-words font-semibold leading-[1.18]">{cleanText(client?.razaoSocial || "Contratante")}</p>
               <p className="mt-[3pt] h-[4mm]">Responsável: ____________________</p>
               <p className="h-[4mm]">Cargo: __________________________</p>
             </div>
@@ -570,22 +570,22 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
   );
 
   const SignatureBlock = () => (
-    <section className="mt-[18pt] break-inside-avoid text-center text-[8.8pt]">
+    <section className="mt-[18pt] break-inside-avoid text-center text-[8.8pt]" style={{ pageBreakInside: "avoid" }}>
       <p className="mb-[16pt] text-center text-[8.8pt] text-slate-500">E, por estarem de acordo, as partes assinam o presente instrumento.</p>
-      <div className="grid grid-cols-2 items-start gap-[18mm]">
-        <div className="flex min-h-[32mm] flex-col">
-          <div className="h-[15mm] border-b border-slate-700" />
-          <div className="pt-[7pt]">
-            <p className="mx-auto flex h-[10mm] max-w-[72mm] items-start justify-center font-semibold leading-[1.18]">{companyName}</p>
+      <div className="grid grid-cols-2 items-stretch gap-[18mm]">
+        <div className="flex min-w-0 min-h-[38mm] flex-col break-inside-avoid">
+          <div className="h-[15mm] shrink-0 border-b border-slate-700" />
+          <div className="min-h-[18mm] pt-[7pt]">
+            <p className="mx-auto flex min-h-[10mm] max-w-[72mm] items-start justify-center break-words font-semibold leading-[1.18]">{companyName}</p>
             <p className="mt-[3pt] h-[4mm]">Responsável: {cleanText(representativeName)}</p>
             <p className="h-[4mm]">{cleanText(representativeRole)}</p>
           </div>
           <p className="mt-[4pt] text-slate-500">Assinatura e carimbo</p>
         </div>
-        <div className="flex min-h-[32mm] flex-col">
-          <div className="h-[15mm] border-b border-slate-700" />
-          <div className="pt-[7pt]">
-            <p className="mx-auto flex h-[10mm] max-w-[72mm] items-start justify-center font-semibold leading-[1.18]">{cleanText(client?.razaoSocial || "Contratante")}</p>
+        <div className="flex min-w-0 min-h-[38mm] flex-col break-inside-avoid">
+          <div className="h-[15mm] shrink-0 border-b border-slate-700" />
+          <div className="min-h-[18mm] pt-[7pt]">
+            <p className="mx-auto flex min-h-[10mm] max-w-[72mm] items-start justify-center break-words font-semibold leading-[1.18]">{cleanText(client?.razaoSocial || "Contratante")}</p>
             <p className="mt-[3pt] h-[4mm]">Responsável: ____________________</p>
             <p className="h-[4mm]">Cargo: __________________________</p>
           </div>

@@ -93,6 +93,7 @@ export default function OrdensServico() {
   const [fotos, setFotos] = useState<{ preview: string; base64: string }[]>([]);
   const [encerrada, setEncerrada] = useState(false);
   const [certHash, setCertHash] = useState("");
+  const [certHashes, setCertHashes] = useState<string[]>([]);
   const [viewOs, setViewOs] = useState<OSApp | null>(null);
   const [editOs, setEditOs] = useState<OSApp | null>(null);
   const [editTecnico, setEditTecnico] = useState("");
@@ -175,6 +176,7 @@ export default function OrdensServico() {
     setFotos([]);
     setEncerrada(false);
     setCertHash("");
+    setCertHashes([]);
     setEncDialog(true);
   }
 
@@ -201,6 +203,7 @@ export default function OrdensServico() {
         motivoNaoExecucao,
       });
       setCertHash(response.certificateHash || "");
+      setCertHashes(response.certificateHashes || (response.certificateHash ? [response.certificateHash] : []));
       setEncerrada(true);
       toast.success(response.certificateHash ? `OS encerrada e certificado ${response.certificateHash} gerado.` : "OS encerrada com sucesso!");
       reload();
@@ -426,7 +429,7 @@ export default function OrdensServico() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2 rounded-lg border border-green-200 bg-green-50 p-5 text-center dark:bg-green-950/20"><CheckCircle2 className="mx-auto h-10 w-10 text-green-600" /><p className="font-bold text-green-700">OS encerrada com sucesso.</p>{certHash ? <p className="font-mono text-lg font-bold text-primary">{certHash}</p> : null}</div>
+              <div className="space-y-2 rounded-lg border border-green-200 bg-green-50 p-5 text-center dark:bg-green-950/20"><CheckCircle2 className="mx-auto h-10 w-10 text-green-600" /><p className="font-bold text-green-700">OS encerrada com sucesso.</p>{certHashes.length > 1 ? <p className="text-sm text-muted-foreground">{certHashes.length} certificados gerados, um para cada TAG atendida.</p> : null}{certHashes.length ? <div className="space-y-1 font-mono text-sm font-bold text-primary">{certHashes.map((hash) => <p key={hash}>{hash}</p>)}</div> : certHash ? <p className="font-mono text-lg font-bold text-primary">{certHash}</p> : null}</div>
               <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)}>Fechar</Button>{certHash ? <Button onClick={() => { setEncDialog(false); navigate("/certificados"); }}><Award className="mr-1.5 h-4 w-4" /> Ver certificados</Button> : null}</DialogFooter>
             </div>
           )}

@@ -401,6 +401,7 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.certificados
     ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
+    ADD COLUMN IF NOT EXISTS tag_equipamento_servico TEXT,
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
     ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,

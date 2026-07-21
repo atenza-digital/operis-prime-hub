@@ -241,7 +241,7 @@ export default function Dashboard() {
               <CardTitle className="section-title">Fluxo recomendado</CardTitle>
               <p className="text-sm text-muted-foreground">O caminho padrão reduz retrabalho e mantém valores comerciais fora da operação.</p>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-5">
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {[
                 ["1", "Proposta", "Comercial"],
                 ["2", "Contrato", "Comercial"],
@@ -249,12 +249,12 @@ export default function Dashboard() {
                 ["4", "OS + certificado", "Operacional"],
                 ["5", "Medição", "Financeiro"],
               ].map(([number, title, module]) => (
-                <div key={title} className="rounded-2xl border bg-card p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">{number}</span>
-                    <p className="font-semibold">{title}</p>
+                <div key={title} className="min-w-0 min-h-[104px] rounded-2xl border bg-card p-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">{number}</span>
+                    <p className="min-w-0 break-words pt-1 font-semibold leading-5">{title}</p>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{module}</p>
+                  <p className="mt-3 text-xs text-muted-foreground">Módulo {module}</p>
                 </div>
               ))}
             </CardContent>

@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: seguir com hardening de producao que nao altere o fluxo em teste, priorizando migracao real controlada de anexos para R2 com lote pequeno e validacao de download pos-migracao.
+- Proxima etapa recomendada: publicar esta rodada em homologacao, repetir os cenarios reprovados pelo Tarcisio e fechar a matriz assistida antes de iniciar novas alteracoes de fluxo.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 42.
 - Itens fora de etapa: 0.
@@ -184,6 +184,9 @@ Entregue ate agora:
 - Validacao automatizada de anexos concluida no deploy de homologacao: 40 anexos catalogados, 8 amostras baixadas por API, hash SHA-256 e tamanho conferidos, provider identificado e 0 falhas; evidencia gerada em `/app/docs/evidencias/etapa7_homologacao/anexos/VALIDACAO_ANEXOS_HOMOLOGACAO_2026-07-20.md`.
 - Auditorias automatizadas de homologacao integradas ao CI/CD e aprovadas no run `29756006104`: E2E de consistencia com 0 itens, isolamento tri-tenant com 0 falhas e 0 alertas, encoding sem achados e smoke publico aprovado.
 - Validacao de numeracao automatica aprovada no run `29756006104` para propostas, contratos, OS, certificados, medicoes e contadores por tenant. Duplicidades legadas de `PC-051/2026` e `CT-133/2026` foram saneadas com preservacao de referencias, renumeracao controlada e auditoria das alteracoes.
+- Ajustes da rodada de validacao do Tarcisio: fluxo recomendado recebeu cards responsivos sem distorcao; contratos passaram a aparecer do mais recente para o mais antigo; assinatura de proposta/minuta/contrato recebeu bloco indivisivel com altura reservada e quebra controlada; detalhes da agenda destacam equipe e veiculo designados.
+- Certificados passaram a persistir a TAG no proprio registro e emitir um certificado por TAG quando a OS possuir varias TAGs, mantendo o hash principal da OS para compatibilidade e exibindo todos os hashes no encerramento.
+- QR Code passou a priorizar a origem publica atual ao imprimir e o deploy de homologacao injeta `PUBLIC_APP_URL` no container para evitar links internos ou antigos; a rota publica `/api/certificates/:hash` foi validada localmente com HTTP 200.
 
 Backlog da Etapa 7: 5 itens.
 
@@ -191,6 +194,7 @@ Backlog da Etapa 7: 5 itens.
 - Validar datas, horas, moeda e acentuacao em formato brasileiro.
 - Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
+- Reexecutar os itens COM-01, COM-03, COM-05, OP-01, OP-04, QL-03 e FINAL-05 do roteiro v1.4.
 - Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening

@@ -108,6 +108,11 @@ jobs:
           fi
 
           docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER_NAME" > "$ENV_FILE"
+          # Keep document QR codes anchored to the public homologation URL,
+          # even when the reverse proxy forwards an internal host.
+          grep -v '^PUBLIC_APP_URL=' "$ENV_FILE" > "${ENV_FILE}.next" || true
+          mv "${ENV_FILE}.next" "$ENV_FILE"
+          printf 'PUBLIC_APP_URL=%s\n' '${{ github.event.inputs.public_url }}' >> "$ENV_FILE"
           docker stop "$CONTAINER_NAME"
           docker rename "$CONTAINER_NAME" "$PREVIOUS"
 

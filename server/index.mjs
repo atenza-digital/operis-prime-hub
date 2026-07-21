@@ -1223,6 +1223,7 @@ async function getCertificates(tenantId) {
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
+    tagEquipamentoServico: row.tag_equipamento_servico || null,
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
@@ -1235,7 +1236,7 @@ async function getCertificateByHash(hash) {
   let { rows } = await query(
     `SELECT
       c.*,
-      o.tag_equipamento_servico,
+      o.tag_equipamento_servico AS os_tag_equipamento_servico,
       o.quantidade,
       o.unidade,
       o.fotos
@@ -1253,7 +1254,7 @@ async function getCertificateByHash(hash) {
     const fallback = await query(
       `SELECT
         c.*,
-        o.tag_equipamento_servico,
+        o.tag_equipamento_servico AS os_tag_equipamento_servico,
         o.quantidade,
         o.unidade,
         o.fotos
@@ -1307,7 +1308,7 @@ async function getCertificateByHash(hash) {
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
-    tagEquipamentoServico: row.tag_equipamento_servico,
+    tagEquipamentoServico: row.tag_equipamento_servico || row.os_tag_equipamento_servico,
     quantidade: Number(row.quantidade || 0),
     unidade: row.unidade,
     fotos: row.fotos ?? [],
@@ -1322,6 +1323,22 @@ async function getCertificateByHash(hash) {
   };
 }
 
+function normalizeCertificateTags(order) {
+  const values = [order.tag_equipamento_servico, order.tags]
+    .flatMap((value) => Array.isArray(value) ? value : String(value || "").split(/[,;|\n]+/))
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const unique = [];
+  const seen = new Set();
+  for (const value of values) {
+    const key = value.toLocaleUpperCase("pt-BR");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(value);
+  }
+  return unique.length ? unique : [null];
+}
+
 async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
@@ -1331,76 +1348,82 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const customer = customerRows[0];
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
-  const { rows: numRows } = await client.query(
-    `UPDATE ciperprag_hub.numeracao_config
-     SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
-     WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
-     RETURNING certificado_formato, certificado_ultimo`,
-    [scopedTenantId],
-  );
-
-  const certId = makeId("CERT");
-  const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
-  const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
   const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
-  const snapshot = buildCertificateSnapshot({
-    order,
-    customer,
-    service,
-    company,
-    hash,
-    number: certNumber,
-    dataExecucao: executionDate,
-    validadeDias,
-    publicBaseUrl,
-    userId,
-  });
+  const hashes = [];
 
-  const insertResult = await client.query(
-    `INSERT INTO ciperprag_hub.certificados
-     (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido')
-     ON CONFLICT (hash) DO NOTHING`,
-    [
-      certId,
-      scopedTenantId,
+  for (const [index, tag] of normalizeCertificateTags(order).entries()) {
+    const { rows: numRows } = await client.query(
+      `UPDATE ciperprag_hub.numeracao_config
+       SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
+       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
+       RETURNING certificado_formato, certificado_ultimo`,
+      [scopedTenantId],
+    );
+    const certId = makeId("CERT");
+    const hash = index === 0 && order.certificado_hash ? order.certificado_hash : await generateUniqueCertificateHash(client);
+    const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
+    const certificateOrder = { ...order, tag_equipamento_servico: tag, tags: tag || order.tags };
+    const snapshot = buildCertificateSnapshot({
+      order: certificateOrder,
+      customer,
+      service,
+      company,
       hash,
-      certNumber,
-      order.id,
-      order.numero,
-      order.cliente_id,
-      order.cliente,
-      customer?.cnpj || order.cnpj,
-      clienteEndereco,
-      customer?.logo_url || order.cliente_logo_url || null,
-      order.contrato_id,
-      order.servico,
-      order.tecnico,
-      order.local_execucao,
-      executionDate,
+      number: certNumber,
+      dataExecucao: executionDate,
       validadeDias,
-      service?.produtos_quimicos || [],
-      JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
-      JSON.stringify(snapshot),
-    ],
-  );
-  if (insertResult.rowCount > 0) {
-    const certificate = { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero };
-    await saveImmutableDocumentAttachment(client, {
-      tenantId: scopedTenantId,
-      tenantSlug,
+      publicBaseUrl,
       userId,
-      entityType: "certificado",
-      entityId: certId,
-      fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
-      html: buildHistoricalCertificateHtml(snapshot, certificate),
-      metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id },
     });
+
+    const insertResult = await client.query(
+      `INSERT INTO ciperprag_hub.certificados
+       (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status, tag_equipamento_servico)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido',$21)
+       ON CONFLICT (hash) DO NOTHING`,
+      [
+        certId,
+        scopedTenantId,
+        hash,
+        certNumber,
+        order.id,
+        order.numero,
+        order.cliente_id,
+        order.cliente,
+        customer?.cnpj || order.cnpj,
+        clienteEndereco,
+        customer?.logo_url || order.cliente_logo_url || null,
+        order.contrato_id,
+        order.servico,
+        order.tecnico,
+        order.local_execucao,
+        executionDate,
+        validadeDias,
+        service?.produtos_quimicos || [],
+        JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
+        JSON.stringify(snapshot),
+        tag,
+      ],
+    );
+    hashes.push(hash);
+    if (insertResult.rowCount > 0) {
+      const certificate = { ...certificateOrder, id: certId, hash, numero: certNumber, os_numero: order.numero };
+      await saveImmutableDocumentAttachment(client, {
+        tenantId: scopedTenantId,
+        tenantSlug,
+        userId,
+        entityType: "certificado",
+        entityId: certId,
+        fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
+        html: buildHistoricalCertificateHtml(snapshot, certificate),
+        metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id, tagEquipamentoServico: tag },
+      });
+    }
   }
-  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3", [order.id, hash, scopedTenantId]);
-  return hash;
+  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3", [order.id, hashes[0], scopedTenantId]);
+  return { primaryHash: hashes[0], hashes };
 }
 
 async function getCompanyConfig(tenantId) {
@@ -1522,7 +1545,7 @@ async function getContractTemplates(tenantId) {
      AND o.contrato_template_id = t.id
      AND o.servico_catalogo_id = s.servico_id
     WHERE t.tenant_id = $1
-    ORDER BY t.id, s.id
+    ORDER BY t.data_criacao DESC NULLS LAST, t.id DESC, s.id
   `, [tenantId]);
   const map = new Map();
   for (const row of rows) {
@@ -3976,18 +3999,21 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     }
 
     let certificateHash = null;
+    let certificateHashes = [];
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
-      certificateHash = await issueCertificateForOrder(
+      const certificateResult = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
         { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
       );
+      certificateHash = certificateResult.primaryHash;
+      certificateHashes = certificateResult.hashes;
       await logAuditEvent(client, req, {
         entityType: "certificado",
         entityId: certificateHash,
         action: "certificate_generated",
         summary: `Certificado ${certificateHash} gerado automaticamente no encerramento da OS ${order.numero || orderId}`,
-        after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+        after: { hash: certificateHash, hashes: certificateHashes, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
       });
     }
 
@@ -4016,7 +4042,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       },
     });
 
-    return { certificateHash };
+    return { certificateHash, certificateHashes };
   });
 
   res.json({ ok: true, ...response });
@@ -4029,18 +4055,19 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   const order = orderRows[0];
   if (!order) return res.status(404).json({ error: "OS nao encontrada" });
   if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
-  const hash = await withTransaction(async (client) => {
-    const certificateHash = await issueCertificateForOrder(client, order, { tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
+  const certificateResponse = await withTransaction(async (client) => {
+    const certificateResult = await issueCertificateForOrder(client, order, { tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
+    const certificateHash = certificateResult.primaryHash;
     await logAuditEvent(client, req, {
       entityType: "certificado",
       entityId: certificateHash,
       action: "certificate_generated",
       summary: `Certificado ${certificateHash} gerado para OS ${order.numero || orderId}`,
-      after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+      after: { hash: certificateHash, hashes: certificateResult.hashes, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
     });
-    return certificateHash;
+    return { hash: certificateHash, hashes: certificateResult.hashes };
   });
-  res.json({ ok: true, hash });
+  res.json({ ok: true, hash: certificateResponse.hash, hashes: certificateResponse.hashes });
 });
 
 app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {

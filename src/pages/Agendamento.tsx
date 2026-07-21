@@ -625,8 +625,8 @@ export default function Agendamento() {
                   ["Contrato", agDetalhe.contratoId],
                   ["Local", agDetalhe.localExecucao || "Não informado"],
                   ["Tipo", agDetalhe.tipo === "sanitario" ? "Sanitário" : "Manutenção"],
-                  ["Equipe", agDetalhe.tecnicosNomes?.join(" • ") || "Não definida"],
-                  ["Veículo", agDetalhe.veiculoDescricao || "Não definido"],
+                  ["Equipe designada", agDetalhe.tecnicosNomes?.join(" • ") || "Não definida"],
+                  ["Veículo designado", agDetalhe.veiculoDescricao || "Não definido"],
                   ["Tags/equipamentos", agDetalhe.tags || "Não informado"],
                   ["Saldo operacional", contratoDetalhe ? formatQuantityUnit(contratoDetalhe.contratado - contratoDetalhe.executado, contratoDetalhe.unidade) : "Não disponível"],
                 ].map(([label, value]) => (
