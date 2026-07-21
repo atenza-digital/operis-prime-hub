@@ -1,6 +1,6 @@
 # Preflight de storage R2
 
-Gerado em: 19/07/2026, 21:49
+Gerado em: 21/07/2026, 19:15
 Tenant: ciperprag
 Modo: somente leitura
 
@@ -11,24 +11,24 @@ Modo: somente leitura
 - Bucket configurado: nao.
 - Credenciais R2 completas: nao.
 - Pronto para apply R2: nao.
-- Anexos pendentes para migracao: 26.
+- Anexos pendentes para migracao: 30.
 
 ## Distribuicao atual por provider
 
 | Provider | Total |
 | --- | --- |
-| database | 26 |
+| database | 30 |
 
 ## Pendencias por tipo/categoria
 
 | Entidade | Categoria | Total | Bytes informados |
 | --- | --- | --- | --- |
-| certificado | pdf_historico | 1 | 685 |
+| certificado | pdf_historico | 2 | 1370 |
 | medicao | pdf_historico | 1 | 917 |
 | minuta | documento | 1 | 35 |
 | minuta | pdf_historico | 1 | 2355 |
-| os | foto | 20 | 516 |
-| os | pdf_historico | 1 | 1376 |
+| os | foto | 22 | 1032 |
+| os | pdf_historico | 2 | 2752 |
 | proposta | pdf_historico | 1 | 2516 |
 
 ## Amostra de 5 candidato(s)

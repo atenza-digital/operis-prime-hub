@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
-- Proxima etapa recomendada: executar o preflight de armazenamento R2 em lote piloto, com validacao de isolamento, rollback e custos antes da producao.
+- Proxima etapa recomendada: liberar o workflow R2 na `main`, configurar os secrets do ambiente `homologation` e executar o dry-run do lote piloto antes de qualquer `apply`.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 40.
 - Itens fora de etapa: 0.
