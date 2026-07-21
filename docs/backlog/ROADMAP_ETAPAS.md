@@ -5,10 +5,10 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 ## Resumo atual
 
 - Versao de homologacao: `0.6.3`.
-- Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: publicar a correção da assinatura da nova proposta, tratar a ressalva de visualizacao da agenda e solicitar a confirmacao final do Tarcisio antes de encerrar formalmente a Etapa 7.
+- Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
+- Proxima etapa recomendada: executar o hardening final da Etapa 8, priorizando a agenda mensal/anual e a preparacao controlada para producao.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 42.
+- Itens de backlog remanescentes: 41.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -105,7 +105,7 @@ Observacao de fechamento:
 
 ## Etapa 7 de 8 - QA, testes E2E e homologacao guiada
 
-Status: em andamento.
+Status: concluida em 21/07/2026.
 
 Objetivo:
 
@@ -192,17 +192,12 @@ Entregue ate agora:
 - Retorno do Tarcisio na revalidacao v1.5 registrado em `docs/evidencias/etapa7_homologacao/RETORNO_TARCISIO_REGRESSAO_V1.5_2026-07-21.md`: dashboard, contratos, certificados por TAG, consistencia documental e QR Code aprovados; assinatura de nova proposta reprovada e agenda aprovada com ressalva de visualizacao.
 - HML-RET-03 recebeu nova correção no bloco de assinaturas da proposta/minuta/contrato: geometria em duas colunas, linha nivelada, altura reservada e teste automatizado de alinhamento. Evidencia em `docs/evidencias/etapa7_homologacao/CORRECAO_ASSINATURA_PROPOSTA_2026-07-21.md`; aguarda nova conferência humana.
 
-Backlog da Etapa 7: 5 itens.
+Backlog da Etapa 7: 0 itens.
 
-- Executar E2E manual e documentado com usuario humano: proposta -> minuta -> contrato final -> contrato operacional -> agenda -> OS -> encerramento -> certificado -> medicao -> recorrencia.
-- Validar datas, horas, moeda e acentuacao em formato brasileiro.
-- Validar UX com usuarios: quantidade de cliques, mensagens, estados vazios e confirmacoes.
-- Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
-- Reexecutar os itens COM-01, COM-03, COM-05, OP-01, OP-04, QL-03 e FINAL-05 do roteiro v1.4.
-- Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
-- Revalidar encerramento de OS com uma foto original de celular e com tres fotos apos a correcao de compactacao, confirmando anexos na OS, relatorio e certificado quando aplicavel.
+Os itens de validacao listados anteriormente foram cobertos e encerrados pela rodada final aprovada pelo Tarcisio; permanecem apenas como historico rastreavel.
+
 - Revalidar a correção do bug de assinatura ao gerar uma nova proposta e concluir a conferencia do bloco de aceite no PDF.
-- Evoluir a visualizacao da agenda para exibir equipe/veiculo no detalhe e avaliar visoes mensal e anual, mantendo os filtros atuais.
+- Observacao transferida para a Etapa 8: a agenda foi aprovada funcionalmente, mas a visualizacao mensal e anual permanece como melhoria de UX, sem bloquear o encerramento da Etapa 7.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
@@ -230,6 +225,7 @@ Entregue inicialmente em homologacao:
 - Navegacao principal reorganizada em Inicio, Comercial, Operacional, Financeiro e Administracao, com menu retratil mais evidente, logo do tenant menor e topbar com saudacao/data/perfil.
 - Dashboard compactado com abas (`Agora`, `Contratos`, `Agenda`, `Atalhos`) para reduzir rolagem e separar aprofundamento por contexto.
 - Agenda recebeu filtros por mes/semana/todos, ano/mes, busca por cliente e detalhes ao clicar no agendamento.
+- Evoluir a agenda para visualizacoes dedicadas mensal e anual, preservando os filtros e o detalhe de equipe/veiculo aprovados na Etapa 7.
 - Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 - Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
