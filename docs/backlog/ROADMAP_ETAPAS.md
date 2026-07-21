@@ -299,6 +299,19 @@ Backlog da Etapa 8: 36 itens.
 - Avaliar se a alocacao semanal deve permanecer em Equipes e veiculos como apoio visual ou migrar/integrar ao modulo Agendamentos, ja que a programacao operacional principal deve nascer no fluxo de agendamento.
 - Validar em navegador real apos deploy que o favicon Atenza substituiu caches antigos do Chrome; se necessario, documentar instrucao de limpeza de favicon/cache ou aplicar estrategia de asset versionado para cache busting.
 
+## Gate final de aceite externo da Etapa 8
+
+Antes de encerrar a Etapa 8, o Tarcisio deve conduzir uma rodada completa com usuarios da Ciperprag, usando o roteiro consolidado de homologacao e registrando evidencias no documento de teste. A rodada deve cobrir:
+
+- Administracao: login, usuarios, papeis, permissoes, identidade visual e numeracao.
+- Comercial: clientes, catalogo de servicos, proposta, minuta e contrato.
+- Operacional: agenda, equipe/veiculo, OS, encerramento, fotos, tags, certificados e historico.
+- Financeiro operacional: medicao, status de envio de NF, acompanhamento de pagamento e baixa manual no ERP.
+- Documentos: proposta, minuta/contrato, OS, certificado, relatorio e medicao, incluindo logo parametrizada, acentuacao, paginacao e leitura dos PDFs.
+- Isolamento SaaS: tenant Ciperprag, tenant demonstracao e tenant sem logo, sem vazamento de dados ou assets.
+
+O aceite externo deve classificar cada item como aprovado, aprovado com observacao, reprovado ou nao testado. Itens reprovados bloqueiam o encerramento; observacoes sem impacto no aceite permanecem vinculadas ao backlog da Etapa 8.
+
 ## Itens explicitamente postergados
 
 Todos os itens abaixo estao alocados na Etapa 8:
@@ -312,7 +325,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo e complemento de medicao: 48.
-- Total de itens remanescentes: 42.
+- Total de itens remanescentes: 40.
 - Etapa 7: 5 itens.
-- Etapa 8: 37 itens.
+- Etapa 8: 36 itens.
 - Itens fora de etapa: 0.
