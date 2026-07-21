@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 7 de 8 em validacao assistida, com Etapa 8 avancando em paralelo nos itens seguros de hardening.
-- Proxima etapa recomendada: enviar o roteiro de revalidacao v1.5 ao Tarcisio, repetir somente os cenarios corrigidos e fechar a matriz assistida antes de iniciar novas alteracoes de fluxo.
+- Proxima etapa recomendada: corrigir a assinatura ao gerar nova proposta, tratar a ressalva de visualizacao da agenda e solicitar a confirmacao final do Tarcisio antes de encerrar formalmente a Etapa 7.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 42.
 - Itens fora de etapa: 0.
@@ -189,6 +189,7 @@ Entregue ate agora:
 - Certificados passaram a persistir a TAG no proprio registro e emitir um certificado por TAG quando a OS possuir varias TAGs, mantendo o hash principal da OS para compatibilidade e exibindo todos os hashes no encerramento.
 - QR Code passou a priorizar a origem publica atual ao imprimir e o deploy de homologacao injeta `PUBLIC_APP_URL` no container para evitar links internos ou antigos; a rota publica `/api/certificates/:hash` foi validada localmente com HTTP 200.
 - Encerramento de OS passou a redimensionar e comprimir fotos antes do envio, evitando o `HTTP 413` do proxy para imagens originais de celular; erros de payload grande agora recebem orientacao clara no frontend. Evidencia em `docs/releases/2026-07-21_correcao_upload_fotos_os.md`.
+- Retorno do Tarcisio na revalidacao v1.5 registrado em `docs/evidencias/etapa7_homologacao/RETORNO_TARCISIO_REGRESSAO_V1.5_2026-07-21.md`: dashboard, contratos, certificados por TAG, consistencia documental e QR Code aprovados; assinatura de nova proposta reprovada e agenda aprovada com ressalva de visualizacao.
 
 Backlog da Etapa 7: 5 itens.
 
@@ -199,6 +200,8 @@ Backlog da Etapa 7: 5 itens.
 - Reexecutar os itens COM-01, COM-03, COM-05, OP-01, OP-04, QL-03 e FINAL-05 do roteiro v1.4.
 - Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
 - Revalidar encerramento de OS com uma foto original de celular e com tres fotos apos a correcao de compactacao, confirmando anexos na OS, relatorio e certificado quando aplicavel.
+- Corrigir o bug de assinatura ao gerar uma nova proposta e concluir a conferencia do bloco de aceite no PDF.
+- Evoluir a visualizacao da agenda para exibir equipe/veiculo no detalhe e avaliar visoes mensal e anual, mantendo os filtros atuais.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
