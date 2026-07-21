@@ -188,6 +188,7 @@ Entregue ate agora:
 - Ajustes da rodada de validacao do Tarcisio: fluxo recomendado recebeu cards responsivos sem distorcao; contratos passaram a aparecer do mais recente para o mais antigo; assinatura de proposta/minuta/contrato recebeu bloco indivisivel com altura reservada e quebra controlada; detalhes da agenda destacam equipe e veiculo designados.
 - Certificados passaram a persistir a TAG no proprio registro e emitir um certificado por TAG quando a OS possuir varias TAGs, mantendo o hash principal da OS para compatibilidade e exibindo todos os hashes no encerramento.
 - QR Code passou a priorizar a origem publica atual ao imprimir e o deploy de homologacao injeta `PUBLIC_APP_URL` no container para evitar links internos ou antigos; a rota publica `/api/certificates/:hash` foi validada localmente com HTTP 200.
+- Encerramento de OS passou a redimensionar e comprimir fotos antes do envio, evitando o `HTTP 413` do proxy para imagens originais de celular; erros de payload grande agora recebem orientacao clara no frontend. Evidencia em `docs/releases/2026-07-21_correcao_upload_fotos_os.md`.
 
 Backlog da Etapa 7: 5 itens.
 
@@ -197,6 +198,7 @@ Backlog da Etapa 7: 5 itens.
 - Validar OS usando tags/equipamentos cadastrados e registrar melhorias de usabilidade.
 - Reexecutar os itens COM-01, COM-03, COM-05, OP-01, OP-04, QL-03 e FINAL-05 do roteiro v1.4.
 - Validar manualmente a leitura fisica do QR Code em tela e em impressao com celular durante homologacao assistida, pois o ambiente local nao possui decoder de QR instalado para automatizar essa etapa.
+- Revalidar encerramento de OS com uma foto original de celular e com tres fotos apos a correcao de compactacao, confirmando anexos na OS, relatorio e certificado quando aplicavel.
 
 ## Etapa 8 de 8 - Producao, governanca SaaS e hardening
 
