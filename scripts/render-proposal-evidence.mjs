@@ -286,6 +286,26 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(800);
 
+const signatureCells = page.locator('[data-testid="proposal-signature-cell"]');
+if (await signatureCells.count() !== 2) {
+  throw new Error("A proposta precisa renderizar exatamente duas colunas de assinatura.");
+}
+const signatureGeometry = await signatureCells.evaluateAll((cells) => cells.map((cell) => {
+  const line = cell.firstElementChild?.getBoundingClientRect();
+  const box = cell.getBoundingClientRect();
+  return { lineTop: line?.top ?? null, lineWidth: line?.width ?? null, top: box.top, height: box.height };
+}));
+const [leftSignature, rightSignature] = signatureGeometry;
+if (
+  leftSignature.lineTop === null ||
+  rightSignature.lineTop === null ||
+  Math.abs(leftSignature.lineTop - rightSignature.lineTop) > 0.5 ||
+  Math.abs(leftSignature.top - rightSignature.top) > 0.5 ||
+  Math.abs(leftSignature.height - rightSignature.height) > 0.5
+) {
+  throw new Error(`Bloco de assinaturas desalinhado: ${JSON.stringify(signatureGeometry)}`);
+}
+
 const pdfPath = path.join(outDir, "proposta-ciperprag-padrao-v5-ritmo.pdf");
 const page1Path = path.join(outDir, "proposta-ciperprag-padrao-v5-ritmo-page-1.png");
 const page2Path = path.join(outDir, "proposta-ciperprag-padrao-v5-ritmo-page-2.png");
