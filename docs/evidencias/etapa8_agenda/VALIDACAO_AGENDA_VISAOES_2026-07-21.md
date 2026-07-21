@@ -31,3 +31,8 @@ Implementação do item transferido da Etapa 7 para a Etapa 8 após a aprovaçã
 ## Situação
 
 Implementação validada localmente. A publicação em homologação e o smoke público devem ser concluídos antes de reduzir o backlog da Etapa 8.
+## Publicacao em homologacao
+
+- Commit publicado: `083f645`.
+- Workflow CI/CD: `29872074746` concluido com sucesso.
+- Smoke publico: `https://fieldops-homologacao.atenza.digital/login` respondeu HTTP 200 e exibiu a marca Atenza FieldOps.

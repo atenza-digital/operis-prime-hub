@@ -6,9 +6,9 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
-- Proxima etapa recomendada: executar o hardening final da Etapa 8, priorizando a agenda mensal/anual e a preparacao controlada para producao.
+- Proxima etapa recomendada: executar o preflight de armazenamento R2 em lote piloto, com validacao de isolamento, rollback e custos antes da producao.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 41.
+- Itens de backlog remanescentes: 40.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -226,7 +226,7 @@ Entregue inicialmente em homologacao:
 - Dashboard compactado com abas (`Agora`, `Contratos`, `Agenda`, `Atalhos`) para reduzir rolagem e separar aprofundamento por contexto.
 - Agenda recebeu filtros por mes/semana/todos, ano/mes, busca por cliente e detalhes ao clicar no agendamento.
 - Evoluir a agenda para visualizacoes dedicadas mensal e anual, preservando os filtros e o detalhe de equipe/veiculo aprovados na Etapa 7.
-- Visões mensal e anual da agenda implementadas com calendário de eventos clicáveis, resumo dos 12 meses e evidências em `docs/evidencias/etapa8_agenda/VALIDACAO_AGENDA_VISAOES_2026-07-21.md`; aguardando publicação e smoke em homologação.
+- Visões mensal e anual da agenda implementadas com calendário de eventos clicáveis, resumo dos 12 meses e evidências em `docs/evidencias/etapa8_agenda/VALIDACAO_AGENDA_VISAOES_2026-07-21.md`; publicação e smoke em homologação concluídos pelo CI/CD.
 - Navegacao principal passou por novo ajuste de nomenclatura para aproximar nomes de menu, titulo da topbar e titulo das telas.
 - Tela de Equipes e veiculos passou a priorizar cadastro de tecnicos e veiculos, deixando alocacao semanal como apoio visual secundario ate revisao completa do fluxo de agendamentos.
 - Favicon global Atenza reforcado em `index.html` com PNG, ICO, shortcut e apple-touch; CI passou a executar auditoria de branding para impedir retorno de marca fixa de tenant no HTML publico.
