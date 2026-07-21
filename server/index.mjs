@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
+import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,13 +13,24 @@ const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const MEASUREMENT_FINANCIAL_STATUSES = new Set([
   "em_conferencia",
+  "emitida",
+  "enviada_ao_cliente",
+  "aceita",
   "aguardando_nf",
+  "nf_registrada",
   "nf_enviada",
   "aguardando_pagamento",
+  "paga",
   "pago_no_erp",
   "pendente_cliente",
   "cancelada",
+  "substituida",
 ]);
+const COMMERCIAL_DOCUMENT_TEMPLATES = {
+  proposta: { code: "proposta-comercial", version: "p0-ciperprag-v1" },
+  contrato: { code: "contrato-prestacao-servicos", version: "p0-ciperprag-v1" },
+  minuta: { code: "minuta-contrato-cliente", version: "p0-ciperprag-v1" },
+};
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
@@ -115,6 +127,44 @@ async function generateUniqueCertificateHash(db = { query }) {
   throw new Error("Nao foi possivel gerar um hash unico para o certificado.");
 }
 
+function currentTenantDate(timeZone = "America/Fortaleza") {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function minIsoDate(left, right) {
+  if (!left) return right;
+  if (!right) return left;
+  return left <= right ? left : right;
+}
+
+function moneyLineTotal(quantity, unitValue) {
+  const normalizedQuantity = Number(quantity || 0);
+  const unitValueCents = Math.round(Number(unitValue || 0) * 100);
+  return Math.round(normalizedQuantity * unitValueCents) / 100;
+}
+
+function buildShortPublicCertificateCode(hash) {
+  const clean = String(hash || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  let first = 0x811c9dc5;
+  let second = 0x45d9f3b;
+  for (const char of clean) {
+    first = Math.imul(first ^ char.charCodeAt(0), 16777619) >>> 0;
+    second = Math.imul(second + char.charCodeAt(0), 2654435761) >>> 0;
+  }
+  const partA = first.toString(36).toUpperCase().padStart(4, "0").slice(-4);
+  const partB = second.toString(36).toUpperCase().padStart(4, "0").slice(-4);
+  return `${partA}-${partB}`;
+}
+
+function certificateSnapshotSha256(snapshot) {
+  return crypto.createHash("sha256").update(JSON.stringify(snapshot), "utf8").digest("hex");
+}
+
 function makeId(prefix) {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
 }
@@ -164,18 +214,6 @@ function normalizeJsonArray(value) {
       }
     })
     .filter(Boolean);
-}
-
-function parseDataUrl(dataUrl) {
-  const value = String(dataUrl || "");
-  const match = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return { mimeType: null, base64Data: value, bytes: null };
-  const base64Data = match[2];
-  return {
-    mimeType: match[1],
-    base64Data,
-    bytes: Math.floor((base64Data.length * 3) / 4) - (base64Data.endsWith("==") ? 2 : base64Data.endsWith("=") ? 1 : 0),
-  };
 }
 
 function htmlEscape(value) {
@@ -279,13 +317,37 @@ function drawCompanyHeader(doc, company, { x, y, width, logoWidth = 92 }) {
   doc.font("Helvetica").fontSize(8).fillColor("#475569").text([company.cnpj ? `CNPJ ${company.cnpj}` : null, company.endereco].filter(Boolean).join(" | "), textX, y + 38, { width: textWidth });
 }
 
-async function saveImmutablePdfAttachment(client, { tenantId, userId, entityType, entityId, fileName, pdfBuffer, snapshot, template, metadata = {} }) {
+async function saveImmutablePdfAttachment(client, { tenantId, tenantSlug, userId, entityType, entityId, fileName, pdfBuffer, snapshot, template, metadata = {} }) {
   const encoded = encodeBinaryDocument(pdfBuffer, "application/pdf");
   const snapHash = snapshotHash(snapshot);
+  const storageTarget = createAttachmentStoragePlan({
+    tenantSlug,
+    entityType,
+    entityId,
+    category: "pdf_historico",
+    fileName,
+    hashSha256: encoded.hash,
+  });
+  const persisted = await persistAttachmentContent({
+    storagePlan: storageTarget,
+    buffer: pdfBuffer,
+    contentBase64: encoded.dataUrl,
+    mimeType: "application/pdf",
+    hashSha256: encoded.hash,
+    fileName,
+    metadata: {
+      ...metadata,
+      formato: "pdf_server_side",
+      hashSha256: encoded.hash,
+      snapshotHashSha256: snapHash,
+      templateCodigo: template.code,
+      templateVersao: template.version,
+    },
+  });
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
-     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, imutavel, criado_por)
-     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,TRUE,$13)
+     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,$16)
      ON CONFLICT (id) DO NOTHING`,
     [
       makeId("PDF"),
@@ -294,23 +356,20 @@ async function saveImmutablePdfAttachment(client, { tenantId, userId, entityType
       entityId,
       fileName,
       encoded.bytes,
-      encoded.dataUrl,
-      JSON.stringify({
-        ...metadata,
-        formato: "pdf_server_side",
-        hashSha256: encoded.hash,
-        snapshotHashSha256: snapHash,
-        templateCodigo: template.code,
-        templateVersao: template.version,
-      }),
+      persisted.contentBase64,
+      JSON.stringify(persisted.metadata),
       encoded.hash,
       snapHash,
       template.code,
       template.version,
+      persisted.provider,
+      persisted.bucket,
+      persisted.key,
+      persisted.etag,
       userId || null,
     ],
   );
-  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes };
+  return { hashSha256: encoded.hash, snapshotHashSha256: snapHash, bytes: encoded.bytes, storageProvider: persisted.provider };
 }
 
 async function buildMeasurementPdfBuffer(snapshot, measurement) {
@@ -445,6 +504,8 @@ function attachmentPermissionFor(entityType) {
     servico_pop: "servicos.manage",
     cliente: "clientes.manage",
     contrato: "contratos.manage",
+    proposta: "contratos.manage",
+    minuta: "contratos.manage",
   };
   return map[entityType] || "dashboard.view";
 }
@@ -474,26 +535,84 @@ async function logAuditEvent(db, req, { entityType, entityId = null, action, sum
   }
 }
 
-async function saveImmutableDocumentAttachment(client, { tenantId, userId, entityType, entityId, fileName, html, metadata = {} }) {
+async function saveImmutableDocumentAttachment(client, {
+  tenantId,
+  userId,
+  entityType,
+  entityId,
+  fileName,
+  html,
+  snapshot = null,
+  template = null,
+  tenantSlug = null,
+  storage = null,
+  metadata = {},
+}) {
   const encoded = encodeHtmlDocument(html);
+  const snapHash = snapshot ? snapshotHash(snapshot) : null;
+  const templateCode = template?.code || null;
+  const templateVersion = template?.version || null;
+  const storageTarget = storage || createAttachmentStoragePlan({
+    tenantSlug,
+    entityType,
+    entityId,
+    category: "pdf_historico",
+    fileName,
+    hashSha256: encoded.hash,
+  });
+  const persisted = await persistAttachmentContent({
+    storagePlan: storageTarget,
+    buffer: Buffer.from(html, "utf8"),
+    contentBase64: encoded.dataUrl,
+    mimeType: "text/html",
+    hashSha256: encoded.hash,
+    fileName,
+    metadata: {
+      ...metadata,
+      formato: "html_historico",
+      hashSha256: encoded.hash,
+      snapshotHashSha256: snapHash,
+      templateCodigo: templateCode,
+      templateVersao: templateVersion,
+    },
+  });
+  const attachmentId = makeId("DOC");
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
-     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, imutavel, criado_por)
-     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'text/html',$6,$7,$8,$9,TRUE,$10)
-     ON CONFLICT (id) DO NOTHING`,
+     (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'text/html',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)
+    ON CONFLICT (id) DO NOTHING`,
     [
-      makeId("DOC"),
+      attachmentId,
       tenantId,
       entityType,
       entityId,
       fileName,
       encoded.bytes,
-      encoded.dataUrl,
-      JSON.stringify({ ...metadata, formato: "html_historico", hashSha256: encoded.hash }),
+      persisted.contentBase64,
+      JSON.stringify(persisted.metadata),
       encoded.hash,
+      snapHash,
+      templateCode,
+      templateVersion,
+      persisted.provider,
+      persisted.bucket,
+      persisted.key,
+      persisted.etag,
       userId || null,
     ],
   );
+  return {
+    id: attachmentId,
+    hashSha256: encoded.hash,
+    snapshotHashSha256: snapHash,
+    bytes: encoded.bytes,
+    templateCodigo: templateCode,
+    templateVersao: templateVersion,
+    storageProvider: persisted.provider,
+    storageBucket: persisted.bucket,
+    storageKey: persisted.key,
+  };
 }
 
 function buildHistoricalOrderHtml(snapshot, order) {
@@ -699,9 +818,11 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
   const tag = order.tag_equipamento_servico || order.tags || null;
-  return {
+  const codigoPublico = buildShortPublicCertificateCode(hash);
+  const snapshot = {
     certificado: {
       hash,
+      codigoPublico,
       numero: number,
       status: "emitido",
       emitidoEm: new Date().toISOString(),
@@ -763,6 +884,8 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       certificadoConfig: company?.certificado_config || {},
     },
   };
+  snapshot.certificado.snapshotHashSha256 = certificateSnapshotSha256(snapshot);
+  return snapshot;
 }
 
 function createTemporaryPassword() {
@@ -998,6 +1121,10 @@ function mapAttachment(row, options = {}) {
     snapshotHashSha256: row.snapshot_hash_sha256,
     templateCodigo: row.template_codigo,
     templateVersao: row.template_versao,
+    storageProvider: row.storage_provider,
+    storageBucket: row.storage_bucket,
+    storageKey: row.storage_key,
+    storageEtag: row.storage_etag,
     imutavel: row.imutavel,
     criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
   };
@@ -1005,7 +1132,7 @@ function mapAttachment(row, options = {}) {
 
 async function getAttachments(tenantId) {
   const { rows } = await query(
-    `SELECT id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, imutavel, criado_em
+    `SELECT id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_em
      FROM ciperprag_hub.evidencias_anexos
      WHERE tenant_id = $1
      ORDER BY criado_em DESC, id DESC`,
@@ -1096,6 +1223,7 @@ async function getCertificates(tenantId) {
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
+    tagEquipamentoServico: row.tag_equipamento_servico || null,
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
@@ -1105,10 +1233,10 @@ async function getCertificates(tenantId) {
 async function getCertificateByHash(hash) {
   const normalizedHash = String(hash || "").trim().toUpperCase();
   if (!normalizedHash) return null;
-  const { rows } = await query(
+  let { rows } = await query(
     `SELECT
       c.*,
-      o.tag_equipamento_servico,
+      o.tag_equipamento_servico AS os_tag_equipamento_servico,
       o.quantidade,
       o.unidade,
       o.fotos
@@ -1116,9 +1244,28 @@ async function getCertificateByHash(hash) {
      LEFT JOIN ciperprag_hub.ordens_servico o
        ON o.id = c.os_id
      WHERE UPPER(c.hash) = $1
+        OR UPPER(c.snapshot_dados #>> '{certificado,codigoPublico}') = $1
+        OR UPPER(c.snapshot_dados #>> '{certificado,publicCode}') = $1
+        OR UPPER(c.snapshot_dados #>> '{certificado,codigo_publico}') = $1
      LIMIT 1`,
     [normalizedHash],
   );
+  if (!rows.length && /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normalizedHash)) {
+    const fallback = await query(
+      `SELECT
+        c.*,
+        o.tag_equipamento_servico AS os_tag_equipamento_servico,
+        o.quantidade,
+        o.unidade,
+        o.fotos
+       FROM ciperprag_hub.certificados c
+       LEFT JOIN ciperprag_hub.ordens_servico o
+         ON o.id = c.os_id
+       ORDER BY c.emitido_em DESC, c.id DESC
+       LIMIT 5000`,
+    );
+    rows = fallback.rows.filter((candidate) => buildShortPublicCertificateCode(candidate.hash) === normalizedHash).slice(0, 1);
+  }
   const row = rows[0];
   if (!row) return null;
   const { rows: documentRows } = await query(
@@ -1161,7 +1308,7 @@ async function getCertificateByHash(hash) {
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
-    tagEquipamentoServico: row.tag_equipamento_servico,
+    tagEquipamentoServico: row.tag_equipamento_servico || row.os_tag_equipamento_servico,
     quantidade: Number(row.quantidade || 0),
     unidade: row.unidade,
     fotos: row.fotos ?? [],
@@ -1176,7 +1323,23 @@ async function getCertificateByHash(hash) {
   };
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, userId = null, publicBaseUrl = null } = {}) {
+function normalizeCertificateTags(order) {
+  const values = [order.tag_equipamento_servico, order.tags]
+    .flatMap((value) => Array.isArray(value) ? value : String(value || "").split(/[,;|\n]+/))
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  const unique = [];
+  const seen = new Set();
+  for (const value of values) {
+    const key = value.toLocaleUpperCase("pt-BR");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(value);
+  }
+  return unique.length ? unique : [null];
+}
+
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1185,75 +1348,82 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const customer = customerRows[0];
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
-  const { rows: numRows } = await client.query(
-    `UPDATE ciperprag_hub.numeracao_config
-     SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
-     WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
-     RETURNING certificado_formato, certificado_ultimo`,
-    [scopedTenantId],
-  );
-
-  const certId = makeId("CERT");
-  const hash = order.certificado_hash || await generateUniqueCertificateHash(client);
-  const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
   const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
   const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
-  const snapshot = buildCertificateSnapshot({
-    order,
-    customer,
-    service,
-    company,
-    hash,
-    number: certNumber,
-    dataExecucao: executionDate,
-    validadeDias,
-    publicBaseUrl,
-    userId,
-  });
+  const hashes = [];
 
-  const insertResult = await client.query(
-    `INSERT INTO ciperprag_hub.certificados
-     (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido')
-     ON CONFLICT (hash) DO NOTHING`,
-    [
-      certId,
-      scopedTenantId,
+  for (const [index, tag] of normalizeCertificateTags(order).entries()) {
+    const { rows: numRows } = await client.query(
+      `UPDATE ciperprag_hub.numeracao_config
+       SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
+       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
+       RETURNING certificado_formato, certificado_ultimo`,
+      [scopedTenantId],
+    );
+    const certId = makeId("CERT");
+    const hash = index === 0 && order.certificado_hash ? order.certificado_hash : await generateUniqueCertificateHash(client);
+    const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
+    const certificateOrder = { ...order, tag_equipamento_servico: tag, tags: tag || order.tags };
+    const snapshot = buildCertificateSnapshot({
+      order: certificateOrder,
+      customer,
+      service,
+      company,
       hash,
-      certNumber,
-      order.id,
-      order.numero,
-      order.cliente_id,
-      order.cliente,
-      customer?.cnpj || order.cnpj,
-      clienteEndereco,
-      customer?.logo_url || order.cliente_logo_url || null,
-      order.contrato_id,
-      order.servico,
-      order.tecnico,
-      order.local_execucao,
-      executionDate,
+      number: certNumber,
+      dataExecucao: executionDate,
       validadeDias,
-      service?.produtos_quimicos || [],
-      JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
-      JSON.stringify(snapshot),
-    ],
-  );
-  if (insertResult.rowCount > 0) {
-    const certificate = { ...order, id: certId, hash, numero: certNumber, os_numero: order.numero };
-    await saveImmutableDocumentAttachment(client, {
-      tenantId: scopedTenantId,
+      publicBaseUrl,
       userId,
-      entityType: "certificado",
-      entityId: certId,
-      fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
-      html: buildHistoricalCertificateHtml(snapshot, certificate),
-      metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id },
     });
+
+    const insertResult = await client.query(
+      `INSERT INTO ciperprag_hub.certificados
+       (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status, tag_equipamento_servico)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido',$21)
+       ON CONFLICT (hash) DO NOTHING`,
+      [
+        certId,
+        scopedTenantId,
+        hash,
+        certNumber,
+        order.id,
+        order.numero,
+        order.cliente_id,
+        order.cliente,
+        customer?.cnpj || order.cnpj,
+        clienteEndereco,
+        customer?.logo_url || order.cliente_logo_url || null,
+        order.contrato_id,
+        order.servico,
+        order.tecnico,
+        order.local_execucao,
+        executionDate,
+        validadeDias,
+        service?.produtos_quimicos || [],
+        JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
+        JSON.stringify(snapshot),
+        tag,
+      ],
+    );
+    hashes.push(hash);
+    if (insertResult.rowCount > 0) {
+      const certificate = { ...certificateOrder, id: certId, hash, numero: certNumber, os_numero: order.numero };
+      await saveImmutableDocumentAttachment(client, {
+        tenantId: scopedTenantId,
+        tenantSlug,
+        userId,
+        entityType: "certificado",
+        entityId: certId,
+        fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
+        html: buildHistoricalCertificateHtml(snapshot, certificate),
+        metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id, tagEquipamentoServico: tag },
+      });
+    }
   }
-  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3", [order.id, hash, scopedTenantId]);
-  return hash;
+  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3", [order.id, hashes[0], scopedTenantId]);
+  return { primaryHash: hashes[0], hashes };
 }
 
 async function getCompanyConfig(tenantId) {
@@ -1362,6 +1532,8 @@ async function getContractTemplates(tenantId) {
       s.quantidade,
       s.valor_unitario,
       s.frequencia,
+      s.descricao_comercial,
+      s.unidade_comercial,
       o.id AS contrato_operacional_id,
       o.status AS contrato_operacional_status,
       o.executado AS contrato_operacional_executado
@@ -1373,7 +1545,7 @@ async function getContractTemplates(tenantId) {
      AND o.contrato_template_id = t.id
      AND o.servico_catalogo_id = s.servico_id
     WHERE t.tenant_id = $1
-    ORDER BY t.id, s.id
+    ORDER BY t.data_criacao DESC NULLS LAST, t.id DESC, s.id
   `, [tenantId]);
   const map = new Map();
   for (const row of rows) {
@@ -1390,6 +1562,13 @@ async function getContractTemplates(tenantId) {
         status: row.status,
         dataCriacao: row.data_criacao?.toISOString?.().split("T")[0] ?? row.data_criacao,
         observacoes: row.observacoes,
+        titulo: row.titulo || "",
+        objeto: row.objeto || "",
+        validadeDias: Number(row.validade_dias ?? 30),
+        modalidade: row.modalidade || "",
+        locaisExecucao: Array.isArray(row.locais_execucao) ? row.locais_execucao : [],
+        escopoTecnico: row.escopo_tecnico || "",
+        condicoesComerciais: row.condicoes_comerciais || "",
         operacionalizado: false,
         contratosOperacionaisIds: [],
       });
@@ -1405,6 +1584,8 @@ async function getContractTemplates(tenantId) {
         quantidade: Number(row.quantidade),
         valorUnitario: Number(row.valor_unitario),
         frequencia: row.frequencia,
+        descricaoComercial: row.descricao_comercial || "",
+        unidadeComercial: row.unidade_comercial || "",
         contratoOperacionalId: row.contrato_operacional_id,
         contratoOperacionalStatus: row.contrato_operacional_status,
         contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
@@ -1412,6 +1593,116 @@ async function getContractTemplates(tenantId) {
     }
   }
   return [...map.values()];
+}
+
+async function buildCommercialDocumentSnapshot(client, { tenantId, templateId }) {
+  const { rows: templateRows } = await client.query(
+    `SELECT t.*, c.razao_social AS cliente_razao_social, c.nome_fantasia AS cliente_nome_fantasia,
+            c.cnpj AS cliente_cnpj, c.endereco AS cliente_endereco, c.bairro AS cliente_bairro,
+            c.municipio AS cliente_municipio, c.uf AS cliente_uf, c.cep AS cliente_cep,
+            c.logo_url AS cliente_logo_url
+     FROM ciperprag_hub.contratos_templates t
+     LEFT JOIN ciperprag_hub.clientes c ON c.id = t.cliente_id AND c.tenant_id = $2
+     WHERE t.id = $1 AND t.tenant_id = $2
+     LIMIT 1`,
+    [templateId, tenantId],
+  );
+  const template = templateRows[0];
+  if (!template) return null;
+
+  const [{ rows: companyRows }, { rows: serviceRows }] = await Promise.all([
+    client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]),
+    client.query(
+      `SELECT s.*, sc.nome AS catalogo_nome, sc.descricao AS catalogo_descricao, sc.unidade AS catalogo_unidade,
+              sc.tipo AS catalogo_tipo, sc.gera_certificado, sc.recorrencia_dias
+       FROM ciperprag_hub.contratos_templates_servicos s
+       LEFT JOIN ciperprag_hub.servicos_catalogo sc
+         ON sc.id = s.servico_id AND sc.tenant_id = $2
+       WHERE s.template_id = $1
+       ORDER BY s.id`,
+      [templateId, tenantId],
+    ),
+  ]);
+  const company = companyRows[0] || {};
+  const services = serviceRows.map((item) => ({
+    id: item.id,
+    servicoId: item.servico_id,
+    nome: item.descricao_comercial || item.catalogo_nome || "Serviço não informado",
+    descricaoCatalogo: item.catalogo_descricao || null,
+    tipo: item.catalogo_tipo || null,
+    quantidade: Number(item.quantidade || 0),
+    unidade: item.unidade_comercial || item.catalogo_unidade || "un.",
+    valorUnitario: Number(item.valor_unitario || 0),
+    valorTotal: Number(item.quantidade || 0) * Number(item.valor_unitario || 0),
+    frequencia: item.frequencia || null,
+    geraCertificado: Boolean(item.gera_certificado),
+    recorrenciaDias: Number(item.recorrencia_dias || 0),
+  }));
+
+  return {
+    snapshotVersion: "commercial-document-snapshot-v1",
+    capturedAt: new Date().toISOString(),
+    tenantId,
+    documento: {
+      id: template.id,
+      numero: template.numero,
+      tipo: template.tipo,
+      status: template.status,
+      dataCriacao: template.data_criacao,
+      titulo: template.titulo || null,
+      objeto: template.objeto || null,
+      validadeDias: Number(template.validade_dias || 0),
+      modalidade: template.modalidade || null,
+      vigenciaMeses: Number(template.vigencia_meses || 0),
+      formaPagamento: template.forma_pagamento || null,
+      prazoPagamentoDias: Number(template.prazo_pagamento_dias || 0),
+      locaisExecucao: Array.isArray(template.locais_execucao) ? template.locais_execucao : [],
+      escopoTecnico: template.escopo_tecnico || null,
+      condicoesComerciais: template.condicoes_comerciais || null,
+      observacoes: template.observacoes || null,
+    },
+    empresa: {
+      razaoSocial: company.razao_social || null,
+      nomeFantasia: company.nome_fantasia || null,
+      cnpj: company.cnpj || null,
+      endereco: company.endereco || null,
+      telefone: company.telefone || null,
+      email: company.email || null,
+      logoUrl: company.logo_url || null,
+      responsavelTecnico: company.responsavel_tecnico || null,
+      responsavelExecucao: company.responsavel_execucao || null,
+      cargoResponsavel: company.cargo_responsavel || null,
+    },
+    cliente: {
+      id: template.cliente_id || null,
+      razaoSocial: template.cliente_razao_social || null,
+      nomeFantasia: template.cliente_nome_fantasia || null,
+      cnpj: template.cliente_cnpj || null,
+      endereco: template.cliente_endereco || null,
+      bairro: template.cliente_bairro || null,
+      municipio: template.cliente_municipio || null,
+      uf: template.cliente_uf || null,
+      cep: template.cliente_cep || null,
+      logoUrl: template.cliente_logo_url || null,
+    },
+    servicos: services,
+    total: services.reduce((sum, item) => sum + item.valorTotal, 0),
+  };
+}
+
+function buildCommercialDocumentHtml(snapshot) {
+  const document = snapshot.documento || {};
+  const company = snapshot.empresa || {};
+  const client = snapshot.cliente || {};
+  const services = snapshot.servicos || [];
+  const total = Number(snapshot.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const typeLabel = document.tipo === "contrato"
+    ? "Contrato de prestação de serviços"
+    : document.tipo === "minuta"
+      ? "Minuta / modelo do cliente"
+      : "Proposta comercial";
+  const serviceRows = services.map((item, index) => `<tr><td>${index + 1}</td><td>${htmlEscape(item.nome)}</td><td>${htmlEscape(item.quantidade)} ${htmlEscape(item.unidade)}</td><td>${htmlEscape(item.frequencia || "-")}</td><td>${Number(item.valorUnitario || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td>${Number(item.valorTotal || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>`).join("");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(document.numero || typeLabel)}</title><style>body{font-family:Arial,sans-serif;color:#172033;padding:36px;line-height:1.45}h1{color:#087f5b;margin-bottom:4px}h2{font-size:15px;color:#087f5b;border-bottom:2px solid #087f5b;padding-bottom:4px;margin-top:24px}.muted{color:#667085;font-size:12px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;border:1px solid #d7dee8;border-radius:8px;padding:16px}.label{color:#667085;font-size:11px;text-transform:uppercase;font-weight:bold}.value{margin-top:2px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#087f5b;color:#fff;text-align:left}td,th{border:1px solid #d7dee8;padding:8px}.right{text-align:right}.total{font-size:18px;font-weight:bold;color:#087f5b;text-align:right;margin-top:12px}.section{page-break-inside:avoid}</style></head><body><h1>${htmlEscape(typeLabel)}</h1><p class="muted">${htmlEscape(document.numero || "Documento sem número")} | Snapshot histórico ${htmlEscape(snapshot.snapshotVersion)}</p><div class="grid"><div><div class="label">Contratada</div><div class="value"><strong>${htmlEscape(company.razaoSocial || company.nomeFantasia || "Empresa emissora")}</strong><br>${htmlEscape(company.cnpj || "-")}<br>${htmlEscape(company.endereco || "-")}</div></div><div><div class="label">Contratante</div><div class="value"><strong>${htmlEscape(client.razaoSocial || client.nomeFantasia || "Cliente não informado")}</strong><br>${htmlEscape(client.cnpj || "-")}<br>${htmlEscape([client.endereco, client.municipio, client.uf].filter(Boolean).join(", ") || "-")}</div></div></div><div class="section"><h2>Objeto e condições</h2><p>${htmlEscape(document.objeto || document.titulo || "Serviços técnicos conforme catálogo e condições comerciais registradas.")}</p><p><strong>Modalidade:</strong> ${htmlEscape(document.modalidade || "-")} | <strong>Validade:</strong> ${htmlEscape(document.validadeDias || "-")} dias | <strong>Vigência:</strong> ${htmlEscape(document.vigenciaMeses || "-")} meses</p><p>${htmlEscape(document.condicoesComerciais || document.formaPagamento || "-")}</p></div><div class="section"><h2>Serviços contratados</h2><table><thead><tr><th>#</th><th>Serviço</th><th>Quantidade</th><th>Frequência</th><th>Valor unitário</th><th>Total</th></tr></thead><tbody>${serviceRows || "<tr><td colspan=\"6\">Nenhum serviço informado.</td></tr>"}</tbody></table><div class="total">Total geral: ${total}</div></div><div class="section"><h2>Escopo técnico</h2><p>${htmlEscape(document.escopoTecnico || "Conforme catálogo de serviços, procedimentos e registros operacionais do sistema.")}</p></div><p class="muted">Documento histórico gerado em ${htmlEscape(new Date(snapshot.capturedAt).toLocaleString("pt-BR"))}. A versão impressa deve ser conferida pelo hash do anexo registrado no sistema.</p></body></html>`;
 }
 
 function makeCompactId(prefix) {
@@ -1916,6 +2207,43 @@ async function nextSequential(field, tenantId) {
 
 async function upsertSchedule(body, tenantId) {
   const id = body.id || makeId("AG");
+  const desiredStatus = body.status || "agendado";
+  if (body.contratoId && !["cancelado", "encerrado"].includes(desiredStatus)) {
+    const { rows: contractRows } = await query(
+      `SELECT
+         c.id,
+         c.status,
+         c.contratado,
+         c.executado,
+         t.tipo AS template_tipo,
+         t.status AS template_status
+       FROM ciperprag_hub.contratos c
+       LEFT JOIN ciperprag_hub.contratos_templates t
+         ON t.id = c.contrato_template_id
+        AND t.tenant_id = c.tenant_id
+       WHERE c.id = $1
+         AND c.tenant_id = $2
+       LIMIT 1`,
+      [body.contratoId, tenantId],
+    );
+    const contract = contractRows[0];
+    const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
+    if (!contract) {
+      const error = new Error("Contrato operacional nao encontrado para o agendamento.");
+      error.status = 400;
+      throw error;
+    }
+    if (contract.status !== "ativo" || balance <= 0) {
+      const error = new Error("Contrato sem saldo operacional disponivel para novo agendamento.");
+      error.status = 400;
+      throw error;
+    }
+    if (contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+      const error = new Error("A agenda aceita apenas contratos finais vigentes. Gere e aprove a minuta antes do contrato final.");
+      error.status = 400;
+      throw error;
+    }
+  }
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
     (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
@@ -1954,7 +2282,7 @@ async function upsertSchedule(body, tenantId) {
       body.tecnicosNomes || [],
       body.veiculoId || null,
       body.veiculoDescricao || null,
-      body.status || "agendado",
+      desiredStatus,
       body.createdAt || null,
     ],
   );
@@ -1993,13 +2321,15 @@ app.get("/api/public/tenant-context", async (req, res) => {
        t.slug,
        COALESCE(t.nome_fantasia, t.razao_social, t.slug) AS nome,
        ec.logo_url,
+       ec.brand_icon_url,
        ec.logo_interface_url,
        ec.cor_primaria
      FROM ciperprag_hub.tenants t
      LEFT JOIN LATERAL (
        SELECT
          logo_url,
-         certificado_config->>'logoInterfaceUrl' AS logo_interface_url,
+         certificado_config->>'brandIconUrl' AS brand_icon_url,
+         COALESCE(certificado_config->>'sidebarLogoDarkUrl', certificado_config->>'logoInterfaceUrl') AS logo_interface_url,
          cor_primaria
        FROM ciperprag_hub.empresa_config
        WHERE tenant_id = t.id
@@ -2019,6 +2349,7 @@ app.get("/api/public/tenant-context", async (req, res) => {
       slug: tenant.slug,
       nome: tenant.nome,
       logoUrl: tenant.logo_url || null,
+      brandIconUrl: tenant.brand_icon_url || null,
       logoInterfaceUrl: tenant.logo_interface_url || null,
       corPrimaria: tenant.cor_primaria || null,
     },
@@ -2102,7 +2433,9 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   const requiredPermission = attachmentPermissionFor(attachment.entidade_tipo);
   const granted = new Set(req.auth?.user?.permissoes || []);
   if (!granted.has(requiredPermission)) return res.status(403).json({ error: "Usuario sem permissao para acessar este anexo." });
-  if (!attachment.conteudo_base64 && !attachment.url) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
+  const hasDatabaseContent = Boolean(attachment.conteudo_base64);
+  const hasR2Content = attachment.storage_provider === "r2" && attachment.storage_bucket && attachment.storage_key;
+  if (!hasDatabaseContent && !attachment.url && !hasR2Content) return res.status(404).json({ error: "Conteudo do anexo nao encontrado." });
   await logAuditEvent(null, req, {
     entityType: "anexo",
     entityId: attachment.id,
@@ -2116,9 +2449,11 @@ app.get("/api/attachments/:id/download", async (req, res) => {
       hashSha256: attachment.hash_sha256,
     },
   });
-  if (attachment.url && !attachment.conteudo_base64) return res.redirect(attachment.url);
+  if (attachment.url && !hasDatabaseContent && !hasR2Content) return res.redirect(attachment.url);
 
-  const decoded = decodeStoredAttachmentContent(attachment.conteudo_base64);
+  const decoded = hasR2Content && !hasDatabaseContent
+    ? await readAttachmentContentFromStorage({ bucket: attachment.storage_bucket, key: attachment.storage_key })
+    : decodeStoredAttachmentContent(attachment.conteudo_base64);
   const mimeType = attachment.mime_type || decoded.mimeType || "application/octet-stream";
   const dispositionType = req.query.download === "1" ? "attachment" : "inline";
   const fileName = String(attachment.nome_arquivo || `${attachment.id}.bin`).replaceAll('"', "");
@@ -2127,6 +2462,7 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   res.setHeader("Content-Length", decoded.buffer.length);
   res.setHeader("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(fileName)}"`);
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Storage-Provider", hasR2Content && !hasDatabaseContent ? "r2" : "database");
   if (attachment.hash_sha256) res.setHeader("X-Document-Hash-Sha256", attachment.hash_sha256);
   res.send(decoded.buffer);
 });
@@ -2705,15 +3041,57 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   const id = body.id || makeCompactId("TPL");
   const tenantId = req.auth.user.tenant.id;
   let operationalSync = null;
+  const locaisExecucao = Array.isArray(body.locaisExecucao)
+    ? body.locaisExecucao.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
   await withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
     const { rowCount: templateRowCount } = await client.query(
-      `INSERT INTO ciperprag_hub.contratos_templates (id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       ON CONFLICT (id) DO UPDATE SET numero=EXCLUDED.numero, cliente_id=EXCLUDED.cliente_id, tipo=EXCLUDED.tipo, vigencia_meses=EXCLUDED.vigencia_meses, forma_pagamento=EXCLUDED.forma_pagamento, prazo_pagamento_dias=EXCLUDED.prazo_pagamento_dias, status=EXCLUDED.status, data_criacao=EXCLUDED.data_criacao, observacoes=EXCLUDED.observacoes
+      `INSERT INTO ciperprag_hub.contratos_templates (
+         id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
+         status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
+         escopo_tecnico, condicoes_comerciais
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18)
+       ON CONFLICT (id) DO UPDATE SET
+         numero=EXCLUDED.numero,
+         cliente_id=EXCLUDED.cliente_id,
+         tipo=EXCLUDED.tipo,
+         vigencia_meses=EXCLUDED.vigencia_meses,
+         forma_pagamento=EXCLUDED.forma_pagamento,
+         prazo_pagamento_dias=EXCLUDED.prazo_pagamento_dias,
+         status=EXCLUDED.status,
+         data_criacao=EXCLUDED.data_criacao,
+         observacoes=EXCLUDED.observacoes,
+         titulo=EXCLUDED.titulo,
+         objeto=EXCLUDED.objeto,
+         validade_dias=EXCLUDED.validade_dias,
+         modalidade=EXCLUDED.modalidade,
+         locais_execucao=EXCLUDED.locais_execucao,
+         escopo_tecnico=EXCLUDED.escopo_tecnico,
+         condicoes_comerciais=EXCLUDED.condicoes_comerciais
        WHERE ciperprag_hub.contratos_templates.tenant_id = EXCLUDED.tenant_id`,
-      [id, tenantId, body.numero, body.clienteId, body.tipo, body.vigenciaMeses, body.formaPagamento, body.prazoPagamentoDias, body.status, body.dataCriacao, body.observacoes],
+      [
+        id,
+        tenantId,
+        body.numero,
+        body.clienteId,
+        body.tipo,
+        body.vigenciaMeses,
+        body.formaPagamento,
+        body.prazoPagamentoDias,
+        body.status,
+        body.dataCriacao,
+        body.observacoes,
+        body.titulo || null,
+        body.objeto || null,
+        Number(body.validadeDias || 30),
+        body.modalidade || null,
+        JSON.stringify(locaisExecucao),
+        body.escopoTecnico || null,
+        body.condicoesComerciais || null,
+      ],
     );
     assertTenantWrite(templateRowCount, "Modelo comercial");
     await client.query(
@@ -2729,9 +3107,17 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     );
     for (const servico of body.servicos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [id, servico.servicoId, servico.quantidade, servico.valorUnitario, servico.frequencia],
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          id,
+          servico.servicoId,
+          servico.quantidade,
+          servico.valorUnitario,
+          servico.frequencia,
+          servico.descricaoComercial || null,
+          servico.unidadeComercial || null,
+        ],
       );
     }
     if (body.tipo === "contrato" && body.status === "vigente") {
@@ -2751,6 +3137,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         status: body.status,
         servicos: (body.servicos || []).length,
         vigenciaMeses: body.vigenciaMeses,
+        validadeDias: body.validadeDias,
+        modalidade: body.modalidade,
         operationalSync,
       },
     });
@@ -2758,24 +3146,44 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   res.json({ ok: true, id, operationalSync });
 });
 
-app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
+app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const tenantId = req.auth.user.tenant.id;
   const next = await nextSequential("contrato_ultimo", tenantId);
   const year = new Date().getFullYear();
-  const number = `CT-${next}/${year}`;
+  const number = `MIN-${next}/${year}`;
   const { rows } = await query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
   const item = rows[0];
-  if (item && item.tipo !== "proposta") return res.status(400).json({ error: "Apenas propostas podem gerar contrato." });
-  if (item && item.status !== "aprovado") return res.status(400).json({ error: "A proposta precisa estar aprovada para gerar contrato." });
+  if (item && item.tipo !== "proposta") return res.status(400).json({ error: "A minuta deve ser gerada a partir de uma proposta aprovada." });
+  if (item && item.status !== "aprovado") return res.status(400).json({ error: "A proposta precisa estar aprovada para gerar minuta." });
   if (!item) return res.status(404).json({ error: "Modelo não encontrado" });
   const newId = makeCompactId("TPL");
-  let operationalSync = null;
   await withTransaction(async (client) => {
     await client.query(
-      `INSERT INTO ciperprag_hub.contratos_templates (id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias, status, data_criacao, observacoes)
-       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9)`,
-      [newId, tenantId, number, item.cliente_id, item.vigencia_meses, item.forma_pagamento, item.prazo_pagamento_dias, new Date().toISOString().split("T")[0], `Gerado a partir da proposta ${item.numero}. ${item.observacoes || ""}`],
+      `INSERT INTO ciperprag_hub.contratos_templates (
+         id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
+         status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
+         escopo_tecnico, condicoes_comerciais
+       )
+       VALUES ($1,$2,$3,$4,'minuta',$5,$6,$7,'rascunho',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+      [
+        newId,
+        tenantId,
+        number,
+        item.cliente_id,
+        item.vigencia_meses,
+        item.forma_pagamento,
+        item.prazo_pagamento_dias,
+        new Date().toISOString().split("T")[0],
+        `Minuta gerada a partir da proposta ${item.numero}. ${item.observacoes || ""}`,
+        item.titulo,
+        item.objeto,
+        item.validade_dias,
+        item.modalidade,
+        JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
+        item.escopo_tecnico,
+        item.condicoes_comerciais,
+      ],
     );
     const { rows: services } = await client.query(
       `SELECT s.*
@@ -2787,17 +3195,100 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
     );
     for (const service of services) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [newId, service.servico_id, service.quantidade, service.valor_unitario, service.frequencia],
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          newId,
+          service.servico_id,
+          service.quantidade,
+          service.valor_unitario,
+          service.frequencia,
+          service.descricao_comercial,
+          service.unidade_comercial,
+        ],
+      );
+    }
+    await logAuditEvent(client, req, {
+      entityType: "contrato_template",
+      entityId: newId,
+      action: "minuta_generated_from_proposal",
+      summary: `Minuta ${number} gerada a partir da proposta ${item.numero || id}`,
+      before: { id, numero: item.numero, tipo: item.tipo, status: item.status },
+      after: { id: newId, numero: number, tipo: "minuta", status: "rascunho", propostaOrigemId: id },
+    });
+  });
+  res.json({ ok: true, id: newId, numero: number });
+});
+
+app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
+  const id = req.params.id;
+  const tenantId = req.auth.user.tenant.id;
+  const next = await nextSequential("contrato_ultimo", tenantId);
+  const year = new Date().getFullYear();
+  const number = `CT-${next}/${year}`;
+  const { rows } = await query("SELECT * FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
+  const item = rows[0];
+  if (item && item.tipo !== "minuta") return res.status(400).json({ error: "O contrato final deve ser gerado a partir de uma minuta aprovada." });
+  if (item && !["aprovado", "vigente"].includes(item.status)) return res.status(400).json({ error: "A minuta precisa estar aprovada para gerar contrato." });
+  if (!item) return res.status(404).json({ error: "Modelo não encontrado" });
+  const newId = makeCompactId("TPL");
+  let operationalSync = null;
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO ciperprag_hub.contratos_templates (
+         id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
+         status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
+         escopo_tecnico, condicoes_comerciais
+       )
+       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+      [
+        newId,
+        tenantId,
+        number,
+        item.cliente_id,
+        item.vigencia_meses,
+        item.forma_pagamento,
+        item.prazo_pagamento_dias,
+        new Date().toISOString().split("T")[0],
+        `Gerado a partir da minuta ${item.numero}. ${item.observacoes || ""}`,
+        item.titulo,
+        item.objeto,
+        item.validade_dias,
+        item.modalidade,
+        JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
+        item.escopo_tecnico,
+        item.condicoes_comerciais,
+      ],
+    );
+    const { rows: services } = await client.query(
+      `SELECT s.*
+       FROM ciperprag_hub.contratos_templates_servicos s
+       JOIN ciperprag_hub.contratos_templates t ON t.id = s.template_id
+       WHERE s.template_id = $1
+         AND t.tenant_id = $2`,
+      [id, tenantId],
+    );
+    for (const service of services) {
+      await client.query(
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          newId,
+          service.servico_id,
+          service.quantidade,
+          service.valor_unitario,
+          service.frequencia,
+          service.descricao_comercial,
+          service.unidade_comercial,
+        ],
       );
     }
     operationalSync = await syncOperationalContractsFromTemplate(client, newId, tenantId);
     await logAuditEvent(client, req, {
       entityType: "contrato_template",
       entityId: newId,
-      action: "contract_generated_from_proposal",
-      summary: `Contrato ${number} gerado a partir da proposta ${item.numero || id}`,
+      action: "contract_generated_from_minuta",
+      summary: `Contrato ${number} gerado a partir da minuta ${item.numero || id}`,
       before: { id, numero: item.numero, tipo: item.tipo, status: item.status },
       after: { id: newId, numero: number, tipo: "contrato", status: "vigente", propostaOrigemId: id, operationalSync },
     });
@@ -2805,14 +3296,169 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
   res.json({ ok: true, id: newId, numero: number, operationalSync });
 });
 
+app.post("/api/contract-templates/:id/issue-document", requirePermission("contratos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const result = await withTransaction(async (client) => {
+    const snapshot = await buildCommercialDocumentSnapshot(client, { tenantId, templateId: req.params.id });
+    if (!snapshot) {
+      const error = new Error("Documento comercial não encontrado.");
+      error.status = 404;
+      throw error;
+    }
+    const entityType = snapshot.documento.tipo;
+    const template = COMMERCIAL_DOCUMENT_TEMPLATES[entityType];
+    const fileName = `${entityType}-${safeFileNamePart(snapshot.documento.numero || snapshot.documento.id)}.html`;
+    const html = buildCommercialDocumentHtml(snapshot);
+    const attachment = await saveImmutableDocumentAttachment(client, {
+      tenantId,
+      tenantSlug,
+      userId: req.auth.user.id,
+      entityType,
+      entityId: snapshot.documento.id,
+      fileName,
+      html,
+      snapshot,
+      template,
+      metadata: {
+        origem: "emissao_documento_comercial",
+        numero: snapshot.documento.numero,
+        tipo: snapshot.documento.tipo,
+        status: snapshot.documento.status,
+      },
+    });
+    await logAuditEvent(client, req, {
+      entityType: "anexo",
+      entityId: attachment.id,
+      action: "commercial_document_issued",
+      summary: `Snapshot histórico emitido: ${snapshot.documento.numero || snapshot.documento.id}`,
+      after: {
+        documentoId: snapshot.documento.id,
+        documentoTipo: snapshot.documento.tipo,
+        numero: snapshot.documento.numero,
+        hashSha256: attachment.hashSha256,
+        snapshotHashSha256: attachment.snapshotHashSha256,
+        templateCodigo: attachment.templateCodigo,
+        templateVersao: attachment.templateVersao,
+        storageProvider: attachment.storageProvider,
+      },
+    });
+    return { attachment, snapshotHashSha256: attachment.snapshotHashSha256 };
+  });
+  res.json({ ok: true, ...result });
+});
+
+app.post("/api/contract-templates/:id/source-file", requirePermission("contratos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const fileName = safeFileNamePart(req.body.fileName || "minuta-cliente");
+  const mimeType = String(req.body.mimeType || "application/octet-stream").toLowerCase();
+  const { rows: companyRows } = await query("SELECT certificado_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const uploadPolicy = resolveAttachmentPolicy("minuta.documento", companyRows[0]?.certificado_config || {});
+  let parsed;
+  try {
+    parsed = validateAttachmentPayload({
+      contentBase64: req.body.contentBase64,
+      declaredMimeType: mimeType,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
+      label: "arquivo da minuta",
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+  const hash = sha256Hex(parsed.buffer);
+  const attachment = await withTransaction(async (client) => {
+    const { rows: templates } = await client.query(
+      "SELECT id, tipo, numero FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [req.params.id, tenantId],
+    );
+    const template = templates[0];
+    if (!template) {
+      const error = new Error("Minuta nao encontrada.");
+      error.status = 404;
+      throw error;
+    }
+    if (template.tipo !== "minuta") {
+      const error = new Error("O arquivo original deve ser vinculado a uma minuta.");
+      error.status = 400;
+      throw error;
+    }
+    const id = makeId("SRC");
+    const storageTarget = createAttachmentStoragePlan({
+      tenantSlug,
+      entityType: "minuta",
+      entityId: template.id,
+      category: "documento",
+      fileName,
+      hashSha256: hash,
+    });
+    const persisted = await persistAttachmentContent({
+      storagePlan: storageTarget,
+      buffer: parsed.buffer,
+      contentBase64: parsed.dataUrl,
+      mimeType,
+      hashSha256: hash,
+      fileName,
+      metadata: {
+        origem: "arquivo_original_cliente",
+        numero: template.numero,
+        hashSha256: hash,
+        ...buildAttachmentSecurityMetadata(uploadPolicy),
+      },
+    });
+    await client.query(
+      `INSERT INTO ciperprag_hub.evidencias_anexos
+       (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+       VALUES ($1,$2,'minuta',$3,'documento',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,$14)`,
+      [
+        id,
+        tenantId,
+        template.id,
+        fileName,
+        mimeType,
+        parsed.bytes,
+        persisted.contentBase64,
+        JSON.stringify(persisted.metadata),
+        hash,
+        persisted.provider,
+        persisted.bucket,
+        persisted.key,
+        persisted.etag,
+        req.auth.user.id,
+      ],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "minuta",
+      entityId: template.id,
+      action: "source_file_uploaded",
+      summary: `Arquivo original da minuta anexado: ${template.numero || template.id}`,
+      after: { attachmentId: id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash },
+    });
+    return { id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash };
+  });
+  res.json({ ok: true, attachment });
+});
+
 app.post("/api/measurements/generate", requirePermission("medicoes.manage"), async (req, res) => {
   const { clienteNome, dataInicio, dataFim } = req.body;
   if (!clienteNome || !dataInicio || !dataFim) return res.status(400).json({ error: "Cliente e periodo sao obrigatorios." });
   const tenantId = req.auth.user.tenant.id;
 
-  const measurement = await withTransaction(async (client) => {
+  let measurement;
+  try {
+    measurement = await withTransaction(async (client) => {
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
+    const timezone = company?.timezone || "America/Fortaleza";
+    const issuedDate = currentTenantDate(timezone);
+    const effectiveEnd = minIsoDate(dataFim, issuedDate);
+    const classification = dataFim > issuedDate ? "parcial" : "definitiva";
+    if (effectiveEnd < dataInicio) {
+      const error = new Error("Nao e possivel gerar medicao: o periodo informado ainda nao possui dias encerrados.");
+      error.status = 400;
+      throw error;
+    }
     const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE tenant_id = $2 AND (razao_social = $1 OR nome_fantasia = $1) LIMIT 1", [clienteNome, tenantId]);
     const customer = clientRows[0];
     const { rows: numRows } = await client.query(
@@ -2842,9 +3488,10 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
            WHERE mi.os_id = o.id
              AND m_exist.tenant_id = $4
              AND m_exist.status <> 'cancelada'
+             AND COALESCE(mi.medicao_ativa, TRUE) IS TRUE
          )
        ORDER BY COALESCE(o.data_execucao, o.data_emissao), o.numero`,
-      [clienteNome, dataInicio, dataFim, tenantId],
+      [clienteNome, dataInicio, effectiveEnd, tenantId],
     );
 
     if (!orderRows.length) {
@@ -2856,6 +3503,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     const items = orderRows.map((order) => {
       const quantidade = Number(order.quantidade || 0);
       const valorUnitario = Number(order.valor_unitario || 0);
+      const valorTotal = moneyLineTotal(quantidade, valorUnitario);
       return {
         osId: order.id,
         osNumero: order.numero,
@@ -2865,21 +3513,25 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
         quantidade,
         unidade: order.unidade,
         valorUnitario,
-        valorTotal: quantidade * valorUnitario,
+        valorTotal,
       };
     });
-    const total = items.reduce((sum, item) => sum + item.valorTotal, 0);
+    const total = Math.round(items.reduce((sum, item) => sum + Math.round(item.valorTotal * 100), 0)) / 100;
     const id = makeId("MED");
     const endereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null;
     const snapshot = {
       numero: number,
+      classificacao: classification,
+      parcialAte: classification === "parcial" ? effectiveEnd : null,
+      emitidoEm: new Date().toISOString(),
+      timezone,
       cliente: {
         id: customer?.id || null,
         nome: clienteNome,
         cnpj: customer?.cnpj || orderRows[0]?.cnpj || null,
         endereco,
       },
-      periodo: { inicio: dataInicio, fim: dataFim },
+      periodo: { inicio: dataInicio, fim: dataFim, medidoAte: effectiveEnd },
       empresa: {
         razaoSocial: company?.razao_social || null,
         nomeFantasia: company?.nome_fantasia || null,
@@ -2903,13 +3555,14 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     for (const item of items) {
       await client.query(
         `INSERT INTO ciperprag_hub.medicao_itens
-         (medicao_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
+         (medicao_id, tenant_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total, medicao_ativa)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
+        [id, tenantId, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
       );
     }
     await saveImmutableDocumentAttachment(client, {
       tenantId: req.auth.user.tenant.id,
+      tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "medicao",
       entityId: id,
@@ -2949,7 +3602,13 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       criadoEm: new Date().toISOString(),
       itens: items,
     };
-  });
+    });
+  } catch (error) {
+    if (error?.code === "23505" && String(error?.constraint || "").includes("ux_medicao_itens_tenant_os_ativa")) {
+      return res.status(409).json({ error: "Uma ou mais OS ja estao vinculadas a uma medicao ativa. Cancele ou substitua formalmente a medicao anterior antes de medir novamente." });
+    }
+    throw error;
+  }
 
   res.json({ ok: true, measurement });
 });
@@ -3018,17 +3677,23 @@ app.patch("/api/measurements/:id/financial", requirePermission("medicoes.manage"
 });
 
 app.patch("/api/measurements/:id/cancel", requirePermission("medicoes.manage"), async (req, res) => {
-  const { rowCount } = await query(
-    "UPDATE ciperprag_hub.medicoes SET status = 'cancelada', financeiro_status = 'cancelada', financeiro_atualizado_em = NOW(), atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2",
-    [req.params.id, req.auth.user.tenant.id],
-  );
-  if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
-  await logAuditEvent(null, req, {
-    entityType: "medicao",
-    entityId: req.params.id,
-    action: "measurement_cancelled",
-    summary: `Medicao ${req.params.id} cancelada`,
+  const rowCount = await withTransaction(async (client) => {
+    const result = await client.query(
+      "UPDATE ciperprag_hub.medicoes SET status = 'cancelada', financeiro_status = 'cancelada', financeiro_atualizado_em = NOW(), atualizado_em = NOW() WHERE id = $1 AND tenant_id = $2",
+      [req.params.id, req.auth.user.tenant.id],
+    );
+    if (result.rowCount) {
+      await client.query("UPDATE ciperprag_hub.medicao_itens SET medicao_ativa = FALSE WHERE medicao_id = $1", [req.params.id]);
+      await logAuditEvent(client, req, {
+        entityType: "medicao",
+        entityId: req.params.id,
+        action: "measurement_cancelled",
+        summary: `Medicao ${req.params.id} cancelada`,
+      });
+    }
+    return result.rowCount;
   });
+  if (!rowCount) return res.status(404).json({ error: "Medicao nao encontrada." });
   res.json({ ok: true });
 });
 
@@ -3067,8 +3732,23 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1 AND tenant_id = $2", [agendamentoId, tenantId]);
     const ag = agRows[0];
     if (!ag) throw new Error("Agendamento não encontrado");
-    const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [ag.contrato_id, tenantId]);
+    const { rows: contractRows } = await client.query(
+      `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+       FROM ciperprag_hub.contratos c
+       LEFT JOIN ciperprag_hub.contratos_templates t
+         ON t.id = c.contrato_template_id
+        AND t.tenant_id = c.tenant_id
+       WHERE c.id = $1
+         AND c.tenant_id = $2`,
+      [ag.contrato_id, tenantId],
+    );
     const contract = contractRows[0];
+    const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
+    if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+      const error = new Error("Nao e possivel gerar OS: o agendamento precisa estar vinculado a contrato final vigente e com saldo operacional.");
+      error.status = 400;
+      throw error;
+    }
     const { rows: clientRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [ag.cliente_id, tenantId]);
     const customer = clientRows[0];
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
@@ -3173,6 +3853,20 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const technician = techRows[0];
     const qty = Number(quantidade || 1);
     const isNotExecuted = Boolean(naoExecutada);
+    const uploadPolicy = resolveAttachmentPolicy("os.foto", company?.certificado_config || {});
+    const rawFotos = Array.isArray(fotos) ? fotos : [];
+    if (rawFotos.length > uploadPolicy.maxFiles) {
+      const error = new Error(`Anexe no maximo ${uploadPolicy.maxFiles} fotos de evidencia.`);
+      error.status = 400;
+      throw error;
+    }
+    const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
+      contentBase64: foto,
+      declaredMimeType: null,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
+      label: `foto ${index + 1}`,
+    }));
 
     if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
       const error = new Error("Informe o motivo da nao execucao.");
@@ -3180,7 +3874,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       throw error;
     }
 
-    if (!isNotExecuted && service?.exige_foto && (!Array.isArray(fotos) || fotos.length === 0)) {
+    if (!isNotExecuted && service?.exige_foto && validatedFotos.length === 0) {
       const error = new Error("Este servico exige ao menos uma foto de evidencia.");
       error.status = 400;
       throw error;
@@ -3197,25 +3891,55 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
            nao_executada = $7,
            motivo_nao_execucao = $8
        WHERE id = $1 AND tenant_id = $9`,
-      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, fotos || [], JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null, tenantId],
+      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, validatedFotos.map((foto) => foto.dataUrl), JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null, tenantId],
     );
 
     await client.query("DELETE FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND categoria = 'foto' AND tenant_id = $2", [orderId, tenantId]);
-    for (const [index, foto] of (Array.isArray(fotos) ? fotos : []).entries()) {
-      const parsed = parseDataUrl(foto);
+    for (const [index, parsed] of validatedFotos.entries()) {
+      const fotoHash = sha256Hex(parsed.buffer);
+      const extension = parsed.mimeType === "image/png" ? "png" : "jpg";
+      const fotoFileName = `evidencia-${String(index + 1).padStart(2, "0")}.${extension}`;
+      const storageTarget = createAttachmentStoragePlan({
+        tenantSlug: req.auth.user.tenant.slug,
+        entityType: "os",
+        entityId: orderId,
+        category: "foto",
+        fileName: fotoFileName,
+        hashSha256: fotoHash,
+      });
+      const persisted = await persistAttachmentContent({
+        storagePlan: storageTarget,
+        buffer: parsed.buffer,
+        contentBase64: parsed.dataUrl,
+        mimeType: parsed.mimeType,
+        hashSha256: fotoHash,
+        fileName: fotoFileName,
+        metadata: {
+          origem: "encerramento_os",
+          posicao: index + 1,
+          dataExecucao,
+          hashSha256: fotoHash,
+          ...buildAttachmentSecurityMetadata(uploadPolicy),
+        },
+      });
       await client.query(
         `INSERT INTO ciperprag_hub.evidencias_anexos
-         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, criado_por)
-         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9)`,
+         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, criado_por)
+         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           `${makeId("EV")}-${index + 1}`,
           tenantId,
           orderId,
-          `evidencia-${String(index + 1).padStart(2, "0")}.jpg`,
-          parsed.mimeType || "image/jpeg",
+          fotoFileName,
+          parsed.mimeType,
           parsed.bytes,
-          foto,
-          JSON.stringify({ origem: "encerramento_os", posicao: index + 1, dataExecucao }),
+          persisted.contentBase64,
+          JSON.stringify(persisted.metadata),
+          fotoHash,
+          persisted.provider,
+          persisted.bucket,
+          persisted.key,
+          persisted.etag,
           req.auth.user.id,
         ],
       );
@@ -3240,6 +3964,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     );
     await saveImmutableDocumentAttachment(client, {
       tenantId,
+      tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "os",
       entityId: orderId,
@@ -3274,18 +3999,21 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     }
 
     let certificateHash = null;
+    let certificateHashes = [];
     if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
-      certificateHash = await issueCertificateForOrder(
+      const certificateResult = await issueCertificateForOrder(
         client,
-        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: fotos || [] },
-        { dataExecucao, tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
       );
+      certificateHash = certificateResult.primaryHash;
+      certificateHashes = certificateResult.hashes;
       await logAuditEvent(client, req, {
         entityType: "certificado",
         entityId: certificateHash,
         action: "certificate_generated",
         summary: `Certificado ${certificateHash} gerado automaticamente no encerramento da OS ${order.numero || orderId}`,
-        after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+        after: { hash: certificateHash, hashes: certificateHashes, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
       });
     }
 
@@ -3309,12 +4037,12 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         dataExecucao,
         quantidade: isNotExecuted ? 0 : qty,
         naoExecutada: isNotExecuted,
-        fotos: Array.isArray(fotos) ? fotos.length : 0,
+        fotos: validatedFotos.length,
         certificateHash,
       },
     });
 
-    return { certificateHash };
+    return { certificateHash, certificateHashes };
   });
 
   res.json({ ok: true, ...response });
@@ -3327,18 +4055,19 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   const order = orderRows[0];
   if (!order) return res.status(404).json({ error: "OS nao encontrada" });
   if (order.nao_executada) return res.status(400).json({ error: "Nao e possivel gerar certificado para OS nao executada." });
-  const hash = await withTransaction(async (client) => {
-    const certificateHash = await issueCertificateForOrder(client, order, { tenantId, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
+  const certificateResponse = await withTransaction(async (client) => {
+    const certificateResult = await issueCertificateForOrder(client, order, { tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
+    const certificateHash = certificateResult.primaryHash;
     await logAuditEvent(client, req, {
       entityType: "certificado",
       entityId: certificateHash,
       action: "certificate_generated",
       summary: `Certificado ${certificateHash} gerado para OS ${order.numero || orderId}`,
-      after: { hash: certificateHash, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
+      after: { hash: certificateHash, hashes: certificateResult.hashes, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
     });
-    return certificateHash;
+    return { hash: certificateHash, hashes: certificateResult.hashes };
   });
-  res.json({ ok: true, hash });
+  res.json({ ok: true, hash: certificateResponse.hash, hashes: certificateResponse.hashes });
 });
 
 app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {
@@ -3352,6 +4081,24 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
   if (action === "confirm") {
     await withTransaction(async (client) => {
       const newId = makeId("AG");
+      const { rows: contractRows } = await client.query(
+        `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+         FROM ciperprag_hub.contratos c
+         LEFT JOIN ciperprag_hub.contratos_templates t
+           ON t.id = c.contrato_template_id
+          AND t.tenant_id = c.tenant_id
+         WHERE c.id = $1
+           AND c.tenant_id = $2
+         LIMIT 1`,
+        [suggestion.contrato_id, tenantId],
+      );
+      const contract = contractRows[0];
+      const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
+      if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+        const error = new Error("Nao e possivel confirmar recorrencia: contrato final sem saldo operacional disponivel.");
+        error.status = 400;
+        throw error;
+      }
       await client.query(
         `INSERT INTO ciperprag_hub.agendamentos
          (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)

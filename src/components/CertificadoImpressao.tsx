@@ -1,16 +1,11 @@
-import { addDays, getBootstrap, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
-import logoCiperprag from "@/assets/logo_ciperprag_certificado.png";
-import brasaoPrefeitura from "@/assets/brasao_prefeitura_parauapebas.png";
-import assinaturaCiperprag from "@/assets/assinatura_certificado.png";
-import iconeLateralCiperprag from "@/assets/icone_lateral_certificado.png";
+﻿import { addDays, getBootstrap, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
 import templateCertificado from "@/template_certificado_dinamico.html?raw";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 import QRCode from "qrcode";
 
 type RecordLike = Record<string, unknown>;
 type LicenseItem = { titulo?: string; valor?: string };
-
-const CIPERPRAG_CNPJ = "15.722.292/0001-43";
-const CIPERPRAG_PUBLIC_BASE_URL = "http://89.116.214.65:3010";
+type EvidencePhoto = { src: string; legenda?: string };
 
 function fmtDate(date: string) {
   if (!date) return "-";
@@ -69,26 +64,60 @@ function snapshotSection(cert: CertificadoApp, section: string) {
   return asRecord(cert.snapshotDados?.[section]);
 }
 
-function normalizeText(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function buildShortPublicCode(hash: string) {
+  const clean = hash.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  let first = 0x811c9dc5;
+  let second = 0x45d9f3b;
+  for (const char of clean) {
+    first = Math.imul(first ^ char.charCodeAt(0), 16777619) >>> 0;
+    second = Math.imul(second + char.charCodeAt(0), 2654435761) >>> 0;
+  }
+  const partA = first.toString(36).toUpperCase().padStart(4, "0").slice(-4);
+  const partB = second.toString(36).toUpperCase().padStart(4, "0").slice(-4);
+  return `${partA}-${partB}`;
 }
 
-function isCiperpragTenant(company: EmpresaConfig | null, snapshotEmpresa: RecordLike) {
-  const slug = firstText(company?.tenantSlug, snapshotEmpresa.tenantSlug);
-  const cnpj = firstText(snapshotEmpresa.cnpj, company?.cnpj);
-  const name = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia);
-  return slug === "ciperprag" || cnpj === CIPERPRAG_CNPJ || normalizeText(name).includes("ciperprag");
+async function sha256Hex(value: string) {
+  if (!globalThis.crypto?.subtle) return "";
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function buildInitialsLogo(name: string, primaryColor: string) {
-  const initials = (name || "Empresa")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "EM";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="140" viewBox="0 0 360 140"><rect width="360" height="140" rx="24" fill="#ffffff"/><circle cx="78" cy="70" r="42" fill="${primaryColor}"/><text x="78" y="84" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#ffffff">${initials}</text><text x="140" y="62" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#111827">${escapeHtml(name || "Empresa")}</text><text x="140" y="92" font-family="Arial, sans-serif" font-size="16" fill="#475569">Certificado técnico</text></svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+function fingerprintSha256(hash: string) {
+  const clean = hash.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+  if (clean.length < 20) return hash;
+  return `SHA-256: ${clean.slice(0, 12)}…${clean.slice(-8)}`;
+}
+
+function normalizeCertificateNumber(value: string) {
+  return value
+    .replace(/^\s*(certificado|cert\.?|cert)\s*(n[ºo.]*)?\s*[-.:]?\s*/i, "")
+    .replace(/^\s*(certificado|cert\.?|cert)\s*(n[ºo.]*)?\s*[-.:]?\s*/i, "")
+    .trim();
+}
+
+function normalizeOsNumber(value: string) {
+  return value
+    .replace(/^\s*os\s*(n[ºo.]*)?\s*[-.:]?\s*/i, "")
+    .replace(/^\s*os\s*(n[ºo.]*)?\s*[-.:]?\s*/i, "")
+    .trim();
+}
+
+function renderCertificateReference(value: string) {
+  const normalized = normalizeCertificateNumber(value);
+  return normalized ? `Certificado nº ${normalized}` : "";
+}
+
+function renderOsReference(value: string) {
+  const normalized = normalizeOsNumber(value);
+  return normalized ? `OS nº ${normalized}` : "";
+}
+
+function renderIssuerBrand(logoSrc: string, empresaNome: string) {
+  if (logoSrc) return `<img class="logo-principal" src="${escapeHtml(logoSrc)}" alt="${escapeHtml(empresaNome || "Empresa emissora")}" />`;
+  if (!empresaNome) return "";
+  return `<div class="marca-textual">${escapeHtml(empresaNome)}</div>`;
 }
 
 function isValidEvidenceImage(foto: unknown) {
@@ -99,15 +128,17 @@ function isValidEvidenceImage(foto: unknown) {
   return true;
 }
 
-function buildVerificationUrl(hash: string, publicBaseUrl: string) {
+function buildVerificationUrl(publicCode: string, publicBaseUrl: string) {
   const cleanBase = publicBaseUrl.replace(/\/+$/, "");
-  return `${cleanBase}/validar-certificado/${encodeURIComponent(hash)}`;
+  return `${cleanBase}/validar-certificado/${encodeURIComponent(publicCode)}`;
 }
 
-function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike, isCiperprag: boolean) {
+function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const safeOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(origin) ? "" : origin;
-  return firstText(config.publicBaseUrl, snapshotCertificado.publicBaseUrl, safeOrigin, isCiperprag ? CIPERPRAG_PUBLIC_BASE_URL : "");
+  // When printing from the tenant's public URL, prefer that origin over an
+  // older snapshot so QR codes remain valid after a deployment or domain move.
+  return firstText(safeOrigin, config.publicBaseUrl, snapshotCertificado.publicBaseUrl);
 }
 
 function toBase64Img(url: string): Promise<string> {
@@ -125,16 +156,20 @@ function toBase64Img(url: string): Promise<string> {
   });
 }
 
-function renderGaleria(fotos: unknown[], limiteFotos: number, exibirFotos: boolean) {
+function renderGaleria(fotos: EvidencePhoto[], limiteFotos: number, exibirFotos: boolean, fotoObjectFit: string) {
   if (!exibirFotos) return "";
-  const validFotos = fotos.filter(isValidEvidenceImage).slice(0, Math.max(0, limiteFotos));
+  const validFotos = fotos.filter((foto) => isValidEvidenceImage(foto.src)).slice(0, Math.max(0, limiteFotos));
   if (!validFotos.length) return "";
+  const fitClass = fotoObjectFit === "contain" ? "fit-contain" : "fit-cover";
   return `
     <div class="gallery gallery-${validFotos.length}">
       ${validFotos
         .map(
-          (foto, index) =>
-            `<div class="gallery-item"><img src="${escapeHtml(String(foto))}" alt="Evidência ${index + 1}" onerror="this.closest('.gallery-item')?.remove()" /></div>`,
+          (foto, index) => `
+            <figure class="gallery-item ${fitClass}">
+              <img src="${escapeHtml(foto.src)}" alt="Evidência ${index + 1}" onerror="this.closest('.gallery-item')?.remove()" />
+              ${foto.legenda ? `<figcaption>${escapeHtml(foto.legenda)}</figcaption>` : ""}
+            </figure>`,
         )
         .join("")}
     </div>
@@ -155,6 +190,8 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
         antidoto: "Anti-histamínico",
       }));
 
+  if (!produtos.length) return "";
+
   const rows = produtos.length
     ? produtos
         .map(
@@ -170,7 +207,7 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
             </tr>`,
         )
         .join("")
-    : `<tr><td colspan="7" class="empty-row">Não aplicável para este serviço.</td></tr>`;
+    : "";
 
   return `
     <h2 class="section-title">Produtos Químicos Utilizados no Serviço</h2>
@@ -194,53 +231,75 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
 }
 
 function renderLicencas(licencas: LicenseItem[]) {
-  if (!licencas.length) return "";
+  const validLicenses = licencas.filter((item) => item.titulo && item.valor);
+  if (!validLicenses.length) return "";
   return `
     <div class="licenca-card">
       <div class="licenca-top">Esta empresa encontra-se devidamente licenciada nos seguintes órgãos</div>
-      <div class="licenca-grid" style="--license-count: ${Math.min(Math.max(licencas.length, 1), 8)}">
-        ${licencas.map((item) => `<div><strong>${escapeHtml(item.titulo || "-")}</strong><br>${escapeHtml(item.valor || "Não informado")}</div>`).join("")}
+      <div class="licenca-grid" style="--license-count: ${Math.min(Math.max(validLicenses.length, 1), 8)}">
+        ${validLicenses
+          .map(
+            (item) =>
+              `<div class="licenca-item"><span class="licenca-label">${escapeHtml(item.titulo || "")}</span><span class="licenca-value">${escapeHtml(item.valor || "")}</span></div>`,
+          )
+          .join("")}
       </div>
     </div>
   `;
 }
 
-function renderAuthBox(qrCodeUrl: string, hash: string, validationUrl: string, showQr: boolean) {
+function renderAuthBox(qrCodeUrl: string, publicCode: string, validationUrl: string, showQr: boolean, shaFingerprint: string) {
   if (!showQr || !qrCodeUrl || !validationUrl) return "";
   return `
     <div class="auth-box-top">
       <img src="${escapeHtml(qrCodeUrl)}" alt="QR Code de validação" />
       <div class="qr-info">
         <div class="qr-title">Autenticidade</div>
-        <div class="qr-hash">${escapeHtml(hash)}</div>
+        <div class="qr-hash">${escapeHtml(publicCode)}</div>
+        ${shaFingerprint ? `<div class="qr-fingerprint">${escapeHtml(shaFingerprint)}</div>` : ""}
         <div class="qr-link">${escapeHtml(validationUrl)}</div>
       </div>
     </div>
   `;
 }
 
-function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel, cargo, registro }: Record<string, string>) {
-  const seloHtml = seloUrl ? `<img class="brasao" src="${escapeHtml(seloUrl)}" alt="Selo institucional" />` : "";
-  const miniLogoHtml = miniLogoUrl ? `<img class="mini-logo" src="${escapeHtml(miniLogoUrl)}" alt="Logo da empresa emissora" />` : "";
-  const assinaturaImg = assinaturaUrl ? `<img class="assinatura-img" src="${escapeHtml(assinaturaUrl)}" alt="Assinatura do responsável técnico" />` : "";
+function renderValidityBox(validadeTexto: string, showValidity: boolean) {
+  if (!showValidity) return "";
   return `
-    <div class="footer-grid">
-      <div class="footer-col">${seloHtml}</div>
-      <div class="footer-col">${miniLogoHtml}</div>
-      <div class="footer-col">
-        <div class="assinatura-box">
-          ${assinaturaImg}
-          <div class="linha-assinatura"></div>
-          <div class="assinatura-nome">${escapeHtml(responsavel || "Responsável técnico não configurado")}</div>
-          ${cargo ? `<div class="assinatura-reg">${escapeHtml(cargo)}</div>` : ""}
-          ${registro ? `<div class="assinatura-reg">${escapeHtml(registro)}</div>` : ""}
-        </div>
-      </div>
+    <div class="validade-box">
+      <div class="label">Período de validade</div>
+      <div class="value">${escapeHtml(validadeTexto)}</div>
     </div>
   `;
 }
 
-function renderRodape(linhas: string[], cit: string, hash: string, templateVersao: string) {
+function renderTraceability(text: string) {
+  if (!text) return "";
+  return `
+    <div class="trace-card" aria-label="Rastreabilidade do certificado">${escapeHtml(text)}</div>
+  `;
+}
+
+function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel, cargo, registro, assinaturaModo }: Record<string, string>) {
+  const seloHtml = seloUrl ? `<img class="brasao" src="${escapeHtml(seloUrl)}" alt="Selo institucional" />` : "";
+  const miniLogoHtml = miniLogoUrl ? `<img class="mini-logo" src="${escapeHtml(miniLogoUrl)}" alt="Logo da empresa emissora" />` : "";
+  const showSignature = assinaturaModo !== "ocultar" && (assinaturaUrl || responsavel || cargo || registro || assinaturaModo === "linha");
+  const assinaturaImg = assinaturaUrl && assinaturaModo !== "linha" ? `<img class="assinatura-img" src="${escapeHtml(assinaturaUrl)}" alt="Assinatura do responsável técnico" />` : "";
+  const assinaturaHtml = showSignature
+    ? `<div class="assinatura-box">
+        ${assinaturaImg}
+        <div class="linha-assinatura"></div>
+        ${responsavel ? `<div class="assinatura-nome">${escapeHtml(responsavel)}</div>` : ""}
+        ${cargo ? `<div class="assinatura-reg">${escapeHtml(cargo)}</div>` : ""}
+        ${registro ? `<div class="assinatura-reg">${escapeHtml(registro)}</div>` : ""}
+      </div>`
+    : "";
+  const columns = [seloHtml, miniLogoHtml, assinaturaHtml].filter(Boolean);
+  if (!columns.length) return "";
+  return `<div class="footer-grid">${columns.map((html) => `<div class="footer-col">${html}</div>`).join("")}</div>`;
+}
+
+function renderRodape(linhas: string[], cit: string) {
   const validLines = linhas.filter(Boolean);
   if (!validLines.length && !cit) return "";
   const main = validLines[0] ? `<div class="empresa">${escapeHtml(validLines[0])}</div>` : "";
@@ -253,7 +312,6 @@ function renderRodape(linhas: string[], cit: string, hash: string, templateVersa
       ${main}
       ${addresses ? `<div class="footer-addresses">${addresses}</div>` : ""}
       ${cit ? `<div class="cit-bottom">${escapeHtml(cit)}</div>` : ""}
-      <div class="microtext">Código ${escapeHtml(hash)} · Template ${escapeHtml(templateVersao || "saas-tenant-v1")}</div>
     </div>
   `;
 }
@@ -265,7 +323,11 @@ function buildValidityText(dataExecucao: string, validadeDias: number) {
   return `A partir de ${start}`;
 }
 
-function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snapshotEmpresa: RecordLike, config: RecordLike, isCiperprag: boolean) {
+function normalizePhotos(fotos: string[], legends: string[]): EvidencePhoto[] {
+  return fotos.map((src, index) => ({ src, legenda: firstText(legends[index]) })).filter((foto) => isValidEvidenceImage(foto.src));
+}
+
+function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snapshotEmpresa: RecordLike, config: RecordLike) {
   const configured = asLicenses(config.licencas);
   if (configured.length) return configured;
   const snapshotLicenses = asLicenses(snapshotEmpresa.licencas);
@@ -281,18 +343,7 @@ function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snap
     { titulo: "VIG. SANITÁRIA", valor: firstText(snapshotEmpresa.vigilanciaSanitaria, company?.vigilanciaSanitaria) },
   ].filter((item) => item.valor);
 
-  if (fromFields.length > 1) return fromFields;
-  if (!isCiperprag) return fromFields;
-
-  return [
-    { titulo: "CERTIFICADO", valor: cert.numero },
-    { titulo: "MTRR", valor: "151012245873" },
-    { titulo: "MEIO AMBIENTE", valor: "Nº102/2024" },
-    { titulo: "C.R.02", valor: "1611984/2025" },
-    { titulo: "CTR02", valor: "1657521/2024" },
-    { titulo: "ALVARÁ", valor: "00060/2025" },
-    { titulo: "VIG. SANITÁRIA", valor: "VSP-2025-4432" },
-  ];
+  return fromFields;
 }
 
 export async function imprimirCertificado(cert: CertificadoApp) {
@@ -307,7 +358,6 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const currentConfig = asRecord(company?.certificadoConfig);
   const snapshotConfig = asRecord(snapshotEmpresa.certificadoConfig);
   const config = { ...currentConfig, ...snapshotConfig };
-  const isCiperprag = isCiperpragTenant(company, snapshotEmpresa);
 
   const customer = bootstrap.clients.find(
     (item) =>
@@ -324,23 +374,48 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const tagTexto = firstText(snapshotOs.tagEquipamentoServico, os?.tagEquipamentoServico);
   const servicoNome = firstText(snapshotServico.nome, cert.servico);
   const servicoTexto = tagTexto ? `${servicoNome} - ${tagTexto}` : servicoNome;
-  const empresaNome = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia, isCiperprag ? "CIPERPRAG SERVIÇOS LTDA" : "");
-  const primaryColor = firstText(config.corPrimaria, company?.corPrimaria, isCiperprag ? "#169556" : "#0f766e");
+  const empresaNome = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia);
+  const primaryColor = firstText(config.corPrimaria, company?.corPrimaria, "#0f766e");
   const secondaryColor = firstText(config.corSecundaria, company?.corSecundaria, "#6f9dd3");
   const accentColor = firstText(config.corDestaque, company?.corDestaque, "#df2027");
-  const publicBaseUrl = resolvePublicBaseUrl(config, snapshotCertificado, isCiperprag);
-  const verificationUrl = publicBaseUrl ? buildVerificationUrl(cert.hash, publicBaseUrl) : "";
+  const publicBaseUrl = resolvePublicBaseUrl(config, snapshotCertificado);
+  const certificateDocument = asRecord((cert as CertificadoApp & { documento?: RecordLike }).documento);
+  const persistedSha256 = firstText(
+    snapshotCertificado.hashSha256,
+    snapshotCertificado.snapshotHashSha256,
+    certificateDocument.hashSha256,
+    certificateDocument.snapshotHashSha256,
+  );
+  const computedSnapshotHash = persistedSha256
+    ? ""
+    : await sha256Hex(
+        JSON.stringify({
+          tenant: firstText(snapshotEmpresa.tenantId, snapshotEmpresa.tenantSlug, company?.tenantSlug),
+          certificado: { numero: cert.numero, hash: cert.hash },
+          os: { id: cert.osId, numero: cert.osNumero || os?.numero, dataExecucao: cert.dataExecucao },
+          cliente: { nome: clienteNome, cnpj: clienteCnpj, endereco: clienteEndereco },
+          servico: { nome: servicoNome, tag: tagTexto },
+        }),
+      );
+  const sha256Rastreabilidade = firstText(persistedSha256, computedSnapshotHash);
+  const shaFingerprint = fingerprintSha256(sha256Rastreabilidade);
+  const codigoPublico = firstText(snapshotCertificado.codigoPublico, snapshotCertificado.publicCode, config.codigoPublico, buildShortPublicCode(cert.hash));
+  const verificationUrl = publicBaseUrl ? buildVerificationUrl(codigoPublico, publicBaseUrl) : "";
   const showQr = firstBool(true, config.exibirQrCode);
   const qrDataUrl = showQr && verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 104, margin: 1 }) : "";
   const limiteFotos = firstNumber(3, config.limiteFotos);
   const fotos = asStringArray(snapshotOs.fotos).length ? asStringArray(snapshotOs.fotos) : os?.fotos ?? cert.fotos ?? [];
+  const fotoLegendas = asStringArray(snapshotOs.fotosLegendas);
+  const fotoObjectFit = firstText(config.fotoObjectFit, config.fotoObjectFitCertificado, "cover") === "contain" ? "contain" : "cover";
+  const evidencias = normalizePhotos(fotos, fotoLegendas);
   const exibirFotos = firstBool(true, config.exibirFotos);
   const exibirProdutos = firstBool(true, config.exibirProdutosQuimicos);
-  const licencas = buildLicenses(cert, company, snapshotEmpresa, config, isCiperprag);
-  const validadeTexto = buildValidityText(cert.dataExecucao, Number(cert.validadeDias || 0));
-  const titulo = firstText(config.titulo, "Certificado de Garantia");
+  const licencas = buildLicenses(cert, company, snapshotEmpresa, config);
+  const validadeDias = Number(cert.validadeDias || 0);
+  const exibirValidade = validadeDias > 0 && firstBool(true, config.exibirValidade, config.exibirPeriodoValidade);
+  const validadeTexto = buildValidityText(cert.dataExecucao, validadeDias);
+  const titulo = firstText(config.titulo, snapshotServico.tituloCertificado, snapshotServico.certificadoTitulo, "Certificado de Garantia");
   const subtitulo = firstText(config.subtitulo, config.tipo);
-  const templateVersao = firstText(snapshotCertificado.templateVersao, config.templateVersao, "saas-tenant-v1");
   const textoLegal = firstText(
     asRecord(config.textoTecnicoPorServico)[servicoNome],
     config.textoLegalPadrao,
@@ -350,41 +425,62 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   );
   const textoCertificado = `Certificamos para os devidos fins que a empresa <strong>${escapeHtml(clienteNome)}</strong> recebeu a execução do serviço de <strong>${escapeHtml(servicoTexto)}</strong>, ${escapeHtml(textoLegal)}.`;
 
-  const logoPrincipalUrl = firstText(config.logoPrincipalUrl, snapshotEmpresa.logoUrl, company?.logoUrl, isCiperprag ? logoCiperprag : "");
-  const logoSrc = await toBase64Img(logoPrincipalUrl || buildInitialsLogo(empresaNome || "Empresa", primaryColor));
-  const arteFundoUrl = firstText(config.arteFundoUrl, isCiperprag ? iconeLateralCiperprag : "");
+  const logoPrincipalUrl = firstText(
+    config.documentLogoLightUrl,
+    config.logoPrincipalUrl,
+    snapshotEmpresa.documentLogoLightUrl,
+    snapshotEmpresa.logoPrincipalUrl,
+    snapshotEmpresa.logoUrl,
+    company?.logoUrl,
+  );
+  const logoSrc = await toBase64Img(logoPrincipalUrl);
+  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl);
   const arteFundoSrc = await toBase64Img(arteFundoUrl);
-  const seloUrl = firstText(config.seloInstitucionalUrl, isCiperprag ? brasaoPrefeitura : "");
+  const seloUrl = firstText(config.seloInstitucionalUrl, snapshotEmpresa.seloInstitucionalUrl);
   const seloSrc = await toBase64Img(seloUrl);
-  const assinaturaUrl = firstText(config.assinaturaUrl, isCiperprag ? assinaturaCiperprag : "");
+  const assinaturaUrl = firstText(config.assinaturaUrl, snapshotEmpresa.assinaturaUrl, snapshotCertificado.assinaturaUrl);
   const assinaturaSrc = await toBase64Img(assinaturaUrl);
-  const responsavel = firstText(config.responsavelTecnico, snapshotEmpresa.responsavelTecnico, company?.responsavelTecnico, company?.responsavelExecucao, isCiperprag ? "Aline Costa Vieira" : "");
-  const cargo = firstText(config.cargoResponsavel, snapshotEmpresa.cargoResponsavel, company?.cargoResponsavel, isCiperprag ? "Diretora / Resp. Técnico" : "");
-  const registro = firstText(config.registroProfissional, snapshotEmpresa.registroProfissional, isCiperprag ? "CRT02-87963930253" : "");
-  const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia, isCiperprag ? "CIT - CENTRO DE INFORMAÇÕES TOXICOLÓGICAS DE BELÉM: 0800-7226001" : "");
+  const assinaturaDocumentos = asRecord(config.assinaturaDocumentos);
+  const assinaturaModo = firstText(assinaturaDocumentos.certificado, config.assinaturaModo, assinaturaSrc ? "imagem" : "linha");
+  const responsavelObrigatorio = firstBool(true, config.responsavelTecnicoObrigatorio);
+  const responsavel = firstText(config.responsavelTecnico, snapshotEmpresa.responsavelTecnico, company?.responsavelTecnico, company?.responsavelExecucao);
+  const cargo = firstText(config.cargoResponsavel, snapshotEmpresa.cargoResponsavel, company?.cargoResponsavel);
+  const registro = firstText(config.registroProfissional, snapshotEmpresa.registroProfissional);
+  if (responsavelObrigatorio && !responsavel) {
+    window.alert("Este certificado exige responsável técnico configurado antes da emissão.");
+    return;
+  }
+  if (assinaturaModo === "obrigatoria" && !assinaturaSrc) {
+    window.alert("Este certificado exige assinatura configurada antes da emissão.");
+    return;
+  }
+  const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia);
   const rodapeLinhas = asStringArray(config.rodapeLinhas);
   const defaultRodape = [
     empresaNome && company?.cnpj ? `${empresaNome} CNPJ: ${company.cnpj}` : empresaNome,
     firstText(snapshotEmpresa.endereco, company?.endereco),
     [company?.telefone, company?.email].filter(Boolean).join(" | "),
   ].filter(Boolean);
-  const ciperpragRodape = [
-    "CIPERPRAG SERVIÇOS LTDA CNPJ: 15.722.292/0001-43",
-    "Rua Topázio Qd 11 Lote 03, Vale dos Carajás, Parauapebas - PA",
-    "Rua Tiradentes, nº 190 - Centro, Rondon do Pará - PA",
-  ];
-  const footerLines = rodapeLinhas.length ? rodapeLinhas : isCiperprag ? ciperpragRodape : defaultRodape;
+  const footerLines = rodapeLinhas.length ? rodapeLinhas : defaultRodape;
+  const certificadoReferencia = renderCertificateReference(cert.numero);
+  const osReferencia = renderOsReference(firstText(cert.osNumero, os?.numero, snapshotOs.numero));
+  const traceabilityText = [certificadoReferencia, osReferencia, `Execução: ${fmtDate(cert.dataExecucao)}`].filter(Boolean).join(" • ");
+  const pdfTitle = [titulo, certificadoReferencia].filter(Boolean).join(" - ");
 
   const html = templateCertificado
+    .replaceAll("{{document_font_faces}}", documentTypographyCss)
+    .replaceAll("{{pdf_title}}", escapeHtml(pdfTitle))
+    .replaceAll("{{pdf_author}}", escapeHtml(empresaNome))
+    .replaceAll("{{pdf_subject}}", escapeHtml(servicoTexto))
+    .replaceAll("{{pdf_keywords}}", escapeHtml(`certificado, validação, ${servicoNome}, pt-BR`))
     .replaceAll("{{cor_primaria}}", escapeHtml(primaryColor))
     .replaceAll("{{cor_primaria_escura}}", escapeHtml(firstText(config.corPrimariaEscura, "#0c6c41")))
     .replaceAll("{{cor_secundaria}}", escapeHtml(secondaryColor))
     .replaceAll("{{cor_destaque}}", escapeHtml(accentColor))
     .replaceAll("{{arte_fundo_html}}", arteFundoSrc ? `<div class="left-art"><img src="${escapeHtml(arteFundoSrc)}" alt="Marca d'água do certificado" /></div>` : "")
-    .replaceAll("{{logo_principal}}", logoSrc)
-    .replaceAll("{{logo_principal_alt}}", escapeHtml(empresaNome || "Empresa emissora"))
-    .replaceAll("{{validade_texto}}", escapeHtml(validadeTexto))
-    .replaceAll("{{qr_code_html}}", renderAuthBox(qrDataUrl, cert.hash, verificationUrl, showQr))
+    .replaceAll("{{emissor_marca_html}}", renderIssuerBrand(logoSrc, empresaNome))
+    .replaceAll("{{validade_box_html}}", renderValidityBox(validadeTexto, exibirValidade))
+    .replaceAll("{{qr_code_html}}", renderAuthBox(qrDataUrl, codigoPublico, verificationUrl, showQr, shaFingerprint))
     .replaceAll("{{certificado_titulo}}", escapeHtml(titulo))
     .replaceAll("{{certificado_subtitulo_html}}", subtitulo ? `<div class="cert-subtitle">${escapeHtml(subtitulo)}</div>` : "")
     .replaceAll("{{logo_cliente_html}}", clienteLogoUrl ? `<img class="logo-cliente" src="${escapeHtml(clienteLogoUrl)}" alt="Logo do cliente" />` : "")
@@ -392,16 +488,21 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     .replaceAll("{{cliente_cnpj}}", escapeHtml(clienteCnpj))
     .replaceAll("{{cliente_endereco}}", escapeHtml(clienteEndereco))
     .replaceAll("{{local_execucao}}", escapeHtml(localExecucao))
-    .replaceAll("{{galeria_html}}", renderGaleria(fotos, limiteFotos, exibirFotos))
+    .replaceAll(
+      "{{rastreabilidade_html}}",
+      renderTraceability(traceabilityText),
+    )
+    .replaceAll("{{galeria_html}}", renderGaleria(evidencias, limiteFotos, exibirFotos, fotoObjectFit))
     .replaceAll("{{produtos_section_html}}", renderProdutos(cert, exibirProdutos))
     .replaceAll("{{texto_fixacao}}", escapeHtml(firstText(config.textoFixacao, snapshotEmpresa.certificadoTextoFixacao, company?.certificadoTextoFixacao, "FIXAR OBRIGATORIAMENTE EM LOCAL VISÍVEL")))
     .replaceAll("{{licencas_section_html}}", renderLicencas(licencas))
     .replaceAll("{{texto_certificado}}", textoCertificado)
-    .replaceAll("{{selos_assinatura_html}}", renderFooterBranding({ seloUrl: seloSrc, miniLogoUrl: logoSrc, assinaturaUrl: assinaturaSrc, responsavel, cargo, registro }))
-    .replaceAll("{{rodape_html}}", renderRodape(footerLines, cit, cert.hash, templateVersao));
+    .replaceAll("{{selos_assinatura_html}}", renderFooterBranding({ seloUrl: seloSrc, miniLogoUrl: logoSrc, assinaturaUrl: assinaturaSrc, responsavel, cargo, registro, assinaturaModo }))
+    .replaceAll("{{rodape_html}}", renderRodape(footerLines, cit));
 
   const printWindow = window.open("", "_blank", "width=1100,height=800");
   if (!printWindow) return;
   printWindow.document.write(`${html}<script>window.onload = function(){ window.print(); }</script>`);
   printWindow.document.close();
 }
+

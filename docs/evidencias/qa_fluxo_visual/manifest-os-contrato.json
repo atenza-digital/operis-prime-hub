@@ -1,75 +1,75 @@
 {
-  "generatedAt": "2026-07-07T11:01:23.665Z",
+  "generatedAt": "2026-07-19T16:57:03.866Z",
   "os": {
-    "numero": "OS-2677",
+    "numero": "OS-2676",
     "cliente": "Komatsu Brasil International LTDA",
-    "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\os-atual.pdf",
-    "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\os-atual.png"
+    "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\os-atual.pdf",
+    "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\os-atual.png"
   },
   "documentosComerciais": [
     {
       "baseName": "proposta-ciperprag",
-      "numero": "PC-50/2026",
+      "numero": "E2E-PROP-MRQFN8X3",
       "tipo": "proposta",
-      "cliente": "Construtora G-Maia S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-ciperprag.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-ciperprag.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-ciperprag.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-ciperprag.png"
     },
     {
       "baseName": "contrato-ciperprag",
-      "numero": "CT-125/2025",
+      "numero": "CT-129/2026",
       "tipo": "contrato",
-      "cliente": "Tecnosonda S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-ciperprag.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-ciperprag.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-ciperprag.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-ciperprag.png"
     },
     {
       "baseName": "proposta-generica",
       "numero": "PROP-DEMO-2026",
       "tipo": "proposta",
-      "cliente": "Construtora G-Maia S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-generica.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-generica.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-generica.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-generica.png"
     },
     {
       "baseName": "contrato-generico",
       "numero": "CT-DEMO-2026",
       "tipo": "contrato",
-      "cliente": "Tecnosonda S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-generico.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-generico.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-generico.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-generico.png"
     },
     {
       "baseName": "proposta-nomes-longos",
       "numero": "PROP-LONG-2026",
       "tipo": "proposta",
       "cliente": "Consorcio Internacional de Infraestrutura, Saneamento, Operacoes Ambientais e Manutencao Predial da Amazonia S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-nomes-longos.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-nomes-longos.png"
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-nomes-longos.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-nomes-longos.png"
     },
     {
       "baseName": "contrato-nomes-longos",
       "numero": "CT-LONG-2026",
       "tipo": "contrato",
       "cliente": "Consorcio Internacional de Infraestrutura, Saneamento, Operacoes Ambientais e Manutencao Predial da Amazonia S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-nomes-longos.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-nomes-longos.png"
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-nomes-longos.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-nomes-longos.png"
     },
     {
       "baseName": "proposta-muitos-servicos",
       "numero": "PROP-MULTI-2026",
       "tipo": "proposta",
-      "cliente": "Construtora G-Maia S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-muitos-servicos.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\proposta-muitos-servicos.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-muitos-servicos.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\proposta-muitos-servicos.png"
     },
     {
       "baseName": "contrato-muitos-servicos",
       "numero": "CT-MULTI-2026",
       "tipo": "contrato",
-      "cliente": "Tecnosonda S.A.",
-      "pdf": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-muitos-servicos.pdf",
-      "png": "C:\\Projetos\\Atenza\\ciperprag_hub\\docs\\evidencias\\qa_fluxo_visual\\contrato-muitos-servicos.png"
+      "cliente": "Komatsu Brasil International LTDA",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-muitos-servicos.pdf",
+      "png": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\qa_fluxo_visual\\contrato-muitos-servicos.png"
     }
   ]
 }

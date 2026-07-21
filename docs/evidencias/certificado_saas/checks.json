@@ -1,0 +1,76 @@
+{
+  "pages": 9,
+  "contains_template_internal": false,
+  "contains_responsavel_nao_configurado": false,
+  "contains_fallback": false,
+  "contains_ellipsis": false,
+  "contains_public_code_pattern": true,
+  "individual_fonts": {
+    "01-ciperprag-garantia-produtos.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "02-ciperprag-execucao-sem-produtos.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "03-ciperprag-higienizacao-tres-fotos.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "04-ciperprag-servico-sem-fotos.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "05-ciperprag-titulo-personalizado.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "06-outro-tenant-com-logo.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "07-outro-tenant-sem-logo-sem-marca.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "08-ciperprag-assinatura-linha.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ],
+    "09-ciperprag-qrcode-url-publica.pdf": [
+      "/AAAAAA+Montserrat-Bold",
+      "/BAAAAA+Montserrat-Regular",
+      "/CAAAAA+Montserrat-SemiBold",
+      "/DAAAAA+Montserrat-Medium"
+    ]
+  },
+  "all_text_fonts_are_montserrat": true,
+  "titles": [
+    "Certificado de Garantia",
+    "Certificado de Execução",
+    "Certificado de Higienização",
+    "Certificado de Serviço",
+    "Certificado Técnico de Saúde Ambiental",
+    "Certificado de Execução",
+    "Certificado de Serviço",
+    "Certificado de Garantia",
+    "Certificado de Garantia"
+  ]
+}

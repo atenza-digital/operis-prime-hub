@@ -2,7 +2,6 @@ import { FormEvent, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import logoCiperprag from "@/assets/logo_ciperprag.png";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { changePassword } from "@/lib/api";
-import { APP_VERSION_LABEL } from "@/lib/version";
+import { APP_VERSION_LABEL, PRODUCT_NAME } from "@/lib/version";
 
 export default function AlterarSenha() {
   const { user, loading, setAuthenticatedUser, logout } = useAuth();
@@ -54,9 +53,15 @@ export default function AlterarSenha() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_30%),linear-gradient(135deg,#07110d,#10251a)] p-6 text-white">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
         <header className="flex items-center justify-between gap-4">
-          <div className="rounded-2xl bg-white px-4 py-3 shadow-2xl shadow-black/25">
-            <img src={logoCiperprag} alt="Ciperprag Serviços" className="h-10 w-52 object-contain" />
-          </div>
+          {user.tenant.logoInterfaceUrl || user.tenant.logoUrl ? (
+            <div className="rounded-2xl bg-white px-4 py-3 shadow-2xl shadow-black/25">
+              <img src={user.tenant.logoInterfaceUrl || user.tenant.logoUrl} alt={`Logo ${user.tenant.nome || "do tenant"}`} className="h-10 w-52 object-contain" />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 shadow-2xl shadow-black/25">
+              <p className="text-lg font-black">{PRODUCT_NAME}</p>
+            </div>
+          )}
           <EnvironmentBadge />
         </header>
 

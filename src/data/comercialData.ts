@@ -48,9 +48,16 @@ export interface ContratoTemplate {
   vigenciaMeses: number;
   formaPagamento: string;
   prazoPagamentoDias: number;
-  status: "rascunho" | "enviado" | "aprovado" | "vigente" | "encerrado";
+  status: "rascunho" | "enviado" | "em_negociacao" | "aprovado" | "recusado" | "cancelado" | "vigente" | "encerrado";
   dataCriacao: string;
   observacoes: string;
+  titulo?: string;
+  objeto?: string;
+  validadeDias?: number;
+  modalidade?: string;
+  locaisExecucao?: string[];
+  escopoTecnico?: string;
+  condicoesComerciais?: string;
 }
 
 export interface ContratoServico {
@@ -58,6 +65,8 @@ export interface ContratoServico {
   quantidade: number;
   valorUnitario: number;
   frequencia: string;
+  descricaoComercial?: string;
+  unidadeComercial?: string;
 }
 
 // --- MOCK DATA ---

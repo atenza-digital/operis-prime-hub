@@ -1,9 +1,9 @@
 # Execucao Tecnica E2E na VPS
 
-Ambiente: http://89.116.214.65:3010
+Ambiente: http://127.0.0.1:3001
 Tenant: ciperprag
-Executado em: 07/07/2026, 11:50
-Identificador da rodada: MRARMWEE
+Executado em: 18/07/2026, 10:58
+Identificador da rodada: MRQFN8X3
 
 ## Resultado
 
@@ -13,16 +13,18 @@ Status geral: Aprovado
 
 | Etapa | Documento/registro | Resultado |
 | --- | --- | --- |
-| Proposta criada | E2E-PROP-MRARMWEE | OK |
-| Proposta aprovada | E2E-PROP-MRARMWEE | OK |
-| Contrato gerado | CT-128/2026 | OK |
-| Contrato operacional | CTO-MRARMV42D9D3 | OK |
-| Agendamento | AG-MRARMV7L | OK |
-| OS gerada | OS-2680 | OK |
+| Proposta criada | E2E-PROP-MRQFN8X3 | OK |
+| Proposta aprovada | E2E-PROP-MRQFN8X3 | OK |
+| Minuta gerada | MIN-128/2026 | OK |
+| Minuta aprovada | MIN-128/2026 | OK |
+| Contrato gerado | CT-129/2026 | OK |
+| Contrato operacional | CTO-MRQFN9IFD6BB | OK |
+| Agendamento | AG-MRQFN9PY | OK |
+| OS gerada | OS-2676 | OK |
 | OS encerrada | encerrada | OK |
-| Certificado | HSH-2026-Z7UR-MA8Q | OK |
-| Validacao certificado | HSH-2026-Z7UR-MA8Q | OK |
-| Medicao | MED-002/2026 | OK |
+| Certificado | HSH-2026-WPN6-XB9L | OK |
+| Validacao certificado | HSH-2026-WPN6-XB9L | OK |
+| Medicao | MED-001/2026 | OK |
 | Acompanhamento medicao | nf_enviada | OK |
 | Recorrencia | confirmada | OK |
 
@@ -34,11 +36,11 @@ Status geral: Aprovado
 | Servico | Controle Integrado de Pragas (CIP) |
 | Servico gera certificado | sim |
 | Recorrencia em dias | 30 |
-| Tecnico | Pedro Oliveira |
+| Tecnico | Jo??o Silva |
 | Local | Komatsu |
 | Tag/equipamento | TAG-E2E |
-| Data agendada | 2026-07-09 |
-| Data executada | 2026-07-09 |
+| Data agendada | 2026-07-20 |
+| Data executada | 2026-07-20 |
 
 ## Observacoes
 

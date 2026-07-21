@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { imprimirCertificado } from "@/components/CertificadoImpressao";
-import { Award, CalendarDays, Clock, FileCheck2, Hash, History, MapPin, Printer, QrCode, Search, Share2, User } from "lucide-react";
+import { Award, CalendarDays, Clock, FileCheck2, Hash, History, MapPin, Printer, QrCode, Search, Share2, Tag, User } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -99,8 +99,8 @@ export default function Certificados() {
 
   async function handleGerarCert(id: string) {
     setGerando(id);
-    await generateCertificateForOrder(id);
-    toast.success("Certificado gerado!");
+    const response = await generateCertificateForOrder(id);
+    toast.success(response.hashes && response.hashes.length > 1 ? `${response.hashes.length} certificados gerados, um para cada TAG.` : "Certificado gerado!");
     setGerando(null);
     reload();
   }
@@ -216,6 +216,7 @@ export default function Certificados() {
                         <div className="flex items-center gap-1.5"><CalendarDays className="h-3 w-3 shrink-0" /><span>Executado: <span className="font-medium text-foreground">{fmtDate(cert.dataExecucao)}</span></span></div>
                         <div className="flex items-center gap-1.5"><User className="h-3 w-3 shrink-0" /> {cert.tecnicoNome}</div>
                         <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> <span className="truncate">{cert.localExecucao || "Local não informado"}</span></div>
+                        {cert.tagEquipamentoServico ? <div className="flex items-center gap-1.5"><Tag className="h-3 w-3 shrink-0" /> TAG: <span className="font-medium text-foreground">{cert.tagEquipamentoServico}</span></div> : null}
                       </div>
                       <div className="flex gap-2 border-t pt-1">
                         <Button size="sm" className="h-7 flex-1 gap-1.5 text-xs" onClick={() => imprimirCertificado(cert)}><Printer className="h-3 w-3" /> Imprimir PDF</Button>

@@ -1,0 +1,44 @@
+@font-face {
+  font-family: "Montserrat";
+  src: url("../assets/fonts/documentos/montserrat/Montserrat-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("../assets/fonts/documentos/montserrat/Montserrat-Medium.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("../assets/fonts/documentos/montserrat/Montserrat-SemiBold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("../assets/fonts/documentos/montserrat/Montserrat-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+}
+
+.font-document,
+.document-print-root,
+.document-print-root *,
+.measurement-document,
+.measurement-document *,
+.certificate-print,
+.certificate-print *,
+.os-print-document,
+.os-print-document * {
+  font-family: "Montserrat", sans-serif !important;
+  font-variant-numeric: tabular-nums lining-nums;
+}

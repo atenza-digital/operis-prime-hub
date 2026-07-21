@@ -23,9 +23,14 @@ function money(value: number) {
 
 const financeiroStatusOrder: MedicaoFinanceiroStatus[] = [
   "em_conferencia",
+  "emitida",
+  "enviada_ao_cliente",
+  "aceita",
   "aguardando_nf",
+  "nf_registrada",
   "nf_enviada",
   "aguardando_pagamento",
+  "paga",
   "pago_no_erp",
   "pendente_cliente",
 ];
@@ -37,10 +42,34 @@ const financeiroStatusMeta: Record<MedicaoFinanceiroStatus, { label: string; des
     tone: "border-slate-200 bg-slate-50 text-slate-700",
     icon: Clock3,
   },
+  emitida: {
+    label: "Emitida",
+    description: "Documento emitido e pronto para envio ou aceite.",
+    tone: "border-cyan-200 bg-cyan-50 text-cyan-800",
+    icon: Receipt,
+  },
+  enviada_ao_cliente: {
+    label: "Enviada ao cliente",
+    description: "Medição enviada para conferência do cliente.",
+    tone: "border-blue-200 bg-blue-50 text-blue-800",
+    icon: Send,
+  },
+  aceita: {
+    label: "Aceita",
+    description: "Cliente aceitou a medição para continuidade do faturamento externo.",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    icon: CheckCircle2,
+  },
   aguardando_nf: {
     label: "Aguardando NF",
     description: "Liberada para faturamento, ainda sem nota enviada.",
     tone: "border-amber-200 bg-amber-50 text-amber-800",
+    icon: Receipt,
+  },
+  nf_registrada: {
+    label: "NF registrada",
+    description: "Dados da NF foram registrados para acompanhamento.",
+    tone: "border-sky-200 bg-sky-50 text-sky-800",
     icon: Receipt,
   },
   nf_enviada: {
@@ -61,6 +90,12 @@ const financeiroStatusMeta: Record<MedicaoFinanceiroStatus, { label: string; des
     tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
     icon: CheckCircle2,
   },
+  paga: {
+    label: "Paga",
+    description: "Pagamento confirmado no acompanhamento da medição.",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    icon: CheckCircle2,
+  },
   pendente_cliente: {
     label: "Pendente cliente",
     description: "Aguardando aceite, retorno ou correção solicitada.",
@@ -73,7 +108,36 @@ const financeiroStatusMeta: Record<MedicaoFinanceiroStatus, { label: string; des
     tone: "border-zinc-200 bg-zinc-50 text-zinc-600",
     icon: Ban,
   },
+  substituida: {
+    label: "Substituída",
+    description: "Medição preservada como histórico e substituída por nova revisão.",
+    tone: "border-zinc-200 bg-zinc-50 text-zinc-600",
+    icon: Ban,
+  },
 };
+
+const measurementFlowSteps = [
+  {
+    title: "1. Selecionar período",
+    description: "Escolha cliente e intervalo. A busca considera somente OS encerradas.",
+  },
+  {
+    title: "2. Conferir OS",
+    description: "Revise as OS disponíveis antes de consolidar. OS já medida não entra novamente.",
+  },
+  {
+    title: "3. Gerar medição",
+    description: "O sistema grava a medição, baixa os itens do contrato e libera o PDF.",
+  },
+  {
+    title: "4. Enviar NF",
+    description: "Informe número e data de envio da NF quando o faturamento externo for feito.",
+  },
+  {
+    title: "5. Baixar no ERP",
+    description: "Acompanhe cobrança e marque a baixa quando o pagamento for confirmado no ERP.",
+  },
+];
 
 type FinancialDraft = {
   financeiroStatus: MedicaoFinanceiroStatus;
@@ -90,8 +154,9 @@ function financialStatusOf(measurement: MedicaoApp): MedicaoFinanceiroStatus {
 }
 
 function financialDraftFrom(measurement: MedicaoApp): FinancialDraft {
+  const currentStatus = financialStatusOf(measurement);
   return {
-    financeiroStatus: financialStatusOf(measurement) === "cancelada" ? "em_conferencia" : financialStatusOf(measurement),
+    financeiroStatus: currentStatus === "cancelada" || currentStatus === "substituida" ? "em_conferencia" : currentStatus,
     nfNumero: measurement.nfNumero || "",
     nfEnviadaEm: measurement.nfEnviadaEm || "",
     pagamentoPrevistoEm: measurement.pagamentoPrevistoEm || "",
@@ -102,20 +167,93 @@ function financialDraftFrom(measurement: MedicaoApp): FinancialDraft {
 
 function formatQuantityUnit(quantity: number, unit?: string | null) {
   const value = Number(quantity || 0);
-  const normalized = textFrom(unit).toLowerCase();
-  const compactUnits = new Set(["un", "un.", "unid", "unid."]);
-  const pluralMap: Record<string, string> = {
-    servico: "servicos",
-    serviço: "serviços",
-    ponto: "pontos",
-  };
+  const normalized = normalizeUnit(unit);
+  const unitLabel = unitLabelFor(value, normalized || textFrom(unit));
 
   if (!normalized) return value.toLocaleString("pt-BR");
-  if (Math.abs(value) === 1 || compactUnits.has(normalized) || normalized.endsWith("s")) {
-    return `${value.toLocaleString("pt-BR")} ${unit}`;
-  }
+  return `${value.toLocaleString("pt-BR")} ${unitLabel}`;
+}
 
-  return `${value.toLocaleString("pt-BR")} ${pluralMap[normalized] || `${unit}s`}`;
+function normalizeUnit(unit?: string | null) {
+  return textFrom(unit).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\.$/, "");
+}
+
+function canonicalUnitKey(unit?: string | null) {
+  const normalized = normalizeUnit(unit);
+  const aliases: Record<string, string> = {
+    itens: "item",
+    visitas: "visita",
+    servicos: "servico",
+    pontos: "ponto",
+    horas: "hora",
+    unidades: "unidade",
+    equipamentos: "equipamento",
+    limpezas: "limpeza",
+    unid: "un",
+    "m²": "m2",
+    "mÂ²": "m2",
+  };
+  return aliases[normalized] || normalized;
+}
+
+function unitLabelFor(quantity: number, unit?: string | null) {
+  const normalized = canonicalUnitKey(unit);
+  const singular = Math.abs(Number(quantity || 0)) === 1;
+  const labels: Record<string, { singular: string; plural: string }> = {
+    item: { singular: "item", plural: "itens" },
+    itens: { singular: "item", plural: "itens" },
+    visita: { singular: "visita", plural: "visitas" },
+    visitas: { singular: "visita", plural: "visitas" },
+    servico: { singular: "serviço", plural: "serviços" },
+    servicos: { singular: "serviço", plural: "serviços" },
+    ponto: { singular: "ponto", plural: "pontos" },
+    pontos: { singular: "ponto", plural: "pontos" },
+    hora: { singular: "hora", plural: "horas" },
+    horas: { singular: "hora", plural: "horas" },
+    unidade: { singular: "unidade", plural: "unidades" },
+    unidades: { singular: "unidade", plural: "unidades" },
+    equipamento: { singular: "equipamento", plural: "equipamentos" },
+    equipamentos: { singular: "equipamento", plural: "equipamentos" },
+    limpeza: { singular: "limpeza", plural: "limpezas" },
+    limpezas: { singular: "limpeza", plural: "limpezas" },
+    un: { singular: "un.", plural: "un." },
+    unid: { singular: "un.", plural: "un." },
+    m2: { singular: "m²", plural: "m²" },
+    "m²": { singular: "m²", plural: "m²" },
+  };
+  const label = labels[normalized];
+  if (label) return singular ? label.singular : label.plural;
+  const fallback = textFrom(unit);
+  if (!fallback) return "";
+  if (singular || fallback.endsWith("s")) return fallback;
+  return `${fallback}s`;
+}
+
+function pluralizeCount(count: number, singular: string, plural: string) {
+  return `${count.toLocaleString("pt-BR")} ${Math.abs(count) === 1 ? singular : plural}`;
+}
+
+function measurementUnitSummary(items: MedicaoApp["itens"]) {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    const key = canonicalUnitKey(item.unidade) || "item";
+    totals.set(key, (totals.get(key) || 0) + Number(item.quantidade || 0));
+  }
+  return [...totals.entries()]
+    .map(([unit, quantity]) => `${quantity.toLocaleString("pt-BR")} ${unitLabelFor(quantity, unit)}`)
+    .join(" • ");
+}
+
+function measurementSnapshotValue(snapshot: Record<string, unknown>, key: string) {
+  return typeof snapshot === "object" && snapshot ? snapshot[key] : null;
+}
+
+function measurementPartialLabel(measurement: MedicaoApp) {
+  const snapshot = measurement.snapshotDados ?? {};
+  const classification = textFrom(measurementSnapshotValue(snapshot, "classificacao"));
+  const partialUntil = textFrom(measurementSnapshotValue(snapshot, "parcialAte"));
+  if (classification === "parcial" && partialUntil) return `Parcial até ${fmtDate(partialUntil)}`;
+  return null;
 }
 
 function getInitials(name: string) {
@@ -133,20 +271,74 @@ function sanitizeHexColor(value: unknown, fallback: string) {
   return /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(color) ? color : fallback;
 }
 
+function companyDocumentConfig(company?: BootstrapData["companyConfig"] | null) {
+  const config = company?.certificadoConfig;
+  return config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+}
+
+function companyDocumentLogo(company?: BootstrapData["companyConfig"] | null) {
+  const config = companyDocumentConfig(company);
+  return textFrom(config.documentLogoLightUrl) || textFrom(config.logoPrincipalUrl) || textFrom(company?.logoUrl);
+}
+
+function parseCityStateFromAddress(address?: string | null) {
+  const text = textFrom(address);
+  const stateMatch = text.match(/(?:-|\/)\s*([A-Z]{2})\b/);
+  const state = stateMatch?.[1] || "";
+  const city = stateMatch?.index !== undefined
+    ? text
+        .slice(0, stateMatch.index)
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .at(-1) || ""
+    : "";
+  return { city, state };
+}
+
+function formatLongDateBr(date: Date, timeZone: string) {
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone }).format(date);
+}
+
+function measurementIssuePlaceDate(measurement: MedicaoApp, company?: BootstrapData["companyConfig"] | null) {
+  const snapshot = measurement.snapshotDados ?? {};
+  const config = companyDocumentConfig(company);
+  const parsedAddress = parseCityStateFromAddress(company?.endereco);
+  const timeZone = textFrom((snapshot as Record<string, unknown>).timezone) || textFrom(config.timezone) || "America/Fortaleza";
+  const city =
+    textFrom((snapshot as Record<string, unknown>).issueCity) ||
+    textFrom(config.issueCity) ||
+    textFrom(config.cidadeDocumental) ||
+    parsedAddress.city;
+  const state =
+    textFrom((snapshot as Record<string, unknown>).issueState) ||
+    textFrom(config.issueState) ||
+    textFrom(config.ufDocumental) ||
+    parsedAddress.state;
+  const issuedAtRaw =
+    textFrom((snapshot as Record<string, unknown>).issuedAt) ||
+    textFrom((snapshot as Record<string, unknown>).acceptedAt) ||
+    measurement.criadoEm;
+  const issuedAt = new Date(issuedAtRaw || Date.now());
+  if (!city || !state || Number.isNaN(issuedAt.getTime())) return "";
+  return `${city} - ${state}, ${formatLongDateBr(issuedAt, timeZone)}.`;
+}
+
 function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data: BootstrapData | null }) {
   const company = data?.companyConfig;
   const today = new Date(measurement.criadoEm || Date.now());
   const issueDate = today.toLocaleDateString("pt-BR");
   const periodLabel = `${fmtDate(measurement.periodoInicio)} a ${fmtDate(measurement.periodoFim)}`;
   const contractIds = [...new Set(measurement.itens.map((item) => item.contratoId).filter(Boolean))];
-  const totalQuantity = measurement.itens.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+  const unitSummary = measurementUnitSummary(measurement.itens);
   const trackingCode = `${measurement.id}-${measurement.numero}`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24).toUpperCase();
   const companyName = company?.razaoSocial || company?.nomeFantasia || "Empresa emissora";
   const companyCnpj = company?.cnpj || "-";
+  const logoSrc = companyDocumentLogo(company);
 
   return (
     <div className="document-print-root measurement-print-root bg-[#f1f5f9] p-0 text-slate-950 print:m-0 print:p-0">
-      <section className="relative mx-auto flex min-h-[210mm] w-[297mm] overflow-hidden bg-[#f8fafc] font-sans shadow-2xl print:shadow-none">
+      <section className="relative mx-auto flex min-h-[210mm] w-[297mm] overflow-hidden bg-[#f8fafc] font-document shadow-2xl print:shadow-none">
         <div className="absolute inset-y-0 left-0 w-[10mm] bg-[#334155]" />
         <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#475569]" />
         <div className="absolute -right-10 top-24 h-28 w-28 rounded-full border-[18px] border-[#cbd5e1]/35" />
@@ -155,8 +347,8 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
         <div className="relative z-10 flex w-full flex-col p-[12mm] pl-[18mm]">
           <div className="grid grid-cols-[1fr_1.2fr_0.85fr] gap-5">
             <div className="rounded-3xl border border-white/70 bg-white/95 p-4 shadow-sm">
-              {company?.logoUrl ? (
-                <img src={company.logoUrl} alt={companyName} className="h-14 w-48 object-contain object-left" />
+              {logoSrc ? (
+                <img src={logoSrc} alt={companyName} className="h-14 w-48 object-contain object-left" />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-lg font-black text-slate-700">
                   {getInitials(companyName)}
@@ -206,13 +398,18 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
                   <strong className="text-slate-950">{measurement.itens.length}</strong>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
-                  <span>Quantidade total</span>
-                  <strong className="text-slate-950">{totalQuantity.toLocaleString("pt-BR")}</strong>
+                  <span>Itens medidos</span>
+                  <strong className="text-slate-950">{measurement.itens.length}</strong>
                 </div>
                 <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2">
                   <span>Contrato(s)</span>
                   <strong className="text-slate-950">{contractIds.join(", ") || "-"}</strong>
                 </div>
+                {unitSummary ? (
+                  <div className="rounded-2xl bg-slate-50 px-3 py-2 font-semibold text-slate-700">
+                    {unitSummary}
+                  </div>
+                ) : null}
               </div>
             </aside>
           </div>
@@ -255,7 +452,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
                   <h2 className="mt-2 text-2xl font-black text-slate-950">Resumo por ordem de serviço</h2>
                 </div>
                 <div className="rounded-full bg-[#f1f5f9] px-4 py-2 text-xs font-bold text-[#334155]">
-                  {measurement.itens.length} item(ns)
+                  {pluralizeCount(measurement.itens.length, "item", "itens")}
                 </div>
               </div>
 
@@ -270,12 +467,12 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
                 <tbody>
                   {measurement.itens.map((item, index) => (
                     <tr key={`${item.osId}-${index}`} className={index % 2 === 0 ? "bg-slate-50" : "bg-white"}>
-                      <td className="px-3 py-3 font-mono text-slate-500">{String(index + 1).padStart(2, "0")}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-500">{String(index + 1).padStart(2, "0")}</td>
                       <td className="px-3 py-3 font-bold uppercase text-slate-900">{item.servico}</td>
-                      <td className="px-3 py-3 font-mono text-slate-700">{item.osNumero || item.osId}</td>
-                      <td className="px-3 py-3 font-mono text-slate-700">{item.contratoId || "-"}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-700">{item.osNumero || item.osId}</td>
+                      <td className="px-3 py-3 font-medium tabular-nums text-slate-700">{item.contratoId || "-"}</td>
                       <td className="px-3 py-3 text-slate-700">{fmtDate(item.dataExecucao)}</td>
-                      <td className="px-3 py-3 text-right text-slate-700">{item.quantidade} {item.unidade || ""}</td>
+                      <td className="px-3 py-3 text-right text-slate-700">{formatQuantityUnit(item.quantidade, item.unidade)}</td>
                       <td className="px-3 py-3 text-right text-slate-700">{money(item.valorUnitario)}</td>
                       <td className="px-3 py-3 text-right font-black text-slate-950">{money(item.valorTotal)}</td>
                     </tr>
@@ -308,7 +505,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
             </div>
             <div className="rounded-3xl bg-white p-4 text-[#1f2937]">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#334155]">Rastreabilidade</p>
-              <p className="mt-2 font-mono text-sm font-black">{trackingCode}</p>
+              <p className="mt-2 text-sm font-black tabular-nums">{trackingCode}</p>
               <p className="mt-2 text-[10px] leading-relaxed text-slate-600">
                 Código interno para conferência e rastreabilidade da medição.
               </p>
@@ -327,14 +524,17 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
   const issueTime = issuedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const periodLabel = `${fmtDate(measurement.periodoInicio)} a ${fmtDate(measurement.periodoFim)}`;
   const contractIds = [...new Set(measurement.itens.map((item) => item.contratoId).filter(Boolean))];
-  const totalQuantity = measurement.itens.reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
-  const trackingCode = `${measurement.id}-${measurement.numero}`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 28).toUpperCase();
+  const unitSummary = measurementUnitSummary(measurement.itens);
+  const partialLabel = measurementPartialLabel(measurement);
   const companyName = company?.razaoSocial || company?.nomeFantasia || "Empresa emissora";
   const companyDisplayName = company?.nomeFantasia || companyName;
   const snapshot = measurement.snapshotDados ?? {};
   const issuerSnapshot = typeof snapshot === "object" && snapshot && "emissor" in snapshot ? (snapshot.emissor as Record<string, unknown>) : null;
-  const issuerName = textFrom(emittedBy?.name) || textFrom(issuerSnapshot?.nome) || company?.responsavelExecucao || company?.responsavelTecnico || "";
-  const issuerRole = textFrom(emittedBy?.role) || textFrom(issuerSnapshot?.cargo) || company?.cargoResponsavel || "Responsável pela emissão";
+  const issuerName = textFrom(issuerSnapshot?.nome) || company?.responsavelExecucao || company?.responsavelTecnico || textFrom(emittedBy?.name) || "";
+  const issuerRole = textFrom(issuerSnapshot?.cargo) || company?.cargoResponsavel || textFrom(emittedBy?.role) || "Responsável pela emissão";
+  const logoSrc = companyDocumentLogo(company);
+  const traceabilityLabel = `${measurement.numero} • Revisão ${textFrom((snapshot as Record<string, unknown>)?.revisao) || "1"} • Página 1 de 1`;
+  const issuePlaceDate = measurementIssuePlaceDate(measurement, company);
   const observationText =
     textFrom((snapshot as Record<string, unknown>)?.observacao) ||
     "Valores consolidados conforme serviços executados, contratos vigentes e período selecionado na emissão da medição.";
@@ -352,13 +552,13 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
 
   return (
     <div className="document-print-root measurement-print-root bg-slate-100 p-0 text-slate-950 print:m-0 print:bg-white print:p-0" style={themeStyle}>
-      <section className="measurement-document mx-auto min-h-[297mm] w-[210mm] bg-white px-[15mm] py-[11mm] font-sans text-[var(--measurement-text)] shadow-2xl print:shadow-none">
+      <section className="measurement-document mx-auto min-h-[297mm] w-[210mm] bg-white px-[15mm] py-[11mm] font-document text-[var(--measurement-text)] shadow-2xl print:shadow-none">
         <div className="h-1 rounded-full bg-[var(--measurement-primary)]" />
 
         <header className="measurement-header mt-4 grid grid-cols-[1fr_0.95fr] gap-8 border-b border-slate-200 pb-4">
           <div className="min-w-0">
-            {company?.logoUrl ? (
-              <img src={company.logoUrl} alt={companyDisplayName} className="h-11 w-44 object-contain object-left" />
+            {logoSrc ? (
+              <img src={logoSrc} alt={companyDisplayName} className="h-11 w-44 object-contain object-left" />
             ) : (
               <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-base font-black text-[var(--measurement-primary)]">
                 {getInitials(companyDisplayName)}
@@ -382,10 +582,10 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[9px] font-semibold text-slate-500">Código da medição</p>
-                  <h1 className="mt-1 break-words text-base font-black leading-snug tracking-tight">{measurement.numero}</h1>
+                  <h1 className="mt-1 whitespace-nowrap text-[15px] font-black leading-tight tracking-tight">{measurement.numero}</h1>
                 </div>
                 <span className="shrink-0 rounded-full border border-[var(--measurement-primary)]/30 bg-white px-2.5 py-1 text-[9px] font-bold uppercase text-[var(--measurement-primary)]">
-                  {measurement.status}
+                  {partialLabel || measurement.status}
                 </span>
               </div>
             </div>
@@ -412,14 +612,20 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
             <p className="mt-1 text-lg font-black">{measurement.itens.length}</p>
           </div>
           <div className="border-r border-slate-200 px-4 py-2.5">
-            <p className="font-semibold text-slate-500">Quantidade total</p>
-            <p className="mt-1 text-lg font-black">{totalQuantity.toLocaleString("pt-BR")}</p>
+            <p className="font-semibold text-slate-500">Itens medidos</p>
+            <p className="mt-1 text-lg font-black">{measurement.itens.length}</p>
           </div>
           <div className="px-4 py-2.5">
             <p className="font-semibold text-slate-500">Total geral</p>
             <p className="mt-1 text-xl font-black text-[var(--measurement-primary)]">{money(measurement.total)}</p>
           </div>
         </section>
+
+        {unitSummary ? (
+          <p className="mt-2 text-right text-[9.5px] font-semibold text-slate-500">
+            Composição: {unitSummary}
+          </p>
+        ) : null}
 
         <section className="measurement-block mt-5">
           <h2 className="border-l-4 border-[var(--measurement-primary)] pl-3 text-sm font-black">Cliente / contratante</h2>
@@ -458,7 +664,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
         <section className="measurement-block measurement-services mt-5">
           <div className="mb-2.5 flex items-end justify-between gap-4">
             <h2 className="border-l-4 border-[var(--measurement-primary)] pl-3 text-sm font-black">Serviços medidos</h2>
-            <p className="text-[10px] font-semibold text-slate-500">{measurement.itens.length} item(ns)</p>
+            <p className="text-[10px] font-semibold text-slate-500">{pluralizeCount(measurement.itens.length, "item", "itens")}</p>
           </div>
 
           <table className="measurement-table w-full border-collapse text-[9.2px]">
@@ -476,9 +682,9 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
             <tbody>
               {measurement.itens.map((item, index) => (
                 <tr key={`${item.osId}-${index}`} className={index % 2 === 0 ? "bg-slate-50" : "bg-white"}>
-                  <td className="border-b border-slate-100 px-1.5 py-2 font-mono text-slate-500">{String(index + 1).padStart(2, "0")}</td>
+                  <td className="border-b border-slate-100 px-1.5 py-2 font-medium tabular-nums text-slate-500">{String(index + 1).padStart(2, "0")}</td>
                   <td className="border-b border-slate-100 px-2 py-2 font-semibold leading-snug text-slate-900">{item.servico}</td>
-                  <td className="border-b border-slate-100 px-1.5 py-2 font-mono leading-snug text-slate-700">
+                  <td className="border-b border-slate-100 px-1.5 py-2 font-medium leading-snug tabular-nums text-slate-700">
                     <p>{item.osNumero || item.osId}</p>
                     <p className="text-slate-500">{item.contratoId || "-"}</p>
                   </td>
@@ -503,6 +709,9 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
         </section>
 
         <section className="measurement-signatures mt-3 grid grid-cols-2 gap-4 text-[10.5px]">
+          {issuePlaceDate ? (
+            <p className="col-span-2 text-right text-[10.5px] font-medium text-slate-700">{issuePlaceDate}</p>
+          ) : null}
           <div className="measurement-signature-box min-h-24 rounded-xl border border-slate-200 p-3.5">
             <p className="font-bold text-slate-600">Responsável pela emissão</p>
             <div className="mt-7 border-t border-slate-300 pt-2 font-bold">{issuerName || "Nome do responsável"}</div>
@@ -514,8 +723,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
             <p className="text-slate-500">Conferência dos serviços e valores medidos</p>
           </div>
           <footer className="col-span-2 border-t border-slate-200 pt-2 text-[9.5px] leading-relaxed text-slate-500">
-            <p className="font-bold text-slate-700">Rastreabilidade</p>
-            <p className="mt-1"><span className="font-semibold text-slate-700">Código interno:</span> <span className="font-mono font-bold text-slate-900">{trackingCode}</span> - Código interno para conferência e rastreabilidade da medição.</p>
+            <p className="font-semibold text-slate-600">{traceabilityLabel}</p>
           </footer>
         </section>
       </section>
@@ -669,10 +877,10 @@ export default function Medicao() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Operacional"
+        eyebrow="Financeiro"
         title="Medição"
         description="Consolide OS encerradas por cliente e período, gere a medição e acompanhe NF, cobrança e baixa manual no ERP."
-        crumbs={[{ label: "Operacional" }, { label: "Medição" }]}
+        crumbs={[{ label: "Financeiro" }, { label: "Medição" }]}
         actions={[
           { label: "Atualizar base", onClick: reload, variant: "outline" },
           { label: "Ver OS", to: "/ordens", variant: "default" },
@@ -680,28 +888,19 @@ export default function Medicao() {
       />
 
       <Card className="border-primary/20 bg-primary/[0.03] print:hidden">
-        <CardContent className="grid gap-3 pt-5 text-sm md:grid-cols-3">
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <Receipt className="h-4 w-4 text-primary" />
-              Medição operacional
-            </p>
-            <p className="mt-2 text-muted-foreground">A base vem apenas de OS encerradas e ainda não medidas dentro do período selecionado.</p>
-          </div>
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <Send className="h-4 w-4 text-primary" />
-              NF e cobrança
-            </p>
-            <p className="mt-2 text-muted-foreground">Registre se a NF foi enviada, se está aguardando pagamento ou se precisa cobrar o cliente.</p>
-          </div>
-          <div className="rounded-2xl border bg-card p-4">
-            <p className="flex items-center gap-2 font-semibold">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-              ERP permanece dono
-            </p>
-            <p className="mt-2 text-muted-foreground">O recebimento formal e a baixa financeira continuam manuais no ERP; aqui fica o acompanhamento da operação.</p>
-          </div>
+        <CardHeader>
+          <CardTitle>Fluxo da medição</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            A medição consolida o serviço executado e ajuda a acompanhar NF e pagamento, sem substituir o ERP.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm md:grid-cols-5">
+          {measurementFlowSteps.map((step) => (
+            <div key={step.title} className="rounded-2xl border bg-card p-4">
+              <p className="font-semibold text-foreground">{step.title}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
@@ -728,8 +927,21 @@ export default function Medicao() {
               {clienteSel ? (
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   {preItens.length ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span><strong>{preItens.length}</strong> OS encerrada(s), ainda não medidas, no período</span>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span><strong>{preItens.length}</strong> OS encerrada(s), ainda não medidas, no período</span>
+                        <span className="text-xs text-muted-foreground">Prévia antes de gerar a medição</span>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {preItens.slice(0, 6).map((order) => (
+                          <div key={order.id} className="rounded-lg border bg-card px-3 py-2">
+                            <p className="font-mono text-xs font-bold">{order.numero || order.id}</p>
+                            <p className="mt-1 truncate font-semibold">{order.servico}</p>
+                            <p className="text-xs text-muted-foreground">{fmtDate(order.dataExecucao || order.dataEmissao)} · {order.contratoId || "Sem contrato"}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {preItens.length > 6 ? <p className="text-xs text-muted-foreground">+{preItens.length - 6} OS adicional(is) serão consolidadas nesta medição.</p> : null}
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 text-muted-foreground"><AlertCircle className="h-4 w-4" /><span>Nenhuma OS disponível para nova medição neste intervalo.</span></div>
@@ -762,7 +974,7 @@ export default function Medicao() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold">{meta.label}</p>
-                          <p className="mt-1 text-xs opacity-80">{column.items.length} medição(ões)</p>
+                          <p className="mt-1 text-xs opacity-80">{pluralizeCount(column.items.length, "medição", "medições")}</p>
                         </div>
                         <Icon className="h-4 w-4 shrink-0" />
                       </div>
@@ -782,7 +994,7 @@ export default function Medicao() {
                             <span className="mt-0.5 block truncate opacity-80">{item.clienteNome}</span>
                           </button>
                         ))}
-                        {column.items.length > 3 ? <p className="text-xs font-medium opacity-75">+{column.items.length - 3} medição(ões)</p> : null}
+                        {column.items.length > 3 ? <p className="text-xs font-medium opacity-75">+{pluralizeCount(column.items.length - 3, "medição", "medições")}</p> : null}
                       </div>
                     </div>
                   );
@@ -824,7 +1036,7 @@ export default function Medicao() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Itens</p>
-                    <p className="mt-1">{selected.itens.length} item(ns)</p>
+                    <p className="mt-1">{pluralizeCount(selected.itens.length, "item", "itens")}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Status</p>
@@ -883,7 +1095,7 @@ export default function Medicao() {
                           <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${financeiroMeta.tone}`}>{financeiroMeta.label}</span>
                         </div>
                         <p className="mt-1 text-sm font-semibold">{measurement.clienteNome}</p>
-                        <p className="text-xs text-muted-foreground">{fmtDate(measurement.periodoInicio)} até {fmtDate(measurement.periodoFim)} · {measurement.itens.length} item(ns) · {money(measurement.total)}</p>
+                        <p className="text-xs text-muted-foreground">{fmtDate(measurement.periodoInicio)} até {fmtDate(measurement.periodoFim)} · {pluralizeCount(measurement.itens.length, "item", "itens")} · {money(measurement.total)}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {measurement.nfNumero ? `NF ${measurement.nfNumero}` : "NF ainda não informada"}
                           {measurement.pagamentoPrevistoEm ? ` · Previsto para ${fmtDate(measurement.pagamentoPrevistoEm)}` : ""}

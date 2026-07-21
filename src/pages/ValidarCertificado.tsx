@@ -1,19 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import logoCiperprag from "@/assets/logo_ciperprag_certificado.png";
+import { AlertTriangle, CheckCircle2, QrCode, Search, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getCertificateVerification, type CertificateVerification } from "@/lib/api";
 import { formatDateBr, formatTimeBr } from "@/lib/formatters";
-import { AlertTriangle, CheckCircle2, QrCode, Search, ShieldAlert, ShieldCheck } from "lucide-react";
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
 
 export default function ValidarCertificado() {
   const { hash = "" } = useParams();
   const navigate = useNavigate();
   const [codigo, setCodigo] = useState(hash);
   const [certificate, setCertificate] = useState<CertificateVerification | null>(null);
-  const [verifiedAt, setVerifiedAt] = useState<string>("");
+  const [verifiedAt, setVerifiedAt] = useState("");
   const [loading, setLoading] = useState(Boolean(hash));
   const [error, setError] = useState("");
 
@@ -32,7 +42,7 @@ export default function ValidarCertificado() {
       const response = await getCertificateVerification(normalized);
       setCertificate(response.certificate);
       setVerifiedAt(response.verifiedAt);
-      setCodigo(response.certificate.hash);
+      setCodigo(normalized);
     } catch (err) {
       setCertificate(null);
       setVerifiedAt("");
@@ -49,6 +59,20 @@ export default function ValidarCertificado() {
     }
   }, [hash]);
 
+  const issuer = useMemo(() => {
+    const empresa = asRecord(certificate?.snapshotDados?.empresa);
+    const config = asRecord(empresa.certificadoConfig);
+    return {
+      nome: firstText(empresa.nomeFantasia, empresa.razaoSocial, "Empresa emissora"),
+      logoUrl: firstText(config.documentLogoLightUrl, config.logoPrincipalUrl, empresa.logoUrl),
+    };
+  }, [certificate]);
+
+  const snapshotHashSha256 = useMemo(() => {
+    const certificado = asRecord(certificate?.snapshotDados?.certificado);
+    return firstText(certificado.snapshotHashSha256, certificado.hashSha256, certificate?.documento?.snapshotHashSha256);
+  }, [certificate]);
+
   const status = certificate?.status ?? null;
   const statusBlock = useMemo(() => {
     if (!certificate) return null;
@@ -56,7 +80,7 @@ export default function ValidarCertificado() {
       return {
         icon: ShieldAlert,
         title: "Certificado revogado",
-        description: certificate.motivoRevogacao || "Este certificado existe na base oficial, mas foi revogado e nao deve ser aceito como valido.",
+        description: certificate.motivoRevogacao || "Este certificado existe na base oficial, mas foi revogado e não deve ser aceito como válido.",
         tone: "border-red-200 bg-red-50 text-red-900",
       };
     }
@@ -64,7 +88,7 @@ export default function ValidarCertificado() {
       return {
         icon: ShieldCheck,
         title: "Certificado válido",
-        description: "Este certificado foi localizado na base oficial da Ciperprag. Confira abaixo se os dados batem com o documento impresso.",
+        description: "Este certificado foi localizado na base oficial. Confira abaixo se os dados batem com o documento apresentado.",
         tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
       };
     }
@@ -81,10 +105,18 @@ export default function ValidarCertificado() {
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="rounded-lg border border-emerald-100 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-3">
-              <img src={logoCiperprag} alt="Ciperprag" className="h-16 w-auto object-contain" />
+            <div className="space-y-4">
+              {certificate ? (
+                issuer.logoUrl ? (
+                  <img src={issuer.logoUrl} alt={issuer.nome} className="h-16 w-auto object-contain" />
+                ) : (
+                  <div className="text-sm font-black uppercase tracking-[0.2em] text-emerald-900">{issuer.nome}</div>
+                )
+              ) : (
+                <div className="text-sm font-black uppercase tracking-[0.24em] text-emerald-800">Validação oficial</div>
+              )}
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Validação oficial</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Autenticidade pública</p>
                 <h1 className="text-3xl font-black tracking-tight text-slate-950">Autenticidade de certificado</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   Leia o QR Code do certificado ou informe o código abaixo. A validação considera exclusivamente os dados oficiais gravados no banco da aplicação.
@@ -122,7 +154,7 @@ export default function ValidarCertificado() {
                 <Input
                   value={codigo}
                   onChange={(event) => setCodigo(event.target.value.toUpperCase())}
-                  placeholder="Ex.: HSH-2026-ABCD-EF89"
+                  placeholder="Ex.: 7F3K-92QX"
                   className="h-11 pl-9 font-mono"
                 />
               </div>
@@ -160,7 +192,8 @@ export default function ValidarCertificado() {
 
             <div className="grid gap-4 md:grid-cols-2">
               {[
-                ["Código do certificado", certificate.hash],
+                ["Código do certificado", codigo],
+                ["Hash interno", certificate.hash],
                 ["Número do certificado", certificate.numero],
                 ["Ordem de serviço", certificate.osNumero || "—"],
                 ["Cliente", certificate.clienteNome],
@@ -170,13 +203,14 @@ export default function ValidarCertificado() {
                 ["Técnico responsável", certificate.tecnicoNome || "—"],
                 ["Data de execução", formatDateBr(certificate.dataExecucao)],
                 ["Emissão", formatDateBr(certificate.emitidoEm)],
-                ["Validade até", certificate.validadeAte ? formatDateBr(certificate.validadeAte) : "Indeterminada"],
+                ["Validade até", certificate.validadeAte ? formatDateBr(certificate.validadeAte) : "Não aplicável"],
                 ["Tag do equipamento", certificate.tagEquipamentoServico || "—"],
+                ["SHA-256 do snapshot", snapshotHashSha256 || "—"],
               ].map(([label, value]) => (
                 <Card key={label} className="border-slate-200 shadow-sm">
                   <CardContent className="p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">{label}</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
+                    <p className="mt-2 break-words text-sm font-semibold text-slate-900">{value}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -196,7 +230,7 @@ export default function ValidarCertificado() {
                     </div>
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Hash do snapshot</p>
-                      <p className="mt-1 break-all font-mono text-xs">{certificate.documento.snapshotHashSha256 || "-"}</p>
+                      <p className="mt-1 break-all font-mono text-xs">{snapshotHashSha256 || "-"}</p>
                     </div>
                   </div>
                   <p className="text-xs text-emerald-800">

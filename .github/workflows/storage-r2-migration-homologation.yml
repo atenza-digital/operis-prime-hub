@@ -1,0 +1,166 @@
+name: Storage R2 Migration Homologacao
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Modo de execucao"
+        required: true
+        type: choice
+        default: "dry-run"
+        options:
+          - dry-run
+          - apply
+      tenant:
+        description: "Slug do tenant"
+        required: true
+        default: "ciperprag"
+      entity_type:
+        description: "Filtro opcional por entidade: os, proposta, minuta, certificado, medicao"
+        required: false
+        default: ""
+      category:
+        description: "Filtro opcional por categoria: foto, documento, pdf_historico"
+        required: false
+        default: ""
+      limit:
+        description: "Tamanho maximo do lote"
+        required: true
+        default: "10"
+      keep_database_copy:
+        description: "Manter conteudo_base64 apos upload R2"
+        required: true
+        type: boolean
+        default: true
+
+env:
+  CONTAINER_NAME: atenza-fieldops
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: homologation
+
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "${{ inputs.limit }}" =~ ^[0-9]+$ ]]; then
+            echo "limit precisa ser numerico." >&2
+            exit 1
+          fi
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.keep_database_copy }}" != "true" ]; then
+            echo "Primeiro apply deve manter copia no banco. Rode keep_database_copy=true no rollout assistido." >&2
+            exit 1
+          fi
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
+          chmod 600 ~/.ssh/homolog_vps_key
+          ssh-keyscan -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Run migration in homologation container
+        shell: bash
+        env:
+          MIGRATION_MODE: ${{ inputs.mode }}
+          MIGRATION_TENANT: ${{ inputs.tenant }}
+          MIGRATION_ENTITY_TYPE: ${{ inputs.entity_type }}
+          MIGRATION_CATEGORY: ${{ inputs.category }}
+          MIGRATION_LIMIT: ${{ inputs.limit }}
+          MIGRATION_KEEP_DATABASE_COPY: ${{ inputs.keep_database_copy }}
+          HOMOLOG_R2_BUCKET_DOCUMENTS: ${{ secrets.HOMOLOG_R2_BUCKET_DOCUMENTS }}
+          HOMOLOG_R2_ACCOUNT_ID: ${{ secrets.HOMOLOG_R2_ACCOUNT_ID }}
+          HOMOLOG_R2_ACCESS_KEY_ID: ${{ secrets.HOMOLOG_R2_ACCESS_KEY_ID }}
+          HOMOLOG_R2_SECRET_ACCESS_KEY: ${{ secrets.HOMOLOG_R2_SECRET_ACCESS_KEY }}
+        run: |
+          R2_BUCKET_B64="$(printf '%s' "$HOMOLOG_R2_BUCKET_DOCUMENTS" | base64 -w0)"
+          R2_ACCOUNT_B64="$(printf '%s' "$HOMOLOG_R2_ACCOUNT_ID" | base64 -w0)"
+          R2_ACCESS_KEY_B64="$(printf '%s' "$HOMOLOG_R2_ACCESS_KEY_ID" | base64 -w0)"
+          R2_SECRET_KEY_B64="$(printf '%s' "$HOMOLOG_R2_SECRET_ACCESS_KEY" | base64 -w0)"
+
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "CONTAINER_NAME='${CONTAINER_NAME}' MIGRATION_MODE='${MIGRATION_MODE}' MIGRATION_TENANT='${MIGRATION_TENANT}' MIGRATION_ENTITY_TYPE='${MIGRATION_ENTITY_TYPE}' MIGRATION_CATEGORY='${MIGRATION_CATEGORY}' MIGRATION_LIMIT='${MIGRATION_LIMIT}' MIGRATION_KEEP_DATABASE_COPY='${MIGRATION_KEEP_DATABASE_COPY}' R2_BUCKET_B64='${R2_BUCKET_B64}' R2_ACCOUNT_B64='${R2_ACCOUNT_B64}' R2_ACCESS_KEY_B64='${R2_ACCESS_KEY_B64}' R2_SECRET_KEY_B64='${R2_SECRET_KEY_B64}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          HOMOLOG_R2_BUCKET_DOCUMENTS="$(printf '%s' "${R2_BUCKET_B64:-}" | base64 -d 2>/dev/null || true)"
+          HOMOLOG_R2_ACCOUNT_ID="$(printf '%s' "${R2_ACCOUNT_B64:-}" | base64 -d 2>/dev/null || true)"
+          HOMOLOG_R2_ACCESS_KEY_ID="$(printf '%s' "${R2_ACCESS_KEY_B64:-}" | base64 -d 2>/dev/null || true)"
+          HOMOLOG_R2_SECRET_ACCESS_KEY="$(printf '%s' "${R2_SECRET_KEY_B64:-}" | base64 -d 2>/dev/null || true)"
+
+          if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            echo "Container de homologacao nao encontrado: $CONTAINER_NAME" >&2
+            exit 1
+          fi
+
+          PROVIDER="database"
+          if [ -n "${HOMOLOG_R2_BUCKET_DOCUMENTS:-}" ] \
+            && [ -n "${HOMOLOG_R2_ACCOUNT_ID:-}" ] \
+            && [ -n "${HOMOLOG_R2_ACCESS_KEY_ID:-}" ] \
+            && [ -n "${HOMOLOG_R2_SECRET_ACCESS_KEY:-}" ]; then
+            PROVIDER="r2"
+          fi
+
+          if [ "$MIGRATION_MODE" = "apply" ] && [ "$PROVIDER" != "r2" ]; then
+            echo "Migracao apply bloqueada: configure HOMOLOG_R2_BUCKET_DOCUMENTS, HOMOLOG_R2_ACCOUNT_ID, HOMOLOG_R2_ACCESS_KEY_ID e HOMOLOG_R2_SECRET_ACCESS_KEY." >&2
+            exit 1
+          fi
+
+          APPLY="false"
+          if [ "$MIGRATION_MODE" = "apply" ]; then
+            APPLY="true"
+          fi
+
+          echo "Executando migracao de storage em modo $MIGRATION_MODE para tenant $MIGRATION_TENANT."
+          echo "Provider efetivo esperado: $PROVIDER."
+
+          echo "Preflight R2 antes da migracao."
+          docker exec \
+            -e RUNTIME_ENV="homologacao" \
+            -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
+            -e R2_BUCKET_DOCUMENTS="$HOMOLOG_R2_BUCKET_DOCUMENTS" \
+            -e R2_ACCOUNT_ID="$HOMOLOG_R2_ACCOUNT_ID" \
+            -e R2_ACCESS_KEY_ID="$HOMOLOG_R2_ACCESS_KEY_ID" \
+            -e R2_SECRET_ACCESS_KEY="$HOMOLOG_R2_SECRET_ACCESS_KEY" \
+            -e STORAGE_MIGRATION_TENANT="$MIGRATION_TENANT" \
+            "$CONTAINER_NAME" \
+            npm run storage:r2-readiness
+
+          echo "Executando migracao R2."
+          docker exec \
+            -e RUNTIME_ENV="homologacao" \
+            -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
+            -e R2_BUCKET_DOCUMENTS="$HOMOLOG_R2_BUCKET_DOCUMENTS" \
+            -e R2_ACCOUNT_ID="$HOMOLOG_R2_ACCOUNT_ID" \
+            -e R2_ACCESS_KEY_ID="$HOMOLOG_R2_ACCESS_KEY_ID" \
+            -e R2_SECRET_ACCESS_KEY="$HOMOLOG_R2_SECRET_ACCESS_KEY" \
+            -e STORAGE_MIGRATION_TENANT="$MIGRATION_TENANT" \
+            -e STORAGE_MIGRATION_ENTITY_TYPE="$MIGRATION_ENTITY_TYPE" \
+            -e STORAGE_MIGRATION_CATEGORY="$MIGRATION_CATEGORY" \
+            -e STORAGE_MIGRATION_LIMIT="$MIGRATION_LIMIT" \
+            -e STORAGE_MIGRATION_APPLY="$APPLY" \
+            -e STORAGE_MIGRATION_KEEP_DATABASE_COPY="$MIGRATION_KEEP_DATABASE_COPY" \
+            "$CONTAINER_NAME" \
+            npm run storage:migrate-r2
+
+          echo "Verificacao R2 apos migracao."
+          docker exec \
+            -e RUNTIME_ENV="homologacao" \
+            -e DOCUMENT_STORAGE_PROVIDER="$PROVIDER" \
+            -e R2_BUCKET_DOCUMENTS="$HOMOLOG_R2_BUCKET_DOCUMENTS" \
+            -e R2_ACCOUNT_ID="$HOMOLOG_R2_ACCOUNT_ID" \
+            -e R2_ACCESS_KEY_ID="$HOMOLOG_R2_ACCESS_KEY_ID" \
+            -e R2_SECRET_ACCESS_KEY="$HOMOLOG_R2_SECRET_ACCESS_KEY" \
+            -e STORAGE_VERIFY_TENANT="$MIGRATION_TENANT" \
+            -e STORAGE_VERIFY_ENTITY_TYPE="$MIGRATION_ENTITY_TYPE" \
+            -e STORAGE_VERIFY_CATEGORY="$MIGRATION_CATEGORY" \
+            -e STORAGE_VERIFY_LIMIT="$MIGRATION_LIMIT" \
+            "$CONTAINER_NAME" \
+            npm run storage:r2-verify
+          REMOTE

@@ -1,9 +1,39 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Montserrat:ital,wght@0,400;0,600;0,700;1,700&display=swap');
-
 @font-face {
   font-family: "NeuePower Ultra";
   src: url("./assets/fonts/NeuePower-Ultra.woff2") format("woff2");
   font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nortica";
+  src: url("./assets/fonts/NorticaTypeface-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nortica";
+  src: url("./assets/fonts/NorticaTypeface-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nortica";
+  src: url("./assets/fonts/NorticaTypeface-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nortica";
+  src: url("./assets/fonts/NorticaTypeface-Bold.woff2") format("woff2");
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
@@ -84,6 +114,31 @@
   ::selection {
     background: hsl(var(--primary) / 0.16);
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.72), hsl(var(--primary) / 0.42));
+    border: 2px solid hsl(var(--muted));
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.82);
+  }
 }
 
 @layer utilities {
@@ -93,7 +148,7 @@
   }
 
   .font-brand {
-    font-family: "NeuePower Ultra", Inter, sans-serif;
+    font-family: "NeuePower Ultra", Nortica, sans-serif;
     font-weight: 900;
   }
 
@@ -113,6 +168,23 @@
 
   .page-grid {
     @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-4;
+  }
+
+  .scrollbar-dark {
+    scrollbar-color: rgba(34, 197, 94, 0.62) rgba(255, 255, 255, 0.06);
+  }
+
+  .scrollbar-dark::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .scrollbar-dark::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.76), rgba(34, 197, 94, 0.34));
+    border-color: #050807;
+  }
+
+  .scrollbar-light {
+    scrollbar-color: hsl(var(--primary) / 0.56) hsl(var(--muted));
   }
 }
 
@@ -182,59 +254,64 @@
   }
 
   .measurement-document {
-    padding: 8mm 13mm 7mm !important;
+    min-height: auto !important;
+    padding: 6mm 13mm 5mm !important;
   }
 
   .measurement-header {
-    margin-top: 3mm !important;
-    padding-bottom: 3mm !important;
+    margin-top: 2mm !important;
+    padding-bottom: 2mm !important;
     gap: 7mm !important;
   }
 
+  .measurement-header img {
+    height: 8.5mm !important;
+  }
+
   .measurement-summary {
-    margin-top: 3mm !important;
+    margin-top: 2mm !important;
   }
 
   .measurement-summary > div {
-    padding-top: 2mm !important;
-    padding-bottom: 2mm !important;
-  }
-
-  .measurement-block {
-    margin-top: 3.2mm !important;
-  }
-
-  .measurement-services {
-    margin-top: 4mm !important;
-  }
-
-  .measurement-table {
-    font-size: 8.5px !important;
-  }
-
-  .measurement-table th {
     padding-top: 1.5mm !important;
     padding-bottom: 1.5mm !important;
   }
 
+  .measurement-block {
+    margin-top: 2.4mm !important;
+  }
+
+  .measurement-services {
+    margin-top: 2.8mm !important;
+  }
+
+  .measurement-table {
+    font-size: 8.1px !important;
+  }
+
+  .measurement-table th {
+    padding-top: 1.15mm !important;
+    padding-bottom: 1.15mm !important;
+  }
+
   .measurement-table td {
-    padding-top: 1.45mm !important;
-    padding-bottom: 1.45mm !important;
+    padding-top: 1.05mm !important;
+    padding-bottom: 1.05mm !important;
   }
 
   .measurement-table tfoot td {
-    padding-top: 2mm !important;
-    padding-bottom: 1.5mm !important;
+    padding-top: 1.4mm !important;
+    padding-bottom: 1mm !important;
   }
 
   .measurement-signatures {
     break-inside: avoid;
     page-break-inside: avoid;
-    margin-top: 2.5mm !important;
+    margin-top: 1.6mm !important;
   }
 
   .measurement-signature-box {
-    min-height: 20mm !important;
-    padding: 3mm !important;
+    min-height: 16mm !important;
+    padding: 2.3mm !important;
   }
 }

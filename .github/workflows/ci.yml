@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Branding audit
+        run: npm run audit:branding
+
       - name: Test
         run: npm test -- --run
 

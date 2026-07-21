@@ -167,7 +167,22 @@ async function main() {
     method: "POST",
     body: { ...proposalPayload, status: "aprovado", observacoes: `${proposalPayload.observacoes} Proposta aprovada no E2E tecnico.` },
   });
-  const contractResult = await requestJson(`/api/contract-templates/${proposalId}/generate-contract`, { token, method: "POST" });
+  const minutaResult = await requestJson(`/api/contract-templates/${proposalId}/generate-minuta`, { token, method: "POST" });
+
+  const afterMinuta = await requestJson("/api/bootstrap", { token });
+  const minutaTemplate = afterMinuta.contractTemplates?.find((item) => item.id === minutaResult.id);
+  if (!minutaTemplate) throw new Error(`Minuta gerada nao localizada no bootstrap: ${minutaResult.numero}.`);
+  await requestJson("/api/contract-templates", {
+    token,
+    method: "POST",
+    body: {
+      ...minutaTemplate,
+      status: "aprovado",
+      observacoes: `${minutaTemplate.observacoes || ""} Minuta aprovada no E2E tecnico.`,
+    },
+  });
+
+  const contractResult = await requestJson(`/api/contract-templates/${minutaResult.id}/generate-contract`, { token, method: "POST" });
 
   const afterContract = await requestJson("/api/bootstrap", { token });
   const operationalContract = afterContract.contracts
@@ -267,6 +282,8 @@ async function main() {
   const rows = [
     ["Proposta criada", proposalNumber, "OK"],
     ["Proposta aprovada", proposalNumber, "OK"],
+    ["Minuta gerada", minutaResult.numero, "OK"],
+    ["Minuta aprovada", minutaResult.numero, "OK"],
     ["Contrato gerado", contractResult.numero, "OK"],
     ["Contrato operacional", operationalContract.id, "OK"],
     ["Agendamento", scheduleResult.id, "OK"],
@@ -281,7 +298,7 @@ async function main() {
   const hasVerification = rows.some((row) => String(row[2]).toLowerCase().includes("verificar"));
 
   const report = [
-    "# Execucao Tecnica E2E na VPS",
+    "# Execucao Tecnica E2E",
     "",
     `Ambiente: ${baseUrl}`,
     `Tenant: ${tenantSlug}`,
@@ -322,7 +339,7 @@ async function main() {
   ].join("\n");
 
   await fs.mkdir(evidenceDir, { recursive: true });
-  const outputPath = path.join(evidenceDir, "execucao-tecnica-e2e-vps.md");
+  const outputPath = path.join(evidenceDir, "execucao-tecnica-e2e.md");
   await fs.writeFile(outputPath, report, "utf8");
 
   console.log(`E2E tecnico: ${hasVerification ? "verificar" : "aprovado"}`);
@@ -330,6 +347,7 @@ async function main() {
   console.log(JSON.stringify({
     runId,
     proposal: proposalNumber,
+    minuta: minutaResult.numero,
     contract: contractResult.numero,
     operationalContract: operationalContract.id,
     schedule: scheduleResult.id,

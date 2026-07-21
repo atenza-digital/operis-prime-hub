@@ -17,15 +17,42 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Building2, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, CalendarPlus, Car, CheckCircle2, ChevronDown, ChevronUp, ClipboardCheck, Clock, FileCheck2, FileText, MapPin, MessageSquare, Printer, ShieldAlert, Tag, User, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { printOsDocument } from "@/lib/osPrint";
 import { PageHeader } from "@/components/PageHeader";
 
+const monthOptions = [
+  ["01", "Janeiro"],
+  ["02", "Fevereiro"],
+  ["03", "Março"],
+  ["04", "Abril"],
+  ["05", "Maio"],
+  ["06", "Junho"],
+  ["07", "Julho"],
+  ["08", "Agosto"],
+  ["09", "Setembro"],
+  ["10", "Outubro"],
+  ["11", "Novembro"],
+  ["12", "Dezembro"],
+];
+
 function fmtDate(date: string) {
   if (!date) return "—";
   return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
+}
+
+function startOfWeek(date: Date) {
+  const copy = new Date(date);
+  const day = copy.getDay() || 7;
+  copy.setDate(copy.getDate() - day + 1);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function toDateInputValue(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
 function newId() {
@@ -65,11 +92,28 @@ const STATUS_CFG = {
   cancelado: { label: "Cancelado", icon: XCircle, cls: "bg-destructive/5 text-destructive border-destructive/20" },
 } as const;
 
+const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function monthCalendarDays(year: number, month: number) {
+  const first = new Date(year, month - 1, 1, 12);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  const start = new Date(year, month - 1, 1 - mondayOffset, 12);
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+}
+
 export default function Agendamento() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
   const [clienteId, setClienteId] = useState("");
   const [contratoId, setContratoId] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
@@ -80,6 +124,11 @@ export default function Agendamento() {
   const [veiculoId, setVeiculoId] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroCliente, setFiltroCliente] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("mes");
+  const [filtroAno, setFiltroAno] = useState(() => String(new Date().getFullYear()));
+  const [filtroMes, setFiltroMes] = useState(() => String(new Date().getMonth() + 1).padStart(2, "0"));
+  const [filtroSemanaBase, setFiltroSemanaBase] = useState(() => toDateInputValue(new Date()));
+  const [detalheAgendamentoId, setDetalheAgendamentoId] = useState<string | null>(null);
   const [osDialog, setOsDialog] = useState(false);
   const [osAgId, setOsAgId] = useState<string | null>(null);
   const [osTecnico, setOsTecnico] = useState("");
@@ -117,7 +166,7 @@ export default function Agendamento() {
     () =>
       contratos.filter((item) => {
         const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0;
+        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId);
       }),
     [clienteNomeSel, contratos],
   );
@@ -127,12 +176,50 @@ export default function Agendamento() {
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
-  const agFiltrados = useMemo(() => {
+  const agendamentosBase = useMemo(() => {
     let list = [...agendamentos].reverse();
     if (filtroStatus !== "todos") list = list.filter((item) => item.status === filtroStatus);
     if (filtroCliente) list = list.filter((item) => item.clienteNome.toLowerCase().includes(filtroCliente.toLowerCase()));
     return list;
-  }, [agendamentos, filtroStatus, filtroCliente]);
+  }, [agendamentos, filtroCliente, filtroStatus]);
+
+  const agFiltrados = useMemo(() => {
+    let list = agendamentosBase;
+    if (filtroPeriodo === "mes") {
+      list = list.filter((item) => {
+        const date = new Date(`${item.dataAgendada}T12:00:00`);
+        return String(date.getFullYear()) === filtroAno && String(date.getMonth() + 1).padStart(2, "0") === filtroMes;
+      });
+    }
+    if (filtroPeriodo === "ano") {
+      list = list.filter((item) => String(new Date(`${item.dataAgendada}T12:00:00`).getFullYear()) === filtroAno);
+    }
+    if (filtroPeriodo === "semana") {
+      const start = startOfWeek(new Date(`${filtroSemanaBase}T12:00:00`));
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      list = list.filter((item) => {
+        const date = new Date(`${item.dataAgendada}T12:00:00`);
+        return date >= start && date <= end;
+      });
+    }
+    return list;
+  }, [agendamentosBase, filtroAno, filtroMes, filtroPeriodo, filtroSemanaBase]);
+
+  const calendarioMes = useMemo(() => monthCalendarDays(Number(filtroAno), Number(filtroMes)), [filtroAno, filtroMes]);
+  const eventosPorDia = useMemo(() => {
+    const grouped = new Map<string, AgendamentoApp[]>();
+    agFiltrados.forEach((item) => grouped.set(item.dataAgendada, [...(grouped.get(item.dataAgendada) ?? []), item]));
+    return grouped;
+  }, [agFiltrados]);
+  const resumoAnual = useMemo(() => monthOptions.map(([value, label]) => ({
+    value,
+    label,
+    items: agendamentosBase.filter((item) => {
+      const date = new Date(`${item.dataAgendada}T12:00:00`);
+      return String(date.getFullYear()) === filtroAno && String(date.getMonth() + 1).padStart(2, "0") === value;
+    }),
+  })), [agendamentosBase, filtroAno]);
 
   const counts = useMemo(() => {
     const result: Record<string, number> = { todos: agendamentos.length };
@@ -142,6 +229,13 @@ export default function Agendamento() {
 
   const agDaOs = agendamentos.find((item) => item.id === osAgId);
   const contratoDaOs = contratos.find((item) => item.id === agDaOs?.contratoId);
+  const agDetalhe = agendamentos.find((item) => item.id === detalheAgendamentoId);
+  const contratoDetalhe = contratos.find((item) => item.id === agDetalhe?.contratoId);
+  const anosDisponiveis = useMemo(() => {
+    const years = new Set([String(new Date().getFullYear())]);
+    agendamentos.forEach((item) => years.add(String(new Date(`${item.dataAgendada}T12:00:00`).getFullYear())));
+    return [...years].sort();
+  }, [agendamentos]);
 
   function resetFormulario() {
     setContratoId("");
@@ -163,27 +257,31 @@ export default function Agendamento() {
       return;
     }
     const equipe = tecnicos.filter((item) => tecnicosSelecionados.includes(item.id));
-    await saveSchedule({
-      id: newId(),
-      clienteId,
-      clienteNome: contratoAtivo.cliente,
-      clienteCnpj: contratoAtivo.cnpj,
-      contratoId,
-      servico: contratoAtivo.servico,
-      tipo: contratoAtivo.tipo,
-      dataAgendada,
-      localExecucao,
-      tags: tagsSelecionadas.join(", "),
-      observacao,
-      tecnicosIds: equipe.map((item) => item.id),
-      tecnicosNomes: equipe.map((item) => item.nome),
-      veiculoId: veiculoSelecionado?.id,
-      veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
-      status: "agendado",
-    });
-    toast.success("Agendamento criado!");
-    resetFormulario();
-    reload();
+    try {
+      await saveSchedule({
+        id: newId(),
+        clienteId,
+        clienteNome: contratoAtivo.cliente,
+        clienteCnpj: contratoAtivo.cnpj,
+        contratoId,
+        servico: contratoAtivo.servico,
+        tipo: contratoAtivo.tipo,
+        dataAgendada,
+        localExecucao,
+        tags: tagsSelecionadas.join(", "),
+        observacao,
+        tecnicosIds: equipe.map((item) => item.id),
+        tecnicosNomes: equipe.map((item) => item.nome),
+        veiculoId: veiculoSelecionado?.id,
+        veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
+        status: "agendado",
+      });
+      toast.success("Agendamento criado!");
+      resetFormulario();
+      reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao criar agendamento");
+    }
   }
 
   async function confirmRecurring(id: string) {
@@ -208,30 +306,23 @@ export default function Agendamento() {
 
   async function handleGerarOS() {
     if (!osAgId) return;
-    await generateOrderFromSchedule(osAgId, osTecnico);
-    const bootstrap = await getBootstrap();
-    setData(bootstrap);
-    const criada = bootstrap.orders.find((item) => item.agendamentoId === osAgId);
-    if (criada) {
-      setOsGerada(criada);
-      toast.success(`${criada.numero} gerada!`);
+    try {
+      await generateOrderFromSchedule(osAgId, osTecnico);
+      const bootstrap = await getBootstrap();
+      setData(bootstrap);
+      const criada = bootstrap.orders.find((item) => item.agendamentoId === osAgId);
+      if (criada) {
+        setOsGerada(criada);
+        toast.success(`${criada.numero} gerada!`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao gerar OS");
     }
   }
 
   function imprimirOS() {
     if (!osGerada) return;
     printOsDocument(osGerada, data);
-    return;
-    const equipe = osGerada.equipeTecnicosNomes?.length ? osGerada.equipeTecnicosNomes.join(" • ") : osGerada.tecnicoNome;
-    const janela = window.open("", "_blank", "width=960,height=720");
-    if (!janela) return;
-    janela.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${osGerada.numero}</title>
-      <style>*{box-sizing:border-box}body{font-family:Inter,sans-serif;font-size:11px;padding:10mm;color:#000}table{width:100%;border-collapse:collapse;margin-bottom:8px}th,td{border:1px solid #555;padding:4px 6px}th{background:#f0f0f0;font-weight:700}h2{text-align:center;margin-bottom:12px;font-size:14px}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #166534;padding-bottom:10px;margin-bottom:12px}.logo-box{background:#166534;color:#fff;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;border-radius:6px}.footer{border-top:2px solid #166534;padding-top:6px;text-align:center;color:#666;font-size:9px;margin-top:16px}</style></head><body>
-      <div class="header"><div style="display:flex;align-items:center;gap:10px"><div class="logo-box">CP</div><div><div style="font-size:16px;font-weight:800;color:#166534">CIPERPRAG</div><div style="font-size:9px;letter-spacing:3px;color:#888">SERVIÇOS</div></div></div><div style="text-align:right"><div style="font-size:13px;font-weight:bold">${osGerada.numero}</div><div style="font-size:10px;color:#666">Emitida em ${new Date().toLocaleDateString("pt-BR")}</div></div></div>
-      <h2>ORDEM DE SERVIÇO</h2>
-      <table><tr><td style="background:#f5f5f5;font-weight:bold;width:130px">CLIENTE</td><td>${osGerada.clienteNome}</td><td style="background:#f5f5f5;font-weight:bold;width:130px">CNPJ</td><td>${osGerada.clienteCnpj}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">SERVIÇO</td><td>${osGerada.servico}</td><td style="background:#f5f5f5;font-weight:bold">CONTRATO</td><td>${osGerada.contratoId}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">LOCAL</td><td>${osGerada.localExecucao}</td><td style="background:#f5f5f5;font-weight:bold">VEÍCULO</td><td>${osGerada.veiculoDescricao ?? "A definir"}</td></tr><tr><td style="background:#f5f5f5;font-weight:bold">TÉCNICO LÍDER</td><td>${osGerada.tecnicoNome}</td><td style="background:#f5f5f5;font-weight:bold">EQUIPE</td><td>${equipe}</td></tr></table>
-      <div class="footer">CIPERPRAG Controle de Pragas e Serviços LTDA • CNPJ 15.722.292/0001-43</div><script>window.onload=function(){window.print();}</script></body></html>`);
-    janela.document.close();
   }
 
   return (
@@ -258,7 +349,7 @@ export default function Agendamento() {
               <ClipboardCheck className="h-4 w-4 text-primary" />
               Origem correta
             </p>
-            <p className="mt-2 text-muted-foreground">Só entram aqui contratos vigentes e com saldo operacional criado pelo contrato/proposta.</p>
+            <p className="mt-2 text-muted-foreground">Só entram aqui contratos finais vigentes e com saldo operacional disponível.</p>
           </div>
           <div className="rounded-2xl border bg-card p-4">
             <p className="flex items-center gap-2 font-semibold">
@@ -342,7 +433,7 @@ export default function Agendamento() {
                 </Select>
                 {clienteId && contratosCliente.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
-                    Nenhum contrato vigente com saldo operacional para este cliente. Gere/aprove um contrato antes de agendar.
+                    Nenhum contrato final vigente com saldo operacional para este cliente. Gere e aprove a minuta antes do contrato final.
                   </p>
                 ) : null}
               </div>
@@ -445,19 +536,145 @@ export default function Agendamento() {
         </Card>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap border-b pb-3">
-        {[["todos", "Todos"], ...Object.entries(STATUS_CFG).map(([key, value]) => [key, value.label])].map(([status, label]) => (
-          <button key={status} onClick={() => setFiltroStatus(status)} className={cn("relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all", filtroStatus === status ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted")}>
-            {label}
-            {(counts[status] ?? agendamentos.length) > 0 && <span className={cn("ml-1.5 text-[10px] rounded-full px-1.5 py-0.5", filtroStatus === status ? "bg-white/20" : "bg-muted-foreground/10")}>{counts[status] ?? agendamentos.length}</span>}
-          </button>
-        ))}
-        <div className="ml-auto"><Input placeholder="Filtrar por cliente..." className="h-8 text-xs w-44" value={filtroCliente} onChange={(event) => setFiltroCliente(event.target.value)} /></div>
-      </div>
+      <Card className="panel-soft">
+        <CardContent className="space-y-4 pt-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="font-semibold">Agenda operacional</p>
+              <p className="text-sm text-muted-foreground">
+                {agFiltrados.length} agendamento(s) no filtro atual. Clique em um card para ver detalhes.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:min-w-[660px]">
+              <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mes">Mês</SelectItem>
+                  <SelectItem value="semana">Semana</SelectItem>
+                  <SelectItem value="ano">Ano</SelectItem>
+                  <SelectItem value="todos">Todos</SelectItem>
+                </SelectContent>
+              </Select>
+              {filtroPeriodo === "mes" || filtroPeriodo === "ano" ? (
+                <>
+                  {filtroPeriodo === "mes" ? (
+                    <Select value={filtroMes} onValueChange={setFiltroMes}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : <div className="hidden sm:block" />}
+                  <Select value={filtroAno} onValueChange={setFiltroAno}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {anosDisponiveis.map((year) => <SelectItem key={year} value={year}>{year}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </>
+              ) : null}
+              {filtroPeriodo === "semana" ? (
+                <Input type="date" className="h-9" value={filtroSemanaBase} onChange={(event) => setFiltroSemanaBase(event.target.value)} />
+              ) : null}
+              <Input placeholder="Filtrar cliente..." className="h-9 text-sm" value={filtroCliente} onChange={(event) => setFiltroCliente(event.target.value)} />
+            </div>
+          </div>
 
-      {!loading && agFiltrados.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {[["todos", "Todos"], ...Object.entries(STATUS_CFG).map(([key, value]) => [key, value.label])].map(([status, label]) => (
+              <button key={status} onClick={() => setFiltroStatus(status)} className={cn("relative rounded-xl px-3 py-1.5 text-xs font-semibold transition-all", filtroStatus === status ? "bg-primary text-white shadow-sm" : "bg-muted/60 text-muted-foreground hover:bg-muted")}>
+                {label}
+                {(counts[status] ?? agendamentos.length) > 0 && <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]", filtroStatus === status ? "bg-white/20" : "bg-muted-foreground/10")}>{counts[status] ?? agendamentos.length}</span>}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {!loading && filtroPeriodo === "mes" ? (
+        <Card className="overflow-hidden">
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 font-semibold"><CalendarDays className="h-4 w-4 text-primary" /> Calendário mensal</p>
+                <p className="text-sm text-muted-foreground">{monthOptions.find(([value]) => value === filtroMes)?.[1]} de {filtroAno}. Clique em um evento para abrir os detalhes.</p>
+              </div>
+              <Badge variant="secondary">{agFiltrados.length} agendamento(s)</Badge>
+            </div>
+            <div className="overflow-x-auto rounded-xl border">
+              <div className="min-w-[760px]">
+                <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-xs font-semibold text-muted-foreground">
+                  {WEEKDAY_LABELS.map((day) => <div key={day} className="px-2 py-2">{day}</div>)}
+                </div>
+                <div className="grid grid-cols-7">
+                  {calendarioMes.map((day) => {
+                    const key = dateKey(day);
+                    const eventos = eventosPorDia.get(key) ?? [];
+                    const isCurrentMonth = day.getMonth() + 1 === Number(filtroMes);
+                    return (
+                      <div key={key} className={cn("min-h-[112px] border-b border-r p-1.5 align-top", !isCurrentMonth && "bg-muted/20 text-muted-foreground")}>
+                        <div className="flex items-center justify-between px-1 text-xs font-semibold">
+                          <span>{day.getDate()}</span>
+                          {eventos.length > 0 ? <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{eventos.length}</span> : null}
+                        </div>
+                        <div className="mt-1 space-y-1">
+                          {eventos.slice(0, 3).map((item) => {
+                            const status = STATUS_CFG[item.status];
+                            return (
+                              <button key={item.id} type="button" onClick={() => setDetalheAgendamentoId(item.id)} className={cn("block w-full truncate rounded-md border px-1.5 py-1 text-left text-[10px] leading-tight transition-colors hover:border-primary hover:bg-primary/5", status?.cls)} title={`${item.clienteNome} — ${item.servico}`}>
+                                <span className="block truncate font-semibold">{item.clienteNome}</span>
+                                <span className="block truncate opacity-80">{item.servico}</span>
+                              </button>
+                            );
+                          })}
+                          {eventos.length > 3 ? <p className="px-1 text-[10px] font-semibold text-muted-foreground">+{eventos.length - 3} outro(s)</p> : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && filtroPeriodo === "ano" ? (
+        <Card>
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 font-semibold"><CalendarDays className="h-4 w-4 text-primary" /> Visão anual</p>
+                <p className="text-sm text-muted-foreground">Distribuição dos agendamentos de {filtroAno}. Selecione um mês para abrir o calendário detalhado.</p>
+              </div>
+              <Badge variant="secondary">{agendamentosBase.filter((item) => new Date(`${item.dataAgendada}T12:00:00`).getFullYear() === Number(filtroAno)).length} agendamento(s)</Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {resumoAnual.map((month) => {
+                const statusCount = Object.entries(STATUS_CFG).filter(([status]) => month.items.some((item) => item.status === status));
+                return (
+                  <button key={month.value} type="button" onClick={() => { setFiltroMes(month.value); setFiltroPeriodo("mes"); }} className="rounded-2xl border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">{month.label}</span>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{month.items.length}</span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, month.items.length * 18)}%` }} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {statusCount.length > 0 ? statusCount.map(([status, config]) => <span key={status} className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{config.label}</span>) : <span className="text-xs text-muted-foreground">Sem agendamentos</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!loading && filtroPeriodo !== "mes" && filtroPeriodo !== "ano" && agFiltrados.length === 0 ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-14 text-muted-foreground"><Clock className="h-10 w-10 mb-3 opacity-20" /><p className="text-sm font-medium">Nenhum agendamento encontrado</p></CardContent></Card>
-      ) : !loading ? (
+      ) : !loading && filtroPeriodo !== "mes" && filtroPeriodo !== "ano" ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {agFiltrados.map((agendamento) => {
             const status = STATUS_CFG[agendamento.status];
@@ -465,7 +682,11 @@ export default function Agendamento() {
             const vencido = dias < 0 && agendamento.status === "agendado";
             const Icon = status.icon;
             return (
-              <Card key={agendamento.id} className={cn("hover:shadow-md transition-all", vencido && "border-destructive/40")}>
+              <Card
+                key={agendamento.id}
+                className={cn("cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md", vencido && "border-destructive/40")}
+                onClick={() => setDetalheAgendamentoId(agendamento.id)}
+              >
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className={cn("inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border", status.cls)}><Icon className="h-3 w-3" /> {status.label}</span>
@@ -483,7 +704,16 @@ export default function Agendamento() {
                   </div>
                   {agendamento.status === "agendado" ? (
                     <div className="flex gap-2 pt-1 border-t">
-                      <Button size="sm" className="flex-1 gap-1.5 h-7 text-xs" onClick={() => openOsDialog(agendamento.id)}><FileText className="h-3.5 w-3.5" /> Gerar OS</Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 gap-1.5 h-7 text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openOsDialog(agendamento.id);
+                        }}
+                      >
+                        <FileText className="h-3.5 w-3.5" /> Gerar OS
+                      </Button>
                     </div>
                   ) : null}
                 </CardContent>
@@ -492,6 +722,69 @@ export default function Agendamento() {
           })}
         </div>
       ) : null}
+
+      <Dialog open={Boolean(agDetalhe)} onOpenChange={(open) => !open && setDetalheAgendamentoId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5 text-primary" />
+              Detalhes do agendamento
+            </DialogTitle>
+          </DialogHeader>
+          {agDetalhe ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border bg-muted/30 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-lg font-bold">{agDetalhe.clienteNome}</p>
+                    <p className="text-sm text-muted-foreground">{agDetalhe.servico}</p>
+                  </div>
+                  <Badge variant={agDetalhe.status === "agendado" ? "default" : "secondary"}>{agDetalhe.status}</Badge>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Data", fmtDate(agDetalhe.dataAgendada)],
+                  ["Contrato", agDetalhe.contratoId],
+                  ["Local", agDetalhe.localExecucao || "Não informado"],
+                  ["Tipo", agDetalhe.tipo === "sanitario" ? "Sanitário" : "Manutenção"],
+                  ["Equipe designada", agDetalhe.tecnicosNomes?.join(" • ") || "Não definida"],
+                  ["Veículo designado", agDetalhe.veiculoDescricao || "Não definido"],
+                  ["Tags/equipamentos", agDetalhe.tags || "Não informado"],
+                  ["Saldo operacional", contratoDetalhe ? formatQuantityUnit(contratoDetalhe.contratado - contratoDetalhe.executado, contratoDetalhe.unidade) : "Não disponível"],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+                    <p className="mt-1 text-sm font-semibold">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {agDetalhe.observacao ? (
+                <div className="rounded-xl border p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Observação</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{agDetalhe.observacao}</p>
+                </div>
+              ) : null}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDetalheAgendamentoId(null)}>Fechar</Button>
+                {agDetalhe.status === "agendado" ? (
+                  <Button
+                    onClick={() => {
+                      setDetalheAgendamentoId(null);
+                      openOsDialog(agDetalhe.id);
+                    }}
+                  >
+                    Gerar OS
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={osDialog} onOpenChange={(value) => { setOsDialog(value); if (!value) setOsGerada(null); }}>
         <DialogContent className="max-w-md">

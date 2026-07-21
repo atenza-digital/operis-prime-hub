@@ -103,7 +103,7 @@ async function main() {
 
   if ((await tableExists("contratos_templates")) && (await tableExists("contratos"))) {
     checks.push(await scalarCheck(
-      "Propostas aprovadas sem contrato gerado identificado",
+      "Propostas aprovadas sem minuta gerada identificada",
       `SELECT COUNT(*)::int AS total
          FROM ciperprag_hub.contratos_templates p
         WHERE p.tenant_id = $1
@@ -111,10 +111,27 @@ async function main() {
           AND p.status = 'aprovado'
           AND NOT EXISTS (
             SELECT 1
+              FROM ciperprag_hub.contratos_templates m
+             WHERE m.tenant_id = p.tenant_id
+               AND m.tipo = 'minuta'
+               AND m.observacoes ILIKE '%' || COALESCE(p.numero, p.id) || '%'
+          )`,
+      [tenantId],
+    ));
+
+    checks.push(await scalarCheck(
+      "Minutas aprovadas sem contrato final gerado identificado",
+      `SELECT COUNT(*)::int AS total
+         FROM ciperprag_hub.contratos_templates m
+        WHERE m.tenant_id = $1
+          AND m.tipo = 'minuta'
+          AND m.status IN ('aprovado', 'vigente')
+          AND NOT EXISTS (
+            SELECT 1
               FROM ciperprag_hub.contratos_templates c
-             WHERE c.tenant_id = p.tenant_id
+             WHERE c.tenant_id = m.tenant_id
                AND c.tipo = 'contrato'
-               AND c.observacoes ILIKE '%' || COALESCE(p.numero, p.id) || '%'
+               AND c.observacoes ILIKE '%' || COALESCE(m.numero, m.id) || '%'
           )`,
       [tenantId],
     ));

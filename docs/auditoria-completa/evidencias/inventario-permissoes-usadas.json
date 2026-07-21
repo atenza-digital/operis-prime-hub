@@ -1,0 +1,15 @@
+[
+  "...permissions",
+  "agenda.manage",
+  "auditoria.view",
+  "certificados.manage",
+  "clientes.manage",
+  "configuracoes.manage",
+  "contratos.manage",
+  "equipes.manage",
+  "medicoes.manage",
+  "os.close",
+  "os.manage",
+  "servicos.manage",
+  "usuarios.manage"
+]

@@ -85,6 +85,20 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS pop_versao VARCHAR(20)
   `);
 
+  // Keep databases created from older SQL snapshots compatible with the
+  // current commercial flow. These fields are part of the proposal/minuta
+  // payload and must exist before the first template is saved.
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates
+    ADD COLUMN IF NOT EXISTS titulo TEXT,
+    ADD COLUMN IF NOT EXISTS objeto TEXT,
+    ADD COLUMN IF NOT EXISTS validade_dias INTEGER DEFAULT 30,
+    ADD COLUMN IF NOT EXISTS modalidade TEXT,
+    ADD COLUMN IF NOT EXISTS locais_execucao JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS escopo_tecnico TEXT,
+    ADD COLUMN IF NOT EXISTS condicoes_comerciais TEXT
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.servico_pops (
       id VARCHAR(30) PRIMARY KEY,
@@ -387,6 +401,7 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.certificados
     ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
+    ADD COLUMN IF NOT EXISTS tag_equipamento_servico TEXT,
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
     ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,
@@ -513,7 +528,21 @@ export async function ensureDatabaseShape() {
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.medicoes
     ADD CONSTRAINT medicoes_financeiro_status_check
-    CHECK (financeiro_status IN ('em_conferencia','aguardando_nf','nf_enviada','aguardando_pagamento','pago_no_erp','pendente_cliente','cancelada'))
+    CHECK (financeiro_status IN (
+      'em_conferencia',
+      'emitida',
+      'enviada_ao_cliente',
+      'aceita',
+      'aguardando_nf',
+      'nf_registrada',
+      'nf_enviada',
+      'aguardando_pagamento',
+      'paga',
+      'pago_no_erp',
+      'pendente_cliente',
+      'cancelada',
+      'substituida'
+    ))
   `);
 
   await query(`
@@ -528,6 +557,7 @@ export async function ensureDatabaseShape() {
     CREATE TABLE IF NOT EXISTS ciperprag_hub.medicao_itens (
       id BIGSERIAL PRIMARY KEY,
       medicao_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.medicoes(id) ON DELETE CASCADE,
+      tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
       os_id VARCHAR(30) NOT NULL,
       os_numero VARCHAR(30),
       contrato_id VARCHAR(20),
@@ -537,7 +567,27 @@ export async function ensureDatabaseShape() {
       unidade VARCHAR(30),
       valor_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
       valor_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+      medicao_ativa BOOLEAN NOT NULL DEFAULT TRUE,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.medicao_itens ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES ciperprag_hub.tenants(id)");
+  await query(`
+    UPDATE ciperprag_hub.medicao_itens mi
+    SET tenant_id = m.tenant_id
+    FROM ciperprag_hub.medicoes m
+    WHERE m.id = mi.medicao_id
+      AND mi.tenant_id IS DISTINCT FROM m.tenant_id
+  `);
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.medicao_itens ADD COLUMN IF NOT EXISTS medicao_ativa BOOLEAN NOT NULL DEFAULT TRUE");
+  await query(`
+    UPDATE ciperprag_hub.medicao_itens mi
+    SET medicao_ativa = EXISTS (
+      SELECT 1
+      FROM ciperprag_hub.medicoes m
+      WHERE m.id = mi.medicao_id
+        AND m.status <> 'cancelada'
     )
   `);
 
@@ -549,6 +599,8 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_medicoes_tenant ON ciperprag_hub.medicoes(tenant_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_medicao ON ciperprag_hub.medicao_itens(medicao_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_os ON ciperprag_hub.medicao_itens(os_id)");
+  await query("DROP INDEX IF EXISTS ciperprag_hub.ux_medicao_itens_os_ativa");
+  await query("CREATE UNIQUE INDEX IF NOT EXISTS ux_medicao_itens_tenant_os_ativa ON ciperprag_hub.medicao_itens(tenant_id, os_id) WHERE medicao_ativa IS TRUE AND tenant_id IS NOT NULL");
 
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.evidencias_anexos (
@@ -565,9 +617,13 @@ export async function ensureDatabaseShape() {
       metadados JSONB NOT NULL DEFAULT '{}'::jsonb,
       hash_sha256 VARCHAR(64),
       imutavel BOOLEAN NOT NULL DEFAULT FALSE,
+      storage_provider VARCHAR(40) NOT NULL DEFAULT 'database',
+      storage_bucket TEXT,
+      storage_key TEXT,
+      storage_etag TEXT,
       criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato')),
+      CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta')),
       CONSTRAINT evidencias_anexos_categoria_check CHECK (categoria IN ('evidencia','foto','documento','pop_aprovado','pdf_historico','outro'))
     )
   `);
@@ -578,8 +634,22 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS imutavel BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS template_codigo VARCHAR(80),
     ADD COLUMN IF NOT EXISTS template_versao VARCHAR(40),
-    ADD COLUMN IF NOT EXISTS snapshot_hash_sha256 VARCHAR(64)
+    ADD COLUMN IF NOT EXISTS snapshot_hash_sha256 VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS storage_provider VARCHAR(40) NOT NULL DEFAULT 'database',
+    ADD COLUMN IF NOT EXISTS storage_bucket TEXT,
+    ADD COLUMN IF NOT EXISTS storage_key TEXT,
+    ADD COLUMN IF NOT EXISTS storage_etag TEXT
   `);
+
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates DROP CONSTRAINT IF EXISTS contratos_templates_tipo_check");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates ADD CONSTRAINT contratos_templates_tipo_check CHECK (tipo IN ('contrato','proposta','minuta'))");
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates_servicos
+    ADD COLUMN IF NOT EXISTS descricao_comercial TEXT,
+    ADD COLUMN IF NOT EXISTS unidade_comercial TEXT
+  `);
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos DROP CONSTRAINT IF EXISTS evidencias_anexos_entidade_check");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos ADD CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta','minuta'))");
 
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_entidade ON ciperprag_hub.evidencias_anexos(entidade_tipo, entidade_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_tenant ON ciperprag_hub.evidencias_anexos(tenant_id)");
@@ -588,6 +658,8 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_snapshot_hash_sha256 ON ciperprag_hub.evidencias_anexos(snapshot_hash_sha256)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_template ON ciperprag_hub.evidencias_anexos(template_codigo, template_versao)");
   await query("CREATE INDEX IF NOT EXISTS idx_evidencias_imutavel ON ciperprag_hub.evidencias_anexos(imutavel)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_storage_provider ON ciperprag_hub.evidencias_anexos(storage_provider)");
+  await query("CREATE INDEX IF NOT EXISTS idx_evidencias_storage_key ON ciperprag_hub.evidencias_anexos(storage_key)");
 
   await query(`
     WITH tenant AS (

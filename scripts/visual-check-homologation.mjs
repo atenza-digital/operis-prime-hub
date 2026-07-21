@@ -85,6 +85,21 @@ async function main() {
   const medicaoPath = path.join(outputDir, "medicao-checagem-visual.png");
   await page.screenshot({ path: medicaoPath, fullPage: true });
 
+  await page.goto(`${baseUrl}/agendar`, { waitUntil: "networkidle" });
+  await page.getByText(/Agenda operacional/i).first().waitFor({ timeout: 20000 });
+  const periodSelect = page.getByRole("combobox").first();
+  await periodSelect.click();
+  await page.getByRole("option", { name: "Ano", exact: true }).click();
+  await page.getByText(/Vis.*anual/i).first().waitFor({ timeout: 20000 });
+  const agendaAnnualPath = path.join(outputDir, "agenda-visao-anual.png");
+  await page.screenshot({ path: agendaAnnualPath, fullPage: true });
+
+  await periodSelect.click();
+  await page.getByRole("option", { name: /M.*s/i }).click();
+  await page.getByText(/Calend.*rio mensal/i).first().waitFor({ timeout: 20000 });
+  const agendaMonthlyPath = path.join(outputDir, "agenda-visao-mensal.png");
+  await page.screenshot({ path: agendaMonthlyPath, fullPage: true });
+
   await page.goto(`${baseUrl}/comercial/configuracoes`, { waitUntil: "networkidle" });
   await page.getByText(/Assets documentais do tenant/i).first().waitFor({ timeout: 20000 });
 
@@ -95,7 +110,9 @@ async function main() {
     email,
     selectedMeasurementPanel: (await page.locator("text=/Medi.*selecionada/i").count()) > 0,
     tenantAssetsPanel: (await page.getByText(/Assets documentais do tenant/i).count()) > 0,
-    screenshots: [dashboardPath, medicaoPath, configuracoesPath],
+    agendaAnnualView: (await page.getByText(/Vis.*anual/i).count()) > 0,
+    agendaMonthlyView: (await page.getByText(/Calend.*rio mensal/i).count()) > 0,
+    screenshots: [dashboardPath, medicaoPath, agendaAnnualPath, agendaMonthlyPath, configuracoesPath],
   };
 
   await browser.close();

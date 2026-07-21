@@ -3,16 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Certificado</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap"
-    rel="stylesheet"
-  />
+  <meta name="author" content="{{pdf_author}}" />
+  <meta name="subject" content="{{pdf_subject}}" />
+  <meta name="keywords" content="{{pdf_keywords}}" />
+  <title>{{pdf_title}}</title>
 
   <style>
+    {{document_font_faces}}
     @page {
       size: A4 landscape;
       margin: 0;
@@ -38,7 +35,7 @@
     body {
       margin: 0;
       padding: 0;
-      font-family: "Montserrat", Arial, sans-serif;
+      font-family: "Montserrat", sans-serif;
       background: #ffffff;
       color: var(--texto);
     }
@@ -101,7 +98,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      gap: 2mm;
+      gap: 1.6mm;
     }
 
     .top-spacer {
@@ -126,6 +123,41 @@
       font-size: 3.85mm;
       font-weight: 900;
       line-height: 1.12;
+    }
+
+    .trace-card {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 1mm;
+      max-width: 178mm;
+      margin: 1.1mm auto 0;
+      min-height: 5.8mm;
+      padding: 1.1mm 2.1mm;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid color-mix(in srgb, var(--verde) 24%, transparent);
+      color: #253142;
+      font-size: 2.55mm;
+      line-height: 1.12;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .trace-item {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.55mm;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .trace-label {
+      color: var(--verde-escuro);
+      font-size: 1.85mm;
+      font-weight: 900;
+      text-transform: uppercase;
     }
 
     .auth-box-top {
@@ -163,10 +195,20 @@
     }
 
     .qr-hash {
-      font-size: 2.02mm;
-      line-height: 1.08;
+      font-size: 1.82mm;
+      line-height: 1.12;
       color: #444;
-      word-break: break-all;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .qr-fingerprint {
+      margin-top: 0.55mm;
+      font-size: 1.54mm;
+      line-height: 1.08;
+      color: #5b6473;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .qr-link {
@@ -182,8 +224,8 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.35mm;
-      margin-top: -2.4mm;
+      gap: 0.8mm;
+      margin-top: -1.6mm;
     }
 
     .logo-principal {
@@ -192,6 +234,18 @@
       object-fit: contain;
       display: block;
       margin-bottom: -0.4mm;
+    }
+
+    .marca-textual {
+      max-width: 96mm;
+      color: var(--verde-escuro);
+      font-size: 5.2mm;
+      font-weight: 900;
+      line-height: 1.04;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 1mm;
     }
 
     .titulo {
@@ -244,7 +298,7 @@
     }
 
     .local {
-      margin-top: 0.7mm;
+      margin-top: 1.1mm;
       font-size: 5.2mm;
       font-weight: 500;
       line-height: 1;
@@ -257,15 +311,16 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 4mm;
+      gap: 3.2mm;
       margin-top: 0.8mm;
       margin-bottom: 0.8mm;
       flex-wrap: nowrap;
     }
 
     .gallery-item {
-      width: 39mm;
-      height: 20mm;
+      position: relative;
+      width: 43mm;
+      height: 23mm;
       border-radius: 8px;
       overflow: hidden;
       border: 1.6px solid var(--verde);
@@ -280,6 +335,25 @@
       object-fit: cover;
       object-position: center;
       display: block;
+    }
+
+    .gallery-item.fit-contain img {
+      object-fit: contain;
+      background: #f8fafc;
+    }
+
+    .gallery-item figcaption {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0.7mm 1mm;
+      background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.68));
+      color: #fff;
+      font-size: 1.75mm;
+      line-height: 1.05;
+      font-weight: 700;
+      text-align: left;
     }
 
     .section-title {
@@ -317,9 +391,9 @@
     th,
     td {
       border: 1px solid var(--verde-borda);
-      padding: 0.45mm 0.75mm;
+      padding: 0.85mm 1mm;
       vertical-align: middle;
-      line-height: 0.98;
+      line-height: 1.08;
     }
 
     th {
@@ -360,7 +434,7 @@
       font-weight: 900;
       font-style: italic;
       text-transform: uppercase;
-      margin: 0.45mm 0 0.4mm;
+      margin: 0.9mm 0 0.85mm;
     }
 
     .licenca-card {
@@ -375,7 +449,7 @@
       font-size: 2.8mm;
       font-weight: 900;
       text-transform: uppercase;
-      padding: 1mm 1.5mm;
+      padding: 1.2mm 1.5mm;
       line-height: 1.05;
     }
 
@@ -386,19 +460,36 @@
     }
 
     .licenca-grid div {
-      min-height: 6mm;
+      min-height: 9mm;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 0.45mm;
+      gap: 0.85mm;
+      padding: 1mm 0.7mm;
       border-right: 1px solid color-mix(in srgb, var(--verde) 35%, transparent);
-      font-size: 2.15mm;
+      font-size: 2.2mm;
       font-weight: 700;
-      line-height: 1.02;
+      line-height: 1.12;
       color: #242424;
       background: #fff;
       overflow-wrap: anywhere;
+    }
+
+    .licenca-label {
+      display: block;
+      font-size: 2.05mm;
+      font-weight: 900;
+      line-height: 1.08;
+      text-transform: uppercase;
+    }
+
+    .licenca-value {
+      display: block;
+      font-size: 2.35mm;
+      font-weight: 700;
+      line-height: 1.12;
     }
 
     .licenca-grid div:last-child {
@@ -407,12 +498,12 @@
 
     .texto {
       text-align: center;
-      font-size: 2.65mm;
-      line-height: 1.12;
+      font-size: 2.9mm;
+      line-height: 1.24;
       color: #2f2f2f;
       font-weight: 500;
-      padding: 0.45mm 8mm 0;
-      margin-top: 0.25mm;
+      padding: 1.2mm 9mm 0;
+      margin-top: 0.7mm;
     }
 
     .texto strong {
@@ -423,19 +514,19 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      gap: 1.3mm;
+      gap: 1.8mm;
       margin-top: 1mm;
       padding-bottom: 1mm;
     }
 
     .footer-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(34mm, 1fr));
       gap: 6mm;
       align-items: center;
       justify-items: center;
       width: 100%;
-      max-width: 146mm;
+      max-width: 156mm;
       margin: 0 auto;
     }
 
@@ -552,6 +643,105 @@
       letter-spacing: 0.02em;
     }
 
+    .page:has(.gallery) .hero {
+      gap: 0.45mm;
+      margin-top: -3mm;
+    }
+
+    .page:has(.gallery) .titulo {
+      font-size: 6.55mm;
+    }
+
+    .page:has(.gallery) .empresa-nome {
+      font-size: 4.75mm;
+    }
+
+    .page:has(.gallery) .empresa-info {
+      font-size: 3mm;
+    }
+
+    .page:has(.gallery) .local {
+      margin-top: 0.75mm;
+      font-size: 4.8mm;
+    }
+
+    .page:has(.gallery) .trace-card {
+      margin-top: 0.75mm;
+      padding-top: 0.62mm;
+      padding-bottom: 0.62mm;
+    }
+
+    .page:has(.gallery) .gallery {
+      margin-top: 0.35mm;
+      margin-bottom: 0.25mm;
+    }
+
+    .page:has(.gallery) .gallery-item {
+      width: 40mm;
+      height: 20.5mm;
+    }
+
+    .page:has(.gallery) .section-title {
+      margin-top: 0;
+      margin-bottom: 0.3mm;
+      font-size: 3.25mm;
+    }
+
+    .page:has(.gallery) th,
+    .page:has(.gallery) td {
+      padding: 0.62mm 0.85mm;
+      font-size: 2.05mm;
+      line-height: 1.02;
+    }
+
+    .page:has(.gallery) .warning {
+      margin: 0.45mm 0;
+      font-size: 2.9mm;
+    }
+
+    .page:has(.gallery) .licenca-top {
+      padding: 0.95mm 1.2mm;
+      font-size: 2.5mm;
+    }
+
+    .page:has(.gallery) .licenca-grid div {
+      min-height: 7.5mm;
+      padding: 0.75mm 0.6mm;
+      font-size: 2mm;
+    }
+
+    .page:has(.gallery) .texto {
+      margin-top: 0.35mm;
+      padding-top: 0.7mm;
+      font-size: 2.65mm;
+      line-height: 1.18;
+    }
+
+    .page:has(.gallery) .bottom-area {
+      gap: 1mm;
+      padding-bottom: 0;
+    }
+
+    .page:has(.gallery) .footer-grid {
+      max-width: 140mm;
+      gap: 4mm;
+    }
+
+    .page:has(.gallery) .footer-col {
+      min-height: 10mm;
+    }
+
+    .page:has(.gallery) .footer-center {
+      margin-top: 0.6mm;
+      font-size: 2.08mm;
+      line-height: 1.1;
+    }
+
+    .page:has(.gallery) .footer-center .empresa {
+      font-size: 2.35mm;
+      margin-bottom: 0.35mm;
+    }
+
     @media print {
       html,
       body {
@@ -570,16 +760,13 @@
           <div class="top-spacer"></div>
 
           <div class="topbar-right">
-            <div class="validade-box">
-              <div class="label">Período de validade</div>
-              <div class="value">{{validade_texto}}</div>
-            </div>
+            {{validade_box_html}}
             {{qr_code_html}}
           </div>
         </div>
 
         <div class="hero">
-          <img class="logo-principal" src="{{logo_principal}}" alt="{{logo_principal_alt}}" />
+          {{emissor_marca_html}}
 
           <h1 class="titulo">{{certificado_titulo}}</h1>
           {{certificado_subtitulo_html}}
@@ -590,6 +777,7 @@
             <div class="empresa-info">{{cliente_nome}}, CNPJ: {{cliente_cnpj}}</div>
             <div class="empresa-info">{{cliente_endereco}}</div>
             <div class="local">{{local_execucao}}</div>
+            {{rastreabilidade_html}}
           </div>
         </div>
 

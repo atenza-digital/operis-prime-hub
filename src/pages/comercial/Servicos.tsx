@@ -238,7 +238,7 @@ export default function Servicos() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             <Briefcase className="h-6 w-6 text-primary" />
-            Catálogo de Serviços
+            Serviços
           </h1>
           <p className="text-sm text-muted-foreground">Regras técnicas, POPs versionados e checklists usados em OS, certificados e medições.</p>
         </div>

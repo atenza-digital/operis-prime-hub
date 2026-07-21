@@ -1,0 +1,156 @@
+[
+  {
+    "line": 52,
+    "path": "/login",
+    "permission": null,
+    "component": "Login",
+    "raw": "<Route path=\"/login\" element={<Login />} />"
+  },
+  {
+    "line": 53,
+    "path": "/alterar-senha",
+    "permission": null,
+    "component": "AlterarSenha",
+    "raw": "<Route path=\"/alterar-senha\" element={<AlterarSenha />} />"
+  },
+  {
+    "line": 54,
+    "path": "/validar-certificado",
+    "permission": null,
+    "component": "ValidarCertificado",
+    "raw": "<Route path=\"/validar-certificado\" element={<ValidarCertificado />} />"
+  },
+  {
+    "line": 55,
+    "path": "/validar-certificado/:hash",
+    "permission": null,
+    "component": "ValidarCertificado",
+    "raw": "<Route path=\"/validar-certificado/:hash\" element={<ValidarCertificado />} />"
+  },
+  {
+    "line": 57,
+    "path": "/",
+    "permission": "dashboard.view",
+    "component": "Dashboard",
+    "raw": "<Route element={<ProtectedRoute permission=\"dashboard.view\"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} path=\"/\" />"
+  },
+  {
+    "line": 58,
+    "path": "/agendar",
+    "permission": "agenda.manage",
+    "component": "Agendamento",
+    "raw": "<Route element={<ProtectedRoute permission=\"agenda.manage\"><AppLayout><Agendamento /></AppLayout></ProtectedRoute>} path=\"/agendar\" />"
+  },
+  {
+    "line": 59,
+    "path": "/os-gerar",
+    "permission": "os.manage",
+    "component": "OSGerar",
+    "raw": "<Route element={<ProtectedRoute permission=\"os.manage\"><AppLayout><OSGerar /></AppLayout></ProtectedRoute>} path=\"/os-gerar\" />"
+  },
+  {
+    "line": 60,
+    "path": "/ordens",
+    "permission": "os.manage",
+    "component": "OrdensServico",
+    "raw": "<Route element={<ProtectedRoute permission=\"os.manage\"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path=\"/ordens\" />"
+  },
+  {
+    "line": 61,
+    "path": "/os-finalizar",
+    "permission": "os.close",
+    "component": "OrdensServico",
+    "raw": "<Route element={<ProtectedRoute permission=\"os.close\"><AppLayout><OrdensServico /></AppLayout></ProtectedRoute>} path=\"/os-finalizar\" />"
+  },
+  {
+    "line": 62,
+    "path": "/historico",
+    "permission": "certificados.manage",
+    "component": "Historico",
+    "raw": "<Route element={<ProtectedRoute permission=\"certificados.manage\"><AppLayout><Historico /></AppLayout></ProtectedRoute>} path=\"/historico\" />"
+  },
+  {
+    "line": 63,
+    "path": "/medicao",
+    "permission": "medicoes.manage",
+    "component": "Medicao",
+    "raw": "<Route element={<ProtectedRoute permission=\"medicoes.manage\"><AppLayout><Medicao /></AppLayout></ProtectedRoute>} path=\"/medicao\" />"
+  },
+  {
+    "line": 64,
+    "path": "/auditoria-anexos",
+    "permission": "os.manage",
+    "component": "AuditoriaAnexos",
+    "raw": "<Route element={<ProtectedRoute permission=\"os.manage\"><AppLayout><AuditoriaAnexos /></AppLayout></ProtectedRoute>} path=\"/auditoria-anexos\" />"
+  },
+  {
+    "line": 65,
+    "path": "/certificados",
+    "permission": "certificados.manage",
+    "component": "Certificados",
+    "raw": "<Route element={<ProtectedRoute permission=\"certificados.manage\"><AppLayout><Certificados /></AppLayout></ProtectedRoute>} path=\"/certificados\" />"
+  },
+  {
+    "line": 66,
+    "path": "/equipes",
+    "permission": "equipes.manage",
+    "component": "Equipes",
+    "raw": "<Route element={<ProtectedRoute permission=\"equipes.manage\"><AppLayout><Equipes /></AppLayout></ProtectedRoute>} path=\"/equipes\" />"
+  },
+  {
+    "line": 67,
+    "path": "/visualizar",
+    "permission": "dashboard.view",
+    "component": "Visualizador",
+    "raw": "<Route element={<ProtectedRoute permission=\"dashboard.view\"><AppLayout><Visualizador /></AppLayout></ProtectedRoute>} path=\"/visualizar\" />"
+  },
+  {
+    "line": 68,
+    "path": "/usuarios",
+    "permission": "usuarios.manage",
+    "component": "Usuarios",
+    "raw": "<Route element={<ProtectedRoute permission=\"usuarios.manage\"><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} path=\"/usuarios\" />"
+  },
+  {
+    "line": 69,
+    "path": "/auditoria-eventos",
+    "permission": "auditoria.view",
+    "component": "AuditoriaEventos",
+    "raw": "<Route element={<ProtectedRoute permission=\"auditoria.view\"><AppLayout><AuditoriaEventos /></AppLayout></ProtectedRoute>} path=\"/auditoria-eventos\" />"
+  },
+  {
+    "line": 71,
+    "path": "/comercial/clientes",
+    "permission": "clientes.manage",
+    "component": "Clientes",
+    "raw": "<Route element={<ProtectedRoute permission=\"clientes.manage\"><AppLayout><Clientes /></AppLayout></ProtectedRoute>} path=\"/comercial/clientes\" />"
+  },
+  {
+    "line": 72,
+    "path": "/comercial/servicos",
+    "permission": "servicos.manage",
+    "component": "Servicos",
+    "raw": "<Route element={<ProtectedRoute permission=\"servicos.manage\"><AppLayout><Servicos /></AppLayout></ProtectedRoute>} path=\"/comercial/servicos\" />"
+  },
+  {
+    "line": 73,
+    "path": "/comercial/contratos",
+    "permission": "contratos.manage",
+    "component": "Contratos",
+    "raw": "<Route element={<ProtectedRoute permission=\"contratos.manage\"><AppLayout><Contratos /></AppLayout></ProtectedRoute>} path=\"/comercial/contratos\" />"
+  },
+  {
+    "line": 74,
+    "path": "/comercial/configuracoes",
+    "permission": "configuracoes.manage",
+    "component": "Configuracoes",
+    "raw": "<Route element={<ProtectedRoute permission=\"configuracoes.manage\"><AppLayout><Configuracoes /></AppLayout></ProtectedRoute>} path=\"/comercial/configuracoes\" />"
+  },
+  {
+    "line": 76,
+    "path": "*",
+    "permission": null,
+    "component": "NotFound",
+    "raw": "<Route path=\"*\" element={<NotFound />} />"
+  }
+]

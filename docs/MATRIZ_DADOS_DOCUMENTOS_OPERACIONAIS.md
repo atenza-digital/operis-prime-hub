@@ -23,7 +23,7 @@ Esta matriz define quais dados devem ser parametrizáveis no SaaS, quais vêm do
 
 ## Proposta e contrato
 
-A proposta e o contrato são documentos distintos no fluxo comercial. A proposta nasce primeiro, com escopo técnico-comercial, valores, validade e condições. Quando aprovada, ela deve originar o contrato, preservando os itens aprovados como base do contrato operacional.
+A proposta, a minuta e o contrato final são documentos distintos no fluxo comercial. A proposta nasce primeiro, com escopo técnico-comercial, valores, validade e condições. Quando aprovada, ela deve originar a minuta para revisão/negociação. Somente a minuta aprovada deve originar o contrato final vigente, preservando os itens aprovados como base do contrato operacional.
 
 | Campo/bloco | Origem dinâmica | Fallback permitido | Observação |
 | --- | --- | --- | --- |

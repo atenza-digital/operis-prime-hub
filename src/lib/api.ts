@@ -1,3 +1,5 @@
+import { repairMojibake } from "@/lib/repairMojibake";
+
 export interface ContatoCliente {
   nome: string;
   cargo: string;
@@ -143,7 +145,7 @@ export interface AgendamentoApp {
 
 export interface EvidenciaAnexoApp {
   id: string;
-  entidadeTipo: "os" | "certificado" | "medicao" | "servico_pop" | "cliente" | "contrato";
+  entidadeTipo: "os" | "certificado" | "medicao" | "servico_pop" | "cliente" | "contrato" | "proposta" | "minuta";
   entidadeId: string;
   categoria: "evidencia" | "foto" | "documento" | "pop_aprovado" | "pdf_historico" | "outro";
   nomeArquivo: string;
@@ -157,6 +159,10 @@ export interface EvidenciaAnexoApp {
   snapshotHashSha256?: string;
   templateCodigo?: string;
   templateVersao?: string;
+  storageProvider?: string;
+  storageBucket?: string;
+  storageKey?: string;
+  storageEtag?: string;
   imutavel?: boolean;
   criadoEm: string;
 }
@@ -299,6 +305,8 @@ export interface ContratoServico {
   quantidade: number;
   valorUnitario: number;
   frequencia: string;
+  descricaoComercial?: string;
+  unidadeComercial?: string;
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -308,14 +316,26 @@ export interface ContratoTemplate {
   id: string;
   numero: string;
   clienteId: string;
-  tipo: "contrato" | "proposta";
+  tipo: "contrato" | "proposta" | "minuta";
   servicos: ContratoServico[];
   vigenciaMeses: number;
   formaPagamento: string;
   prazoPagamentoDias: number;
-  status: "rascunho" | "enviado" | "aprovado" | "vigente" | "encerrado";
+  status: "rascunho" | "enviado" | "em_negociacao" | "aprovado" | "recusado" | "cancelado" | "vigente" | "encerrado";
   dataCriacao: string;
   observacoes: string;
+  titulo?: string;
+  objeto?: string;
+  validadeDias?: number;
+  modalidade?: string;
+  locaisExecucao?: string[];
+  escopoTecnico?: string;
+  condicoesComerciais?: string;
+  issueCity?: string;
+  issueState?: string;
+  issuedAt?: string;
+  timezone?: string;
+  issuingBranchId?: string;
   operacionalizado?: boolean;
   contratosOperacionaisIds?: string[];
 }
@@ -352,11 +372,16 @@ export interface EmpresaConfig {
     titulo?: string;
     subtitulo?: string;
     tipo?: string;
+    brandIconUrl?: string;
+    sidebarLogoDarkUrl?: string;
+    documentLogoLightUrl?: string;
     logoPrincipalUrl?: string;
     logoInterfaceUrl?: string;
     arteFundoUrl?: string;
     seloInstitucionalUrl?: string;
     assinaturaUrl?: string;
+    assinaturaModo?: "imagem" | "linha" | "ocultar" | "obrigatoria";
+    assinaturaDocumentos?: Record<string, "imagem" | "linha" | "ocultar" | "obrigatoria">;
     corPrimaria?: string;
     corSecundaria?: string;
     corDestaque?: string;
@@ -373,6 +398,17 @@ export interface EmpresaConfig {
     licencas?: Array<{ titulo?: string; valor?: string }>;
     textoLegalPadrao?: string;
     textoTecnicoPorServico?: Record<string, string>;
+    uploadPolicies?: Record<string, {
+      maxFiles?: number;
+      maxBytes?: number;
+      allowedMimeTypes?: string[];
+      securityScan?: {
+        required?: boolean;
+        provider?: string;
+        quarantineMode?: string;
+        blockingMode?: string;
+      };
+    }>;
   };
 }
 
@@ -426,12 +462,18 @@ export interface MedicaoItemApp {
 
 export type MedicaoFinanceiroStatus =
   | "em_conferencia"
+  | "emitida"
+  | "enviada_ao_cliente"
+  | "aceita"
   | "aguardando_nf"
+  | "nf_registrada"
   | "nf_enviada"
   | "aguardando_pagamento"
+  | "paga"
   | "pago_no_erp"
   | "pendente_cliente"
-  | "cancelada";
+  | "cancelada"
+  | "substituida";
 
 export interface MedicaoApp {
   id: string;
@@ -491,6 +533,7 @@ export interface AuthUser {
     slug: string;
     nome: string;
     logoUrl?: string | null;
+    brandIconUrl?: string | null;
     logoInterfaceUrl?: string | null;
   };
   perfis: Array<{ codigo: string; nome: string }>;
@@ -507,6 +550,7 @@ export interface PublicTenantContext {
   slug: string;
   nome: string;
   logoUrl?: string | null;
+  brandIconUrl?: string | null;
   logoInterfaceUrl?: string | null;
   corPrimaria?: string | null;
 }
@@ -573,7 +617,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Erro na API" }));
+    const isPayloadTooLarge = response.status === 413;
+    const error = await response.json().catch(() => ({
+      error: isPayloadTooLarge
+        ? "As fotos excedem o limite de envio. Reduza a quantidade ou o tamanho das imagens e tente novamente."
+        : `Erro na API (HTTP ${response.status})`,
+    }));
     if (response.status === 428 && window.location.pathname !== "/alterar-senha") {
       window.location.assign("/alterar-senha");
     }
@@ -586,6 +635,44 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(error.error || "Erro na API");
   }
   return response.json();
+}
+
+const SKIP_TEXT_REPAIR_KEYS = new Set([
+  "conteudoBase64",
+  "contentBase64",
+  "fotos",
+  "logoUrl",
+  "clienteLogoUrl",
+  "downloadUrl",
+  "url",
+  "hash",
+  "hashSha256",
+  "snapshotHashSha256",
+  "storageKey",
+  "storageEtag",
+  "token",
+]);
+
+function repairBootstrapText<T>(value: T, key = ""): T {
+  if (typeof value === "string") {
+    return (SKIP_TEXT_REPAIR_KEYS.has(key) ? value : repairMojibake(value)) as T;
+  }
+
+  if (Array.isArray(value)) {
+    if (SKIP_TEXT_REPAIR_KEYS.has(key)) return value;
+    return value.map((item) => repairBootstrapText(item)) as T;
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+        entryKey,
+        repairBootstrapText(entryValue, entryKey),
+      ]),
+    ) as T;
+  }
+
+  return value;
 }
 
 export async function fetchAttachmentBlob(id: string, download = false) {
@@ -612,7 +699,7 @@ export const addDays = (dateStr: string, days: number) => {
   return date.toISOString().split("T")[0];
 };
 
-export const getBootstrap = () => api<BootstrapData>("/bootstrap");
+export const getBootstrap = async () => repairBootstrapText(await api<BootstrapData>("/bootstrap"));
 export const getPublicTenantContext = (tenantSlug?: string | null) => {
   const search = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
   return api<{ ok: boolean; tenant: PublicTenantContext | null }>(`/public/tenant-context${search}`);
@@ -680,13 +767,27 @@ export const generateContractFromProposal = (id: string) => api<{
   numero: string;
   operationalSync?: { created: number; updated: number; disabled: number; skipped: boolean };
 }>(`/contract-templates/${id}/generate-contract`, { method: "POST" });
+export const generateMinutaFromProposal = (id: string) => api<{
+  ok: boolean;
+  id: string;
+  numero: string;
+}>(`/contract-templates/${id}/generate-minuta`, { method: "POST" });
+export const issueContractTemplateDocument = (id: string) => api<{
+  ok: boolean;
+  snapshotHashSha256: string | null;
+  attachment: Pick<EvidenciaAnexoApp, "id" | "hashSha256" | "snapshotHashSha256" | "templateCodigo" | "templateVersao" | "storageProvider">;
+}>(`/contract-templates/${id}/issue-document`, { method: "POST" });
+export const uploadContractTemplateSourceFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
+  ok: boolean;
+  attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string };
+}>(`/contract-templates/${id}/source-file`, { method: "POST", body: JSON.stringify(payload) });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string }) =>
-  api<{ ok: boolean; certificateHash?: string }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
-export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string }>(`/orders/${id}/certificado`, { method: "POST" });
+  api<{ ok: boolean; certificateHash?: string; certificateHashes?: string[] }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
+export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string; hashes?: string[] }>(`/orders/${id}/certificado`, { method: "POST" });
 export const getCertificateVerification = (hash: string) =>
   api<{ ok: boolean; certificate: CertificateVerification; verifiedAt: string }>(`/certificates/${encodeURIComponent(hash)}`);
 export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dismiss") =>

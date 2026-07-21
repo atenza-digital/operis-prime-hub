@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, FileSearch, FileText, Image as ImageIcon, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  Cloud,
+  Copy,
+  Download,
+  ExternalLink,
+  FileSearch,
+  FileText,
+  Image as ImageIcon,
+  Info,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp } from "@/lib/api";
 import { formatDateBr, formatTimeBr } from "@/lib/formatters";
@@ -18,6 +30,8 @@ const entityLabels: Record<EvidenciaAnexoApp["entidadeTipo"], string> = {
   servico_pop: "POP",
   cliente: "Cliente",
   contrato: "Contrato",
+  proposta: "Proposta",
+  minuta: "Minuta",
 };
 
 const categoryLabels: Record<EvidenciaAnexoApp["categoria"], string> = {
@@ -29,6 +43,8 @@ const categoryLabels: Record<EvidenciaAnexoApp["categoria"], string> = {
   outro: "Outro",
 };
 
+type StatusTone = "success" | "warning" | "info" | "muted";
+
 function formatBytes(value?: number) {
   if (!value) return "Não informado";
   if (value < 1024) return `${value} B`;
@@ -39,6 +55,115 @@ function formatBytes(value?: number) {
 function hashPreview(hash?: string) {
   if (!hash) return "Sem hash";
   return `${hash.slice(0, 12)}...${hash.slice(-8)}`;
+}
+
+function metadataText(anexo: EvidenciaAnexoApp, key: string) {
+  const value = anexo.metadados?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function metadataNumber(anexo: EvidenciaAnexoApp, key: string) {
+  const value = anexo.metadados?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function metadataBoolean(anexo: EvidenciaAnexoApp, key: string) {
+  return anexo.metadados?.[key] === true;
+}
+
+function metadataList(anexo: EvidenciaAnexoApp, key: string) {
+  const value = anexo.metadados?.[key];
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function storageStatus(anexo: EvidenciaAnexoApp): { label: string; detail: string; tone: StatusTone } {
+  const provider = anexo.storageProvider || metadataText(anexo, "storageProvider") || "database";
+  const upload = metadataText(anexo, "storageUpload");
+  const plannedProvider = metadataText(anexo, "plannedStorageProvider");
+  const ready = anexo.metadados?.storageReady === true;
+
+  if (provider === "r2") {
+    return { label: "R2 ativo", detail: "Arquivo servido pelo storage externo.", tone: "success" };
+  }
+  if (upload === "fallback_database") {
+    return { label: "Fallback banco", detail: "Tentou storage externo e preservou cópia no banco.", tone: "warning" };
+  }
+  if (plannedProvider === "r2" || ready) {
+    return { label: "Plano R2", detail: "Chave planejada para migração controlada.", tone: "info" };
+  }
+  return { label: "Banco", detail: "Conteúdo ainda persistido no banco.", tone: "muted" };
+}
+
+function securityStatus(anexo: EvidenciaAnexoApp): { label: string; detail: string; quarantine: string; tone: StatusTone } {
+  const scanStatus = metadataText(anexo, "securityScanStatus") || (metadataBoolean(anexo, "securityScanRequired") ? "pendente" : "validacao_basica");
+  const quarantineStatus = metadataText(anexo, "quarantineStatus") || "desativada";
+  const provider = metadataText(anexo, "securityScanProvider") || "validação local";
+
+  if (scanStatus === "clean") {
+    return { label: "Verificado", detail: provider, quarantine: quarantineStatus, tone: "success" };
+  }
+  if (scanStatus === "pending" || scanStatus === "pendente") {
+    return { label: "Pendente", detail: provider, quarantine: quarantineStatus, tone: "warning" };
+  }
+  if (scanStatus === "validacao_basica") {
+    return { label: "Validação básica", detail: "MIME, tamanho, base64 e assinatura.", quarantine: quarantineStatus, tone: "info" };
+  }
+  return { label: scanStatus, detail: provider, quarantine: quarantineStatus, tone: "muted" };
+}
+
+function policyLabel(anexo: EvidenciaAnexoApp) {
+  return metadataText(anexo, "uploadPolicyKey") || `${anexo.entidadeTipo}.${anexo.categoria}`;
+}
+
+function toneClass(tone: StatusTone) {
+  if (tone === "success") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (tone === "info") return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function detailRows(anexo: EvidenciaAnexoApp) {
+  const storage = storageStatus(anexo);
+  const security = securityStatus(anexo);
+  return [
+    ["ID do anexo", anexo.id],
+    ["Origem", `${entityLabels[anexo.entidadeTipo]} · ${anexo.entidadeId}`],
+    ["Categoria", categoryLabels[anexo.categoria]],
+    ["Arquivo", anexo.nomeArquivo],
+    ["MIME", anexo.mimeType || "Não informado"],
+    ["Tamanho", formatBytes(anexo.tamanhoBytes)],
+    ["Imutável", anexo.imutavel ? "Sim" : "Não"],
+    ["Storage", `${storage.label} · ${storage.detail}`],
+    ["Provider ativo", anexo.storageProvider || metadataText(anexo, "storageProvider") || "database"],
+    ["Bucket ativo", anexo.storageBucket || metadataText(anexo, "storageBucket") || "Não configurado"],
+    ["Chave ativa", anexo.storageKey || metadataText(anexo, "storageKey") || "Não configurada"],
+    ["Provider planejado", metadataText(anexo, "plannedStorageProvider") || "Não informado"],
+    ["Bucket planejado", metadataText(anexo, "plannedStorageBucket") || "Não informado"],
+    ["Chave planejada", metadataText(anexo, "plannedStorageKey") || "Não informada"],
+    ["Política", policyLabel(anexo)],
+    ["Limite de arquivos", metadataNumber(anexo, "uploadPolicyMaxFiles")?.toString() || "Não informado"],
+    ["Limite de tamanho", formatBytes(metadataNumber(anexo, "uploadPolicyMaxBytes"))],
+    ["Tipos permitidos", metadataList(anexo, "uploadPolicyAllowedMimeTypes").join(", ") || "Não informado"],
+    ["Segurança", `${security.label} · ${security.detail}`],
+    ["Quarentena", security.quarantine],
+    ["Hash SHA-256", anexo.hashSha256 || "Sem hash"],
+    ["Hash do snapshot", anexo.snapshotHashSha256 || "Sem hash"],
+    ["Template", [anexo.templateCodigo, anexo.templateVersao].filter(Boolean).join(" · ") || "Não informado"],
+    ["Criado em", `${formatDateBr(anexo.criadoEm)} às ${formatTimeBr(anexo.criadoEm)}`],
+  ];
+}
+
+function metadataJson(anexo: EvidenciaAnexoApp) {
+  return JSON.stringify(anexo.metadados || {}, null, 2);
+}
+
+async function copyText(value: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copiado.`);
+  } catch {
+    toast.error("Não foi possível copiar para a área de transferência.");
+  }
 }
 
 async function openAttachment(anexo: EvidenciaAnexoApp) {
@@ -67,7 +192,10 @@ export default function AuditoriaAnexos() {
   const [entityFilter, setEntityFilter] = useState("todos");
   const [categoryFilter, setCategoryFilter] = useState("todas");
   const [immutabilityFilter, setImmutabilityFilter] = useState("todos");
+  const [storageFilter, setStorageFilter] = useState("todos");
+  const [securityFilter, setSecurityFilter] = useState("todos");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedAttachment, setSelectedAttachment] = useState<EvidenciaAnexoApp | null>(null);
 
   useEffect(() => {
     getBootstrap()
@@ -81,9 +209,22 @@ export default function AuditoriaAnexos() {
   const filteredAttachments = useMemo(() => {
     const term = search.trim().toLowerCase();
     return attachments.filter((anexo) => {
+      const storage = storageStatus(anexo);
+      const security = securityStatus(anexo);
       const matchesSearch =
         !term ||
-        [anexo.id, anexo.entidadeId, anexo.nomeArquivo, anexo.mimeType, anexo.hashSha256, categoryLabels[anexo.categoria], entityLabels[anexo.entidadeTipo]]
+        [
+          anexo.id,
+          anexo.entidadeId,
+          anexo.nomeArquivo,
+          anexo.mimeType,
+          anexo.hashSha256,
+          categoryLabels[anexo.categoria],
+          entityLabels[anexo.entidadeTipo],
+          storage.label,
+          security.label,
+          policyLabel(anexo),
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(term));
       const matchesEntity = entityFilter === "todos" || anexo.entidadeTipo === entityFilter;
@@ -92,10 +233,21 @@ export default function AuditoriaAnexos() {
         immutabilityFilter === "todos" ||
         (immutabilityFilter === "imutaveis" && anexo.imutavel) ||
         (immutabilityFilter === "editaveis" && !anexo.imutavel);
+      const matchesStorage =
+        storageFilter === "todos" ||
+        (storageFilter === "r2" && storage.label === "R2 ativo") ||
+        (storageFilter === "plano-r2" && storage.label === "Plano R2") ||
+        (storageFilter === "banco" && storage.label === "Banco") ||
+        (storageFilter === "fallback" && storage.label === "Fallback banco");
+      const matchesSecurity =
+        securityFilter === "todos" ||
+        (securityFilter === "validacao-basica" && security.label === "Validação básica") ||
+        (securityFilter === "pendente" && security.label === "Pendente") ||
+        (securityFilter === "verificado" && security.label === "Verificado");
 
-      return matchesSearch && matchesEntity && matchesCategory && matchesImmutability;
+      return matchesSearch && matchesEntity && matchesCategory && matchesImmutability && matchesStorage && matchesSecurity;
     });
-  }, [attachments, categoryFilter, entityFilter, immutabilityFilter, search]);
+  }, [attachments, categoryFilter, entityFilter, immutabilityFilter, search, securityFilter, storageFilter]);
 
   const totals = useMemo(
     () => ({
@@ -104,6 +256,10 @@ export default function AuditoriaAnexos() {
       historical: attachments.filter((item) => item.categoria === "pdf_historico").length,
       serverPdf: attachments.filter((item) => item.mimeType === "application/pdf" && item.templateCodigo).length,
       images: attachments.filter((item) => item.mimeType?.startsWith("image/")).length,
+      r2: attachments.filter((item) => storageStatus(item).label === "R2 ativo").length,
+      plannedR2: attachments.filter((item) => storageStatus(item).label === "Plano R2").length,
+      basicValidated: attachments.filter((item) => securityStatus(item).label === "Validação básica").length,
+      securityPending: attachments.filter((item) => securityStatus(item).label === "Pendente").length,
     }),
     [attachments],
   );
@@ -128,10 +284,10 @@ export default function AuditoriaAnexos() {
       <PageHeader
         eyebrow="Operacional"
         title="Auditoria de Anexos"
-        description="Rastreie evidências de campo, documentos históricos, hashes e arquivos imutáveis gerados pela operação."
+        description="Rastreie evidências de campo, documentos históricos, hashes, políticas de upload e arquivos imutáveis gerados pela operação."
       />
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
             <FileSearch className="h-9 w-9 rounded-xl bg-emerald-50 p-2 text-emerald-700" />
@@ -171,6 +327,33 @@ export default function AuditoriaAnexos() {
         </Card>
       </div>
 
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardContent className="flex items-center gap-4 p-5">
+            <Cloud className="h-9 w-9 rounded-xl bg-blue-50 p-2 text-blue-700" />
+            <div>
+              <p className="text-sm text-muted-foreground">Storage externo</p>
+              <p className="text-2xl font-bold">{totals.r2}</p>
+              <p className="text-xs text-muted-foreground">{totals.plannedR2} com plano R2 preparado</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardContent className="grid gap-3 p-5 md:grid-cols-2">
+            <div>
+              <p className="text-sm font-semibold">Segurança de anexos</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                A homologação já bloqueia tipo indevido, base64 inválido, tamanho acima do limite e assinatura de arquivo divergente.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <Badge variant="outline">{totals.basicValidated} com validação básica</Badge>
+              <Badge variant={totals.securityPending ? "destructive" : "secondary"}>{totals.securityPending} pendente(s) de provedor externo</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -179,7 +362,7 @@ export default function AuditoriaAnexos() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr]">
+          <div className="grid gap-3 xl:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr]">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -221,15 +404,40 @@ export default function AuditoriaAnexos() {
                 <SelectItem value="editaveis">Somente editáveis</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={storageFilter} onValueChange={setStorageFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Storage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todo storage</SelectItem>
+                <SelectItem value="banco">Banco</SelectItem>
+                <SelectItem value="plano-r2">Plano R2</SelectItem>
+                <SelectItem value="r2">R2 ativo</SelectItem>
+                <SelectItem value="fallback">Fallback banco</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={securityFilter} onValueChange={setSecurityFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Segurança" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Toda segurança</SelectItem>
+                <SelectItem value="validacao-basica">Validação básica</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="verificado">Verificado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="rounded-xl border">
+          <div className="overflow-x-auto rounded-xl border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Arquivo</TableHead>
                   <TableHead>Origem</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Storage</TableHead>
+                  <TableHead>Política e segurança</TableHead>
                   <TableHead>Hash SHA-256</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -238,74 +446,168 @@ export default function AuditoriaAnexos() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                       Carregando anexos...
                     </TableCell>
                   </TableRow>
                 ) : null}
                 {!loading && filteredAttachments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                       Nenhum anexo encontrado para os filtros selecionados.
                     </TableCell>
                   </TableRow>
                 ) : null}
-                {filteredAttachments.map((anexo) => (
-                  <TableRow key={anexo.id}>
-                    <TableCell>
-                      <div className="font-medium">{anexo.nomeArquivo}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {anexo.mimeType || "Tipo não informado"} • {formatBytes(anexo.tamanhoBytes)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{entityLabels[anexo.entidadeTipo]}</Badge>
-                      <div className="mt-1 text-xs text-muted-foreground">{anexo.entidadeId}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant={anexo.categoria === "pdf_historico" ? "default" : "secondary"}>{categoryLabels[anexo.categoria]}</Badge>
-                        {anexo.imutavel ? <Badge variant="outline">Imutável</Badge> : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <code className="rounded bg-muted px-2 py-1 text-xs">{hashPreview(anexo.hashSha256)}</code>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatDateBr(anexo.criadoEm)}
-                      <div className="text-xs text-muted-foreground">{formatTimeBr(anexo.criadoEm)}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busyId === `open:${anexo.id}`}
-                          onClick={() => runAttachmentAction(anexo, "open")}
-                        >
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                          Abrir
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busyId === `download:${anexo.id}`}
-                          onClick={() => runAttachmentAction(anexo, "download")}
-                        >
-                          <Download className="mr-1 h-3.5 w-3.5" />
-                          Baixar
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredAttachments.map((anexo) => {
+                  const storage = storageStatus(anexo);
+                  const security = securityStatus(anexo);
+                  return (
+                    <TableRow key={anexo.id}>
+                      <TableCell className="min-w-[220px]">
+                        <div className="font-medium">{anexo.nomeArquivo}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {anexo.mimeType || "Tipo não informado"} • {formatBytes(anexo.tamanhoBytes)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{entityLabels[anexo.entidadeTipo]}</Badge>
+                        <div className="mt-1 text-xs text-muted-foreground">{anexo.entidadeId}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant={anexo.categoria === "pdf_historico" ? "default" : "secondary"}>{categoryLabels[anexo.categoria]}</Badge>
+                          {anexo.imutavel ? <Badge variant="outline">Imutável</Badge> : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="min-w-[150px]">
+                        <Badge variant="outline" className={toneClass(storage.tone)}>
+                          {storage.label}
+                        </Badge>
+                        <div className="mt-1 max-w-[220px] text-xs text-muted-foreground">{storage.detail}</div>
+                      </TableCell>
+                      <TableCell className="min-w-[190px]">
+                        <div className="text-xs font-semibold">{policyLabel(anexo)}</div>
+                        <Badge variant="outline" className={`mt-1 ${toneClass(security.tone)}`}>
+                          {security.label}
+                        </Badge>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {security.detail} · Quarentena: {security.quarantine}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <code className="rounded bg-muted px-2 py-1 text-xs">{hashPreview(anexo.hashSha256)}</code>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {formatDateBr(anexo.criadoEm)}
+                        <div className="text-xs text-muted-foreground">{formatTimeBr(anexo.criadoEm)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setSelectedAttachment(anexo)}>
+                            <Info className="mr-1 h-3.5 w-3.5" />
+                            Detalhes
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busyId === `open:${anexo.id}`}
+                            onClick={() => runAttachmentAction(anexo, "open")}
+                          >
+                            <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                            Abrir
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busyId === `download:${anexo.id}`}
+                            onClick={() => runAttachmentAction(anexo, "download")}
+                          >
+                            <Download className="mr-1 h-3.5 w-3.5" />
+                            Baixar
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
+
+      <Sheet open={Boolean(selectedAttachment)} onOpenChange={(open) => !open && setSelectedAttachment(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {selectedAttachment ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Detalhes do anexo</SheetTitle>
+                <SheetDescription>Metadados úteis para conferência, suporte, segurança e futura migração R2.</SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-6 space-y-5">
+                <div className="rounded-2xl border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold">{selectedAttachment.nomeArquivo}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {entityLabels[selectedAttachment.entidadeTipo]} · {selectedAttachment.entidadeId} · {categoryLabels[selectedAttachment.categoria]}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="outline" className={toneClass(storageStatus(selectedAttachment).tone)}>
+                      {storageStatus(selectedAttachment).label}
+                    </Badge>
+                    <Badge variant="outline" className={toneClass(securityStatus(selectedAttachment).tone)}>
+                      {securityStatus(selectedAttachment).label}
+                    </Badge>
+                    {selectedAttachment.imutavel ? <Badge variant="outline">Imutável</Badge> : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  {detailRows(selectedAttachment).map(([label, value]) => (
+                    <div key={label} className="grid gap-1 rounded-xl border p-3 sm:grid-cols-[160px_1fr]">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+                      <div className="break-all text-sm">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border">
+                  <div className="flex items-center justify-between border-b p-3">
+                    <div>
+                      <p className="text-sm font-semibold">Metadados brutos</p>
+                      <p className="text-xs text-muted-foreground">Use apenas para suporte técnico e auditoria.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => copyText(metadataJson(selectedAttachment), "Metadados")}>
+                      <Copy className="mr-1 h-3.5 w-3.5" />
+                      Copiar
+                    </Button>
+                  </div>
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all p-3 text-xs text-muted-foreground">
+                    {metadataJson(selectedAttachment)}
+                  </pre>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => copyText(selectedAttachment.id, "ID do anexo")}>
+                    <Copy className="mr-1 h-4 w-4" />
+                    Copiar ID
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => runAttachmentAction(selectedAttachment, "open")}>
+                    <ExternalLink className="mr-1 h-4 w-4" />
+                    Abrir
+                  </Button>
+                  <Button type="button" onClick={() => runAttachmentAction(selectedAttachment, "download")}>
+                    <Download className="mr-1 h-4 w-4" />
+                    Baixar
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

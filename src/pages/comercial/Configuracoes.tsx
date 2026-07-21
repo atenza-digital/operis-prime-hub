@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { getBootstrap, saveCompanyConfig, saveNumberingConfig, type EmpresaConfig, type NumeracaoConfig } from "@/lib/api";
-import logoDefault from "@/assets/logo_ciperprag.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Settings, Building2, Hash, ShieldCheck, Save, Image, FileCheck2, ReceiptText, Upload } from "lucide-react";
+import { Building2, FileCheck2, FileUp, Hash, Image, ReceiptText, Save, Settings, ShieldCheck, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 const defaultEmpresa: EmpresaConfig = {
@@ -17,7 +16,7 @@ const defaultEmpresa: EmpresaConfig = {
   endereco: "",
   telefone: "",
   email: "",
-  logoUrl: logoDefault,
+  logoUrl: "",
   corPrimaria: "#0b7a53",
   corSecundaria: "#64748b",
   corDestaque: "#0f5138",
@@ -59,10 +58,159 @@ const defaultNumeracao: NumeracaoConfig = {
   medicaoUltimo: 0,
 };
 
+type UploadPolicyKey = "os.foto" | "minuta.documento" | "servico_pop.pop_aprovado" | "cliente.documento" | "contrato.documento" | "documento.pdf_historico";
+type UploadPolicy = {
+  maxFiles: number;
+  maxBytes: number;
+  allowedMimeTypes: string[];
+  securityScan?: {
+    required?: boolean;
+    provider?: string;
+    quarantineMode?: string;
+    blockingMode?: string;
+  };
+};
+
+const uploadPolicyOptions = {
+  "os.foto": {
+    title: "Fotos da OS",
+    description: "Controla as evidências fotográficas enviadas no encerramento da ordem de serviço.",
+    defaults: {
+      maxFiles: 3,
+      maxBytes: 5 * 1024 * 1024,
+      allowedMimeTypes: ["image/png", "image/jpeg"],
+    },
+    mimeOptions: [
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "minuta.documento": {
+    title: "Arquivo de minuta/contrato do cliente",
+    description: "Controla o anexo usado quando o cliente fornece a própria minuta ou documento contratual.",
+    defaults: {
+      maxFiles: 1,
+      maxBytes: 8 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/msword", label: "DOC" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "servico_pop.pop_aprovado": {
+    title: "POP aprovado",
+    description: "Controla arquivos de POP enviados prontos pelo cliente para versionamento e consulta.",
+    defaults: {
+      maxFiles: 1,
+      maxBytes: 12 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "cliente.documento": {
+    title: "Documentos do cliente",
+    description: "Arquivos cadastrais, evidências administrativas ou documentos de apoio vinculados ao cliente.",
+    defaults: {
+      maxFiles: 10,
+      maxBytes: 10 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "contrato.documento": {
+    title: "Documentos contratuais",
+    description: "Arquivos auxiliares de proposta, minuta, contrato assinado ou anexos comerciais.",
+    defaults: {
+      maxFiles: 5,
+      maxBytes: 12 * 1024 * 1024,
+      allowedMimeTypes: [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.oasis.opendocument.text",
+        "image/png",
+        "image/jpeg",
+      ],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", label: "DOCX" },
+      { value: "application/msword", label: "DOC" },
+      { value: "application/vnd.oasis.opendocument.text", label: "ODT" },
+      { value: "image/png", label: "PNG" },
+      { value: "image/jpeg", label: "JPEG/JPG" },
+    ],
+  },
+  "documento.pdf_historico": {
+    title: "Documentos históricos gerados",
+    description: "PDF/HTML imutável gerado pelo sistema para auditoria, hash e histórico documental.",
+    defaults: {
+      maxFiles: 1,
+      maxBytes: 20 * 1024 * 1024,
+      allowedMimeTypes: ["application/pdf", "text/html"],
+    },
+    mimeOptions: [
+      { value: "application/pdf", label: "PDF" },
+      { value: "text/html", label: "HTML histórico" },
+    ],
+  },
+} satisfies Record<UploadPolicyKey, {
+  title: string;
+  description: string;
+  defaults: UploadPolicy;
+  mimeOptions: Array<{ value: string; label: string }>;
+}>;
+
 function gerarNumero(formato: string, sequencia: number) {
   return formato
     .replace("{SEQ}", String(sequencia).padStart(3, "0"))
     .replace("{ANO}", String(new Date().getFullYear()));
+}
+
+function readImageFile(file: File, onLoad: (value: string) => void) {
+  const reader = new FileReader();
+  reader.onload = (loadEvent) => onLoad(String(loadEvent.target?.result || ""));
+  reader.readAsDataURL(file);
+}
+
+function bytesToMb(bytes: number | undefined, fallback: number) {
+  return Math.max(1, Math.round((Number(bytes || fallback) / 1024 / 1024) * 10) / 10);
 }
 
 function NumberingCard({
@@ -89,15 +237,11 @@ function NumberingCard({
         <Label className="text-xs">Último número</Label>
         <Input type="number" value={ultimo} onChange={(event) => onUltimo(Number(event.target.value))} />
       </div>
-      <p className="text-xs text-muted-foreground">Próximo: <span className="font-mono font-bold">{gerarNumero(formato, ultimo + 1)}</span></p>
+      <p className="text-xs text-muted-foreground">
+        Próximo: <span className="font-mono font-bold">{gerarNumero(formato, ultimo + 1)}</span>
+      </p>
     </div>
   );
-}
-
-function readImageFile(file: File, onLoad: (value: string) => void) {
-  const reader = new FileReader();
-  reader.onload = (loadEvent) => onLoad(String(loadEvent.target?.result || ""));
-  reader.readAsDataURL(file);
 }
 
 function AssetUploadCard({
@@ -119,7 +263,7 @@ function AssetUploadCard({
         {value ? (
           <img src={value} alt={title} className="max-h-full max-w-full object-contain" />
         ) : (
-          <span className="text-xs text-muted-foreground">Nao configurado</span>
+          <span className="text-xs text-muted-foreground">Não configurado</span>
         )}
       </div>
       <div className="space-y-2">
@@ -150,11 +294,21 @@ export default function Configuracoes() {
   const [savingNumeracao, setSavingNumeracao] = useState(false);
   const [certificadoConfigText, setCertificadoConfigText] = useState("{}");
 
+  const certificadoConfig = useMemo(() => {
+    try {
+      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
+    } catch {
+      return {};
+    }
+  }, [certificadoConfigText]) as NonNullable<EmpresaConfig["certificadoConfig"]>;
+
+  const interfaceLogoUrl = certificadoConfig.sidebarLogoDarkUrl || certificadoConfig.logoInterfaceUrl;
+
   async function reload() {
     setLoading(true);
     try {
       const data = await getBootstrap();
-      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || logoDefault };
+      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || "" };
       setEmpresa(mergedEmpresa);
       setCertificadoConfigText(JSON.stringify(mergedEmpresa.certificadoConfig || {}, null, 2));
       setNumeracao({ ...defaultNumeracao, ...data.numberingConfig });
@@ -168,6 +322,48 @@ export default function Configuracoes() {
   useEffect(() => {
     reload();
   }, []);
+
+  function readCertificadoConfig() {
+    try {
+      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function updateCertificadoConfig(key: string, value: unknown) {
+    const currentConfig = readCertificadoConfig();
+    setCertificadoConfigText(JSON.stringify({ ...currentConfig, [key]: value }, null, 2));
+  }
+
+  function updateUploadPolicy(policyKey: UploadPolicyKey, patch: Partial<UploadPolicy>) {
+    const currentConfig = readCertificadoConfig();
+    const uploadPolicies = currentConfig.uploadPolicies && typeof currentConfig.uploadPolicies === "object" ? currentConfig.uploadPolicies : {};
+    const option = uploadPolicyOptions[policyKey];
+    const currentPolicy = uploadPolicies[policyKey] && typeof uploadPolicies[policyKey] === "object" ? uploadPolicies[policyKey] : {};
+    setCertificadoConfigText(JSON.stringify({
+      ...currentConfig,
+      uploadPolicies: {
+        ...uploadPolicies,
+        [policyKey]: {
+          ...option.defaults,
+          ...currentPolicy,
+          ...patch,
+        },
+      },
+    }, null, 2));
+  }
+
+  function resolveUploadPolicy(policyKey: UploadPolicyKey) {
+    const uploadPolicies = certificadoConfig.uploadPolicies && typeof certificadoConfig.uploadPolicies === "object"
+      ? certificadoConfig.uploadPolicies
+      : {};
+    const option = uploadPolicyOptions[policyKey];
+    return {
+      ...option.defaults,
+      ...(uploadPolicies[policyKey] || {}),
+    };
+  }
 
   async function handleSaveEmpresa() {
     setSavingEmpresa(true);
@@ -196,50 +392,30 @@ export default function Configuracoes() {
     }
   }
 
-  function handleLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     readImageFile(file, (value) => {
       setEmpresa((prev) => ({ ...prev, logoUrl: value }));
-      updateCertificadoConfig("logoPrincipalUrl", value);
+      const currentConfig = readCertificadoConfig();
+      setCertificadoConfigText(JSON.stringify({ ...currentConfig, documentLogoLightUrl: value, logoPrincipalUrl: value }, null, 2));
       toast.success("Logo atualizada na tela. Salve para gravar no banco.");
     });
     event.target.value = "";
   }
 
-  function readCertificadoConfig() {
-    try {
-      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
-    } catch {
-      return {};
-    }
-  }
-
-  function updateCertificadoConfig(key: string, value: unknown) {
-    const currentConfig = readCertificadoConfig();
-    setCertificadoConfigText(JSON.stringify({ ...currentConfig, [key]: value }, null, 2));
-  }
-
-  function handleInterfaceLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleInterfaceLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
     readImageFile(file, (value) => {
-      updateCertificadoConfig("logoInterfaceUrl", value);
+      const currentConfig = readCertificadoConfig();
+      setCertificadoConfigText(JSON.stringify({ ...currentConfig, sidebarLogoDarkUrl: value, logoInterfaceUrl: value }, null, 2));
       toast.success("Logo da interface atualizada na tela. Salve para gravar no banco.");
     });
     event.target.value = "";
   }
-
-  const certificadoConfig = useMemo(() => {
-    try {
-      return certificadoConfigText.trim() ? JSON.parse(certificadoConfigText) : {};
-    } catch {
-      return {};
-    }
-  }, [certificadoConfigText]);
-  const interfaceLogoUrl = certificadoConfig.logoInterfaceUrl as string | undefined;
 
   return (
     <div className="space-y-6">
@@ -248,7 +424,7 @@ export default function Configuracoes() {
           <Settings className="h-6 w-6 text-primary" />
           Configurações
         </h2>
-        <p className="text-sm text-muted-foreground">Identidade, licenças, textos e numerações usados nos documentos operacionais.</p>
+        <p className="text-sm text-muted-foreground">Identidade, licenças, textos, uploads e numerações usados nos documentos operacionais.</p>
       </div>
 
       {loading ? (
@@ -269,7 +445,7 @@ export default function Configuracoes() {
                 <div className="min-w-0 flex-1 space-y-2">
                   <Label>Alterar logo</Label>
                   <Input type="file" accept="image/*" onChange={handleLogoChange} className="w-full max-w-md text-sm" />
-                  <p className="text-xs text-muted-foreground">A logo será usada nos documentos e no topo do sistema.</p>
+                  <p className="text-xs text-muted-foreground">A logo será usada como fallback documental do tenant.</p>
                 </div>
               </div>
               <div className="flex flex-col gap-4 rounded-2xl border bg-slate-950 p-4 sm:flex-row sm:items-center sm:gap-6">
@@ -279,43 +455,28 @@ export default function Configuracoes() {
                 <div className="min-w-0 flex-1 space-y-2">
                   <Label className="text-white">Logo da interface</Label>
                   <Input type="file" accept="image/*" onChange={handleInterfaceLogoChange} className="w-full max-w-md bg-white text-sm" />
-                  <p className="text-xs text-white/65">Usada no menu lateral e nas Ã¡reas internas. Ideal para versÃµes claras da marca sobre fundo escuro.</p>
+                  <p className="text-xs text-white/65">Usada no menu lateral e em áreas internas com fundo escuro. Ideal para versões claras da marca.</p>
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Cor primaria</Label>
+                  <Label>Cor primária</Label>
                   <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={empresa.corPrimaria || "#0b7a53"}
-                      onChange={(event) => setEmpresa({ ...empresa, corPrimaria: event.target.value })}
-                      className="h-10 w-14 p-1"
-                    />
+                    <Input type="color" value={empresa.corPrimaria || "#0b7a53"} onChange={(event) => setEmpresa({ ...empresa, corPrimaria: event.target.value })} className="h-10 w-14 p-1" />
                     <Input value={empresa.corPrimaria || ""} onChange={(event) => setEmpresa({ ...empresa, corPrimaria: event.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Cor secundaria</Label>
+                  <Label>Cor secundária</Label>
                   <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={empresa.corSecundaria || "#64748b"}
-                      onChange={(event) => setEmpresa({ ...empresa, corSecundaria: event.target.value })}
-                      className="h-10 w-14 p-1"
-                    />
+                    <Input type="color" value={empresa.corSecundaria || "#64748b"} onChange={(event) => setEmpresa({ ...empresa, corSecundaria: event.target.value })} className="h-10 w-14 p-1" />
                     <Input value={empresa.corSecundaria || ""} onChange={(event) => setEmpresa({ ...empresa, corSecundaria: event.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Cor de destaque</Label>
                   <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={empresa.corDestaque || "#0f5138"}
-                      onChange={(event) => setEmpresa({ ...empresa, corDestaque: event.target.value })}
-                      className="h-10 w-14 p-1"
-                    />
+                    <Input type="color" value={empresa.corDestaque || "#0f5138"} onChange={(event) => setEmpresa({ ...empresa, corDestaque: event.target.value })} className="h-10 w-14 p-1" />
                     <Input value={empresa.corDestaque || ""} onChange={(event) => setEmpresa({ ...empresa, corDestaque: event.target.value })} />
                   </div>
                 </div>
@@ -408,38 +569,52 @@ export default function Configuracoes() {
                   Assets documentais do tenant
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Configure os elementos visuais que podem aparecer no certificado e nos documentos do cliente SaaS. Para cada cliente,
+                  Configure os elementos visuais que podem aparecer nos certificados e documentos do cliente SaaS. Para cada cliente,
                   a logo, a assinatura, o selo e a arte de fundo devem vir da configuração do próprio tenant.
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <AssetUploadCard
-                  title="Logo principal"
-                  description="Logo usada no cabeçalho dos certificados e documentos."
-                  value={(certificadoConfig.logoPrincipalUrl as string) || empresa.logoUrl}
+                  title="Logo dos documentos"
+                  description="Logo para fundo claro, usada em certificados, propostas, contratos, OS, relatórios e medições."
+                  value={certificadoConfig.documentLogoLightUrl || certificadoConfig.logoPrincipalUrl || empresa.logoUrl}
                   onChange={(value) => {
                     setEmpresa((prev) => ({ ...prev, logoUrl: value }));
-                    updateCertificadoConfig("logoPrincipalUrl", value);
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, documentLogoLightUrl: value, logoPrincipalUrl: value }, null, 2));
                   }}
                 />
                 <AssetUploadCard
-                  title="Arte de fundo"
-                  description="Marca d'agua, icone lateral ou elemento visual do certificado."
-                  value={certificadoConfig.arteFundoUrl as string}
+                  title="Ícone da marca"
+                  description="Ícone compacto para menu retraído, marca d'água e usos visuais menores."
+                  value={certificadoConfig.brandIconUrl || certificadoConfig.arteFundoUrl}
                   previewClassName="bg-slate-100"
-                  onChange={(value) => updateCertificadoConfig("arteFundoUrl", value)}
+                  onChange={(value) => {
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, brandIconUrl: value, arteFundoUrl: value }, null, 2));
+                  }}
+                />
+                <AssetUploadCard
+                  title="Logo fundo escuro"
+                  description="Logo para menu lateral expandido e fundos escuros, preferencialmente PNG/SVG com transparência."
+                  value={certificadoConfig.sidebarLogoDarkUrl || certificadoConfig.logoInterfaceUrl}
+                  previewClassName="bg-slate-950"
+                  onChange={(value) => {
+                    const currentConfig = readCertificadoConfig();
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, sidebarLogoDarkUrl: value, logoInterfaceUrl: value }, null, 2));
+                  }}
                 />
                 <AssetUploadCard
                   title="Selo institucional"
-                  description="Selo, brasao, certificacao ou marca complementar do tenant."
-                  value={certificadoConfig.seloInstitucionalUrl as string}
+                  description="Selo, brasão, certificação ou marca complementar do tenant."
+                  value={certificadoConfig.seloInstitucionalUrl}
                   onChange={(value) => updateCertificadoConfig("seloInstitucionalUrl", value)}
                 />
                 <AssetUploadCard
                   title="Assinatura"
-                  description="Imagem da assinatura do responsavel configurado para sair no documento."
-                  value={certificadoConfig.assinaturaUrl as string}
+                  description="Imagem da assinatura do responsável configurado para sair nos documentos permitidos."
+                  value={certificadoConfig.assinaturaUrl}
                   onChange={(value) => updateCertificadoConfig("assinaturaUrl", value)}
                 />
               </div>
@@ -447,19 +622,11 @@ export default function Configuracoes() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Título do certificado</Label>
-                  <Input
-                    value={(certificadoConfig.titulo as string) || ""}
-                    onChange={(event) => updateCertificadoConfig("titulo", event.target.value)}
-                    placeholder="Certificado de Garantia"
-                  />
+                  <Input value={certificadoConfig.titulo || ""} onChange={(event) => updateCertificadoConfig("titulo", event.target.value)} placeholder="Certificado de Garantia" />
                 </div>
                 <div className="space-y-2">
                   <Label>Subtítulo</Label>
-                  <Input
-                    value={(certificadoConfig.subtitulo as string) || ""}
-                    onChange={(event) => updateCertificadoConfig("subtitulo", event.target.value)}
-                    placeholder="Texto complementar opcional"
-                  />
+                  <Input value={certificadoConfig.subtitulo || ""} onChange={(event) => updateCertificadoConfig("subtitulo", event.target.value)} placeholder="Texto complementar opcional" />
                 </div>
               </div>
 
@@ -473,6 +640,22 @@ export default function Configuracoes() {
                   <Input value={empresa.telefoneEmergencia || ""} onChange={(event) => setEmpresa({ ...empresa, telefoneEmergencia: event.target.value })} />
                 </div>
               </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Uso da assinatura no certificado</Label>
+                  <select
+                    value={certificadoConfig.assinaturaModo || "imagem"}
+                    onChange={(event) => updateCertificadoConfig("assinaturaModo", event.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="imagem">Usar imagem quando houver</option>
+                    <option value="linha">Deixar linha para assinatura física/digital</option>
+                    <option value="ocultar">Não exibir assinatura</option>
+                    <option value="obrigatoria">Bloquear emissão sem assinatura configurada</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">A configuração poderá ser refinada por família documental na etapa SaaS de perfis documentais.</p>
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label>Texto legal padrão</Label>
                 <Textarea value={empresa.certificadoTextoLegal || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoLegal: event.target.value })} rows={3} />
@@ -481,18 +664,84 @@ export default function Configuracoes() {
                 <Label>Texto de fixação</Label>
                 <Input value={empresa.certificadoTextoFixacao || ""} onChange={(event) => setEmpresa({ ...empresa, certificadoTextoFixacao: event.target.value })} />
               </div>
-              <div className="space-y-2">
-                <Label>Configuração avançada do certificado (JSON)</Label>
-                <Textarea
-                  value={certificadoConfigText}
-                  onChange={(event) => setCertificadoConfigText(event.target.value)}
-                  rows={10}
-                  className="font-mono text-xs"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Use para parametrizar logoInterfaceUrl, logoPrincipalUrl, arteFundoUrl, seloInstitucionalUrl, assinaturaUrl,
-                  titulo, subtitulo, publicBaseUrl, licencas, rodapeLinhas, cit, limiteFotos e exibições do template.
-                </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg"><FileUp className="h-5 w-5" />Políticas de Upload</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-950">
+                Estes limites valem por tenant e são aplicados pelo backend antes de gravar anexos. Use valores conservadores em homologação para evitar arquivos pesados, tipos indevidos e evidências fora do padrão do fluxo.
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {(Object.keys(uploadPolicyOptions) as UploadPolicyKey[]).map((policyKey) => {
+                  const option = uploadPolicyOptions[policyKey];
+                  const policy = resolveUploadPolicy(policyKey);
+                  return (
+                    <div key={policyKey} className="space-y-4 rounded-2xl border bg-card p-4">
+                      <div>
+                        <h3 className="text-sm font-semibold">{option.title}</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">{option.description}</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Quantidade máxima</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={policy.maxFiles}
+                            onChange={(event) => updateUploadPolicy(policyKey, { maxFiles: Math.max(1, Number(event.target.value || option.defaults.maxFiles)) })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Tamanho máximo por arquivo (MB)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            step={0.5}
+                            value={bytesToMb(policy.maxBytes, option.defaults.maxBytes)}
+                            onChange={(event) => updateUploadPolicy(policyKey, { maxBytes: Math.max(1, Number(event.target.value || bytesToMb(option.defaults.maxBytes, option.defaults.maxBytes))) * 1024 * 1024 })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Tipos permitidos</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {option.mimeOptions.map((mime) => {
+                            const checked = (policy.allowedMimeTypes || []).includes(mime.value);
+                            return (
+                              <label key={mime.value} className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${checked ? "border-primary bg-primary/10 text-primary" : "bg-muted/40 text-muted-foreground"}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const current = new Set(policy.allowedMimeTypes || []);
+                                    if (event.target.checked) current.add(mime.value);
+                                    else current.delete(mime.value);
+                                    const next = Array.from(current);
+                                    updateUploadPolicy(policyKey, { allowedMimeTypes: next.length ? next : option.defaults.allowedMimeTypes });
+                                  }}
+                                  className="h-3.5 w-3.5"
+                                />
+                                {mime.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Chave técnica: <code className="rounded bg-muted px-1">{policyKey}</code>
+                      </p>
+                      <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-[11px] text-muted-foreground">
+                        <p className="font-semibold text-foreground">Segurança do upload</p>
+                        <p>Validação ativa: base64, MIME, tamanho e assinatura do arquivo.</p>
+                        <p>Antivírus/quarentena: preparado em metadados, pendente de integração com provedor externo.</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -512,6 +761,14 @@ export default function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="space-y-2">
+            <Label>Configuração avançada do certificado e documentos (JSON)</Label>
+            <Textarea value={certificadoConfigText} onChange={(event) => setCertificadoConfigText(event.target.value)} rows={10} className="font-mono text-xs" />
+            <p className="text-xs text-muted-foreground">
+              Use para ajustes técnicos como brandIconUrl, sidebarLogoDarkUrl, documentLogoLightUrl, seloInstitucionalUrl, assinaturaUrl, assinaturaModo, licenças, rodapeLinhas, cit, uploadPolicies e exibições do template.
+            </p>
+          </div>
 
           <div className="flex justify-end">
             <Button onClick={handleSaveEmpresa} disabled={savingEmpresa}>

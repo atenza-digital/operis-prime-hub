@@ -1,0 +1,211 @@
+{
+  "ok": true,
+  "generatedAt": "2026-07-18T21:54:09.417Z",
+  "combinedPdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\cliente\\certificados_montserrat\\certificados-montserrat-validacao-final.pdf",
+  "samplePdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\cliente\\certificados_montserrat\\certificado-ciperprag-amostra-final.pdf",
+  "samplePng": "C:\\Projetos\\Atenza\\field_ops\\docs\\cliente\\certificados_montserrat\\certificado-ciperprag-amostra-final.png",
+  "scenarios": 13,
+  "passed": 13,
+  "failed": 0,
+  "results": [
+    {
+      "slug": "01-ciperprag-com-produtos",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\01-ciperprag-com-produtos.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1697,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "02-ciperprag-sem-produtos",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\02-ciperprag-sem-produtos.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1194,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "03-ciperprag-tres-fotos",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\03-ciperprag-tres-fotos.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1750,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "04-ciperprag-titulo-personalizado",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\04-ciperprag-titulo-personalizado.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1990,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "05-outro-tenant-com-logo",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\05-outro-tenant-com-logo.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 972,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "06-outro-tenant-sem-logo",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\06-outro-tenant-sem-logo.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 685,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "07-ciperprag-assinatura-imagem",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\07-ciperprag-assinatura-imagem.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1695,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "08-ciperprag-assinatura-linha",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\08-ciperprag-assinatura-linha.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1695,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "09-ciperprag-sem-assinatura",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\09-ciperprag-sem-assinatura.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1629,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "10-ciperprag-com-licencas",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\10-ciperprag-com-licencas.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1695,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "11-ciperprag-sem-licencas",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\11-ciperprag-sem-licencas.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1474,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "12-ciperprag-com-validade",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\12-ciperprag-com-validade.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1695,
+      "ok": true,
+      "failures": []
+    },
+    {
+      "slug": "13-ciperprag-sem-validade",
+      "pdf": "C:\\Projetos\\Atenza\\field_ops\\docs\\evidencias\\certificado_saas\\13-ciperprag-sem-validade.pdf",
+      "pages": 1,
+      "fonts": [
+        "/AAAAAA+Montserrat-Bold",
+        "/BAAAAA+Montserrat-Regular",
+        "/CAAAAA+Montserrat-SemiBold",
+        "/DAAAAA+Montserrat-Medium"
+      ],
+      "tagged": true,
+      "textLength": 1174,
+      "ok": true,
+      "failures": []
+    }
+  ],
+  "knownLimitations": [
+    "O PDF consolidado é mesclado por pypdf para conferência visual e pode perder marcação Tagged; os PDFs individuais são emitidos pelo Chromium com tagged=true.",
+    "A leitura física do QR Code em papel depende de conferência manual com celular, fora do ambiente automatizado local."
+  ]
+}

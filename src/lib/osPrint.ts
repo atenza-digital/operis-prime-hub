@@ -1,5 +1,6 @@
-import logoCiperprag from "@/assets/logo_ciperprag.png";
+import { repairMojibake } from "@/lib/repairMojibake";
 import type { BootstrapData, Contrato, OSApp, ServicoCatalogo } from "@/lib/api";
+import { documentTypographyCss } from "@/lib/documentFontFaces";
 
 function escapeHtml(value: string | number | null | undefined) {
   return String(value ?? "")
@@ -64,6 +65,16 @@ function snapshotNumber(value: unknown) {
 
 function snapshotStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function documentLogoFromCompany(company: BootstrapData["companyConfig"] | null | undefined) {
+  const config = company?.certificadoConfig ?? {};
+  return config.documentLogoLightUrl || config.logoPrincipalUrl || company?.logoUrl || "";
+}
+
+function renderDocumentLogo(logoSrc: string, companyName: string) {
+  if (logoSrc) return `<img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(companyName || "Empresa emissora")}" />`;
+  return `<div class="logo-fallback">${escapeHtml(companyName || "Empresa emissora")}</div>`;
 }
 
 function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCatalogo | undefined {
@@ -202,7 +213,7 @@ export function buildOsPrintHtml(
       ? ["Cones e correntes", "Sinalização de área", "Bloqueio e etiquetagem quando aplicável"]
       : ["Cones e correntes", "Sinalização de área", "Kit de emergência e lavagem quando aplicável"];
 
-  const logoSrc = options.logoSrc ?? logoCiperprag;
+  const logoSrc = options.logoSrc ?? documentLogoFromCompany(company);
   const clienteNome = customer?.razaoSocial || os.clienteNome || contract?.cliente || "";
   const clienteCnpj = customer?.cnpj || os.clienteCnpj || contract?.cnpj || "";
   const clienteEndereco = customer
@@ -214,21 +225,22 @@ export function buildOsPrintHtml(
     .filter(Boolean)
     .join(", ");
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(os.numero)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    ${documentTypographyCss}
     * { box-sizing: border-box; }
     @page { size: A4; margin: 6mm; }
-    body { margin: 0; font-family: Inter, Arial, Helvetica, sans-serif; color: #111; background: #fff; }
+    body { margin: 0; color: #111; background: #fff; }
     .page { width: 100%; height: 284mm; border: 1.2px solid #222; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
     .brand-center { text-align: center; padding-top: 6px; }
     .brand-center img { width: 330px; max-width: 100%; height: auto; }
+    .logo-fallback { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; max-width: 330px; padding: 8px 18px; border: 1px solid #d1d5db; border-radius: 10px; color: #111827; font-size: 18px; font-weight: 800; text-transform: uppercase; }
     .os-meta { padding: 16px 18px 0 0; font-size: 20px; font-weight: 700; white-space: nowrap; }
     .title { text-align: center; font-size: 22px; font-weight: 700; padding: 6px 0 10px; border-bottom: 1.2px solid #222; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -259,7 +271,7 @@ export function buildOsPrintHtml(
 <body>
   <div class="page">
     <div class="top-brand">
-      <div class="brand-center"><img src="${escapeHtml(logoSrc)}" alt="${escapeHtml(company?.nomeFantasia || company?.razaoSocial || "Logo")}" /></div>
+      <div class="brand-center">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
       <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
     </div>
     <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>
@@ -384,6 +396,7 @@ export function buildOsPrintHtml(
   </div>
 </body>
 </html>`;
+  return repairMojibake(html);
 }
 
 export function printOsDocument(os: OSApp, bootstrap: BootstrapData | null) {

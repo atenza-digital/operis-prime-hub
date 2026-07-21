@@ -1,0 +1,206 @@
+[
+  {
+    "id": 1,
+    "method": "GET",
+    "path": "/api/health",
+    "middlewares": ", async (_req, res) => { "
+  },
+  {
+    "id": 2,
+    "method": "GET",
+    "path": "/api/certificates/:hash",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 3,
+    "method": "POST",
+    "path": "/api/auth/login",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 4,
+    "method": "GET",
+    "path": "/api/public/tenant-context",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 5,
+    "method": "GET",
+    "path": "/api/auth/me",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 6,
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 7,
+    "method": "POST",
+    "path": "/api/auth/change-password",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 8,
+    "method": "GET",
+    "path": "/api/bootstrap",
+    "middlewares": ", async (_req, res) => { "
+  },
+  {
+    "id": 9,
+    "method": "GET",
+    "path": "/api/audit-logs",
+    "middlewares": ", requirePermission(\"auditoria.view\"), async (req, res) => { "
+  },
+  {
+    "id": 10,
+    "method": "POST",
+    "path": "/api/audit-logs/evidence",
+    "middlewares": ", requirePermission(\"auditoria.view\"), async (req, res) => { "
+  },
+  {
+    "id": 11,
+    "method": "GET",
+    "path": "/api/attachments/:id/download",
+    "middlewares": ", async (req, res) => { "
+  },
+  {
+    "id": 12,
+    "method": "GET",
+    "path": "/api/roles",
+    "middlewares": ", requirePermission(\"usuarios.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 13,
+    "method": "GET",
+    "path": "/api/users",
+    "middlewares": ", requirePermission(\"usuarios.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 14,
+    "method": "POST",
+    "path": "/api/users",
+    "middlewares": ", requirePermission(\"usuarios.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 15,
+    "method": "POST",
+    "path": "/api/users/:id/reset-password",
+    "middlewares": ", requirePermission(\"usuarios.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 16,
+    "method": "POST",
+    "path": "/api/clients",
+    "middlewares": ", requirePermission(\"clientes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 17,
+    "method": "POST",
+    "path": "/api/services",
+    "middlewares": ", requirePermission(\"servicos.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 18,
+    "method": "POST",
+    "path": "/api/technicians",
+    "middlewares": ", requirePermission(\"equipes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 19,
+    "method": "POST",
+    "path": "/api/vehicles",
+    "middlewares": ", requirePermission(\"equipes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 20,
+    "method": "POST",
+    "path": "/api/allocations",
+    "middlewares": ", requirePermission(\"equipes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 21,
+    "method": "PATCH",
+    "path": "/api/company-config",
+    "middlewares": ", requirePermission(\"configuracoes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 22,
+    "method": "PATCH",
+    "path": "/api/numbering-config",
+    "middlewares": ", requirePermission(\"configuracoes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 23,
+    "method": "POST",
+    "path": "/api/contract-templates",
+    "middlewares": ", requirePermission(\"contratos.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 24,
+    "method": "POST",
+    "path": "/api/contract-templates/:id/generate-contract",
+    "middlewares": ", requirePermission(\"contratos.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 25,
+    "method": "POST",
+    "path": "/api/measurements/generate",
+    "middlewares": ", requirePermission(\"medicoes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 26,
+    "method": "PATCH",
+    "path": "/api/measurements/:id/financial",
+    "middlewares": ", requirePermission(\"medicoes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 27,
+    "method": "PATCH",
+    "path": "/api/measurements/:id/cancel",
+    "middlewares": ", requirePermission(\"medicoes.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 28,
+    "method": "POST",
+    "path": "/api/agendamentos",
+    "middlewares": ", requirePermission(\"agenda.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 29,
+    "method": "PATCH",
+    "path": "/api/agendamentos/:id",
+    "middlewares": ", requirePermission(\"agenda.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 30,
+    "method": "POST",
+    "path": "/api/agendamentos/:id/gerar-os",
+    "middlewares": ", requirePermission(\"os.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 31,
+    "method": "PATCH",
+    "path": "/api/orders/:id",
+    "middlewares": ", requirePermission(\"os.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 32,
+    "method": "POST",
+    "path": "/api/orders/:id/encerrar",
+    "middlewares": ", requirePermission(\"os.close\"), async (req, res) => { "
+  },
+  {
+    "id": 33,
+    "method": "POST",
+    "path": "/api/orders/:id/certificado",
+    "middlewares": ", requirePermission(\"certificados.manage\"), async (req, res) => { "
+  },
+  {
+    "id": 34,
+    "method": "PATCH",
+    "path": "/api/recurrence-suggestions/:id",
+    "middlewares": ", requirePermission(\"agenda.manage\"), async (req, res) => { "
+  }
+]

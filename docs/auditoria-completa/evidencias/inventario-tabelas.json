@@ -1,0 +1,16 @@
+[
+  "audit_logs",
+  "cliente_equipamentos",
+  "cliente_locais_execucao",
+  "evidencias_anexos",
+  "medicao_itens",
+  "medicoes",
+  "perfil_permissoes",
+  "perfis",
+  "permissoes",
+  "servico_pops",
+  "tenants",
+  "usuario_perfis",
+  "usuario_sessoes",
+  "usuarios"
+]
