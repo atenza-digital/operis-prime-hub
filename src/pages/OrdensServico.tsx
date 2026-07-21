@@ -40,6 +40,41 @@ function formatBytes(bytes?: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const MAX_EVIDENCE_EDGE = 1600;
+const MAX_EVIDENCE_DATA_URL_CHARS = 900_000;
+
+async function prepareEvidencePhoto(file: File) {
+  if (!file.type.startsWith("image/")) throw new Error("Selecione somente arquivos de imagem.");
+
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = sourceUrl;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Não foi possível ler a foto selecionada."));
+    });
+
+    const scale = Math.min(1, MAX_EVIDENCE_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Não foi possível preparar a foto para envio.");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    let quality = 0.82;
+    let dataUrl = canvas.toDataURL("image/jpeg", quality);
+    while (dataUrl.length > MAX_EVIDENCE_DATA_URL_CHARS && quality > 0.56) {
+      quality -= 0.08;
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+    }
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
 function isImageEvidence(anexo: { mimeType?: string; conteudoBase64?: string }) {
   return Boolean(anexo.conteudoBase64) && (anexo.mimeType?.startsWith("image/") || anexo.conteudoBase64?.startsWith("data:image/"));
 }
@@ -150,16 +185,14 @@ export default function OrdensServico() {
     encerrada: ordens.filter((item) => item.status === "encerrada").length,
   };
 
-  function handleFotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
-    files.slice(0, 3 - fotos.length).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        const base64 = loadEvent.target?.result as string;
-        setFotos((prev) => [...prev, { preview: base64, base64 }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const prepared = await Promise.all(files.slice(0, 3 - fotos.length).map(prepareEvidencePhoto));
+      setFotos((prev) => [...prev, ...prepared.map((base64) => ({ preview: base64, base64 }))].slice(0, 3));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível preparar a foto.");
+    }
     event.target.value = "";
   }
 

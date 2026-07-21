@@ -617,7 +617,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Erro na API" }));
+    const isPayloadTooLarge = response.status === 413;
+    const error = await response.json().catch(() => ({
+      error: isPayloadTooLarge
+        ? "As fotos excedem o limite de envio. Reduza a quantidade ou o tamanho das imagens e tente novamente."
+        : `Erro na API (HTTP ${response.status})`,
+    }));
     if (response.status === 428 && window.location.pathname !== "/alterar-senha") {
       window.location.assign("/alterar-senha");
     }
