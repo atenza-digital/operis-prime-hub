@@ -15,6 +15,7 @@
     "audit:e2e-sanitize": "node --env-file-if-exists=.env scripts/sanitize-homologation-residue.mjs",
     "homologation:users": "node --env-file=.env scripts/prepare-homologation-users.mjs",
     "homologation:provision-user": "node --env-file-if-exists=.env scripts/provision-homologation-user.mjs",
+    "homologation:promote-admins": "node --env-file-if-exists=.env scripts/promote-homologation-admins.mjs",
     "homologation:smoke-vps": "node --env-file=.env scripts/smoke-vps-homologation.mjs",
     "homologation:attachments": "node --env-file-if-exists=.env scripts/validate-homologation-attachments.mjs",
     "homologation:repair-attachment-hashes": "node --env-file-if-exists=.env scripts/repair-homologation-attachment-hashes.mjs",
