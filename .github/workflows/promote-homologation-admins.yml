@@ -1,0 +1,42 @@
+name: Promover Administradores de Homologacao
+
+on:
+  workflow_dispatch:
+
+env:
+  CONTAINER_NAME: atenza-fieldops
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: homologation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
+          chmod 600 ~/.ssh/homolog_vps_key
+          ssh-keyscan -T 20 -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts \
+            || echo "::warning::known_hosts nao respondeu; SSH usara StrictHostKeyChecking=accept-new."
+
+      - name: Promover contas controladas de homologacao
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "CONTAINER_NAME='${CONTAINER_NAME}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          docker exec \
+            -e HOMOLOGATION_TENANT_SLUG='ciperprag' \
+            "$CONTAINER_NAME" npm run homologation:promote-admins
+          REMOTE
