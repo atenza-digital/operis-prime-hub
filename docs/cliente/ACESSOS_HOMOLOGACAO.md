@@ -31,3 +31,5 @@ npm run homologation:users -- --reset-passwords
 ```
 
 O comando exibe as senhas temporarias apenas no terminal e nao grava as senhas em arquivo.
+
+Para a rodada atual, a senha temporaria da conta operacional deve ser solicitada separadamente a Atenza. Ela e redefinida pelo workflow `Provisionar Usuario de Homologacao`, fica marcada para troca no primeiro acesso e nao e armazenada neste documento, no Git ou nos logs da aplicacao.
