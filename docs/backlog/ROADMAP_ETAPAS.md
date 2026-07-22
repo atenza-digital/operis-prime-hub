@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
-- Proxima etapa recomendada: validar o download dos 5 anexos piloto pela aplicacao e ampliar a migracao R2 em lotes graduais, sempre mantendo copia no banco durante a homologacao.
+- Proxima etapa recomendada: executar a rodada externa completa com a Ciperprag usando o roteiro consolidado, registrar evidencias e corrigir somente reprovacoes ou observacoes confirmadas.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 40.
 - Itens fora de etapa: 0.
@@ -256,6 +256,8 @@ Entregue inicialmente em homologacao:
 - Validacao automatizada de anexos em homologacao criada, cobrindo login tecnico, bootstrap, visualizacao, download, provedor de armazenamento e conferencia do SHA-256 persistido.
 - Deploy oficial pela CI/CD na VPS executado no run `29882972879`, com smoke autenticado da aplicacao aprovado para visualizacao/download dos anexos R2 piloto, hash SHA-256 conferido, auditorias de consistencia/isolation aprovadas e smoke publico aprovado. Evidencia: `docs/evidencias/etapa8_infra_saas/R2_DOWNLOAD_APLICACAO_HOMOLOGACAO_2026-07-22.md`.
 - Segundo lote R2 executado pela CI/CD no run `29883935132`: 10 fotos de OS migradas, 10 verificadas no R2 e 0 falhas, mantendo copia no banco. O deploy seguinte no run `29883983839` refez o smoke autenticado da aplicacao com 68 anexos catalogados, 8 amostras e 0 falhas. Evidencia: `docs/evidencias/etapa8_infra_saas/R2_LOTE_2_HOMOLOGACAO_2026-07-22.md`.
+- Terceiro lote R2 executado pela CI/CD no run `29884615968`: 20 fotos de OS avaliadas no pos-migracao, provider `r2`, 0 falhas de leitura, hash ou tamanho, mantendo copia no banco.
+- Roteiro consolidado de validacao externa v1.6 gerado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.6.docx`, cobrindo Administracao, Comercial, Operacional, Qualidade, Relatorios, Medicao, ERP, Recorrencia, isolamento SaaS, R2 e documentos, com prints, usuarios/perfis, criterios esperados e matriz de aceite. Senhas temporarias nao foram gravadas no arquivo por seguranca e devem ser entregues separadamente.
 - Corrigido drift de schema identificado pelo smoke: `ensureDatabaseShape` agora garante as colunas comerciais de servicos de templates antes das consultas do bootstrap.
 - Saneamento controlado de hashes legados de anexos preparado no CI/CD para homologacao: recalcula somente conteudo local persistido, registra auditoria e mantem o smoke bloqueando divergencias remanescentes.
 
