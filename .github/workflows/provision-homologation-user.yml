@@ -1,0 +1,49 @@
+name: Provisionar Usuario de Homologacao
+
+on:
+  workflow_dispatch:
+
+env:
+  CONTAINER_NAME: atenza-fieldops
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    environment: homologation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
+          chmod 600 ~/.ssh/homolog_vps_key
+          ssh-keyscan -T 20 -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts \
+            || echo "::warning::known_hosts nao respondeu; SSH usara StrictHostKeyChecking=accept-new."
+
+      - name: Provisionar conta administrativa operacional
+        shell: bash
+        env:
+          TEMP_PASSWORD: ${{ secrets.HOMOLOG_OPERACAO_TEMP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          PASSWORD_B64="$(printf '%s' "$TEMP_PASSWORD" | base64 -w0)"
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "CONTAINER_NAME='${CONTAINER_NAME}' PASSWORD_B64='${PASSWORD_B64}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          docker exec \
+            -e HOMOLOGATION_TENANT_SLUG='ciperprag' \
+            -e HOMOLOGATION_USER_EMAIL='homolog.operacao@atenza.digital' \
+            -e HOMOLOGATION_USER_PASSWORD_B64="$PASSWORD_B64" \
+            -e HOMOLOGATION_USER_ROLES='operacao,administrativo' \
+            "$CONTAINER_NAME" npm run homologation:provision-user
+          REMOTE
+
