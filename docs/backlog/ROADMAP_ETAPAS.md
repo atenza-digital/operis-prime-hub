@@ -6,7 +6,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 
 - Versao de homologacao: `0.6.3`.
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
-- Proxima etapa recomendada: liberar o workflow R2 na `main`, configurar os secrets do ambiente `homologation` e executar o dry-run do lote piloto antes de qualquer `apply`.
+- Proxima etapa recomendada: executar o `apply` piloto do R2 em homologacao com `keep_database_copy=true`, validar download/hash e ampliar somente apos a evidencia do lote.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
 - Itens de backlog remanescentes: 40.
 - Itens fora de etapa: 0.
@@ -247,6 +247,7 @@ Entregue inicialmente em homologacao:
 - Validacao por assinatura magica adicionada para anexos aceitos no P0, conferindo PNG, JPEG, PDF, DOC legado e conteiner ZIP de DOCX/ODT antes de persistir uploads.
 - Politica tecnica de uploads por familia documental criada, com defaults seguros para `os.foto` e `minuta.documento` e possibilidade de sobrescrita futura por `certificado_config.uploadPolicies` do tenant.
 - Workflow manual de migracao R2 reforcado para executar preflight antes da migracao e verificacao pos-migracao depois do lote, garantindo evidencia automatica de readiness, upload, leitura, hash e tamanho.
+- Secrets R2 do ambiente GitHub `homologation` configurados com token de menor privilegio restrito ao bucket `atenza-hml-files`; dry-run oficial executado via CI/CD no run `29882003045`, com provider `r2`, readiness `sim`, zero registros avaliados e zero falhas. Evidencia: `docs/evidencias/etapa8_infra_saas/R2_DRY_RUN_CICD_HOMOLOGACAO_2026-07-22.md`.
 - Tela de Parametros do tenant passou a expor politicas guiadas de upload por familia documental, inicialmente para fotos da OS e arquivo de minuta/contrato do cliente, gravando em `certificado_config.uploadPolicies` e usando os mesmos limites aplicados pelo backend.
 - Politicas de upload foram ampliadas para POP aprovado, documentos do cliente, documentos contratuais e documentos historicos gerados, com metadados de seguranca preparando antivirus/quarentena sem bloquear a homologacao.
 - Tela de Auditoria de Anexos revisada para exibir acentuacao correta, status de storage, plano R2, politica de upload aplicada, validacao de seguranca e quarentena planejada, dando visibilidade administrativa antes da migracao real de anexos.
@@ -263,7 +264,7 @@ Backlog da Etapa 8: 36 itens.
 - Criar templates versionados em tabela propria por tenant e por tipo documental.
 - Criar historico de versoes de templates/documentos na interface.
 - Criar backfill controlado para documentos antigos.
-- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado, a rotina de migracao controlada, o workflow manual com preflight/verificacao, a auditoria automatizada tri-tenant, o preparador de tenants de validacao, o preflight R2 e o verificador pos-migracao ja foram implementados e publicados em homologacao; falta configurar secrets R2, executar a migracao real em lote pequeno, testar download pos-migracao e depois ampliar a migracao.
+- Concluir storage externo R2 para anexos/documentos, reduzindo base64 no banco. A politica de chaves por ambiente/tenant/entidade/hash, o upload real, o download autenticado, a rotina de migracao controlada, o workflow manual com preflight/verificacao, a auditoria automatizada tri-tenant, o preparador de tenants de validacao, o preflight R2, o verificador pos-migracao, os secrets de homologacao e o dry-run oficial ja foram implementados e publicados em homologacao; falta executar a migracao real em lote pequeno, testar download pos-migracao e depois ampliar a migracao.
 - Concluir hardening de upload para producao com varredura antivirus/antimalware, quarentena opcional e inspecao profunda de DOCX/ODT conectadas a provedor externo ou rotina dedicada.
 - Criar editor visual/guiado de certificado por tenant.
 - Evoluir assets documentais para R2/storage externo controlado, rodape parametrizado e assinatura por usuario/perfil/papel documental. A base visual por tenant ja permite configurar ativos em `certificado_config`, mas a evolucao SaaS deve consolidar a tela "Identidade Visual e Documentos" com `brandIconUrl` (menu recolhido, marca d'agua e usos compactos), `sidebarLogoDarkUrl` (logo para fundo escuro), `documentLogoLightUrl` (logo para documentos em fundo claro), selo/brasao institucional opcional, cor primaria dos documentos, assinatura por responsavel, modo de assinatura por familia documental (`imagem`, `linha`, `ocultar`, `obrigatoria`) e vinculo a papeis documentais como responsavel comercial, responsavel tecnico e emissor da medicao. O uso da assinatura deve ser auditado, versionado e isolado por tenant, com versao/hash dos arquivos no snapshot e teste tri-tenant obrigatorio (Ciperprag, empresa demonstracao e tenant sem identidade visual) para impedir vazamento de logo, selo, assinatura, cor ou dados entre tenants.
