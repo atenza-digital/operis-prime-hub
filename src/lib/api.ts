@@ -307,6 +307,7 @@ export interface ContratoServico {
   frequencia: string;
   descricaoComercial?: string;
   unidadeComercial?: string;
+  enderecoAtividade?: string;
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -382,6 +383,10 @@ export interface EmpresaConfig {
     assinaturaUrl?: string;
     assinaturaModo?: "imagem" | "linha" | "ocultar" | "obrigatoria";
     assinaturaDocumentos?: Record<string, "imagem" | "linha" | "ocultar" | "obrigatoria">;
+    medicaoResponsavelNome?: string;
+    medicaoResponsavelCargo?: string;
+    medicaoAssinaturaUrl?: string;
+    medicaoAssinaturaModo?: "imagem" | "linha" | "ocultar";
     corPrimaria?: string;
     corSecundaria?: string;
     corDestaque?: string;

@@ -530,8 +530,12 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
   const companyDisplayName = company?.nomeFantasia || companyName;
   const snapshot = measurement.snapshotDados ?? {};
   const issuerSnapshot = typeof snapshot === "object" && snapshot && "emissor" in snapshot ? (snapshot.emissor as Record<string, unknown>) : null;
-  const issuerName = textFrom(issuerSnapshot?.nome) || company?.responsavelExecucao || company?.responsavelTecnico || textFrom(emittedBy?.name) || "";
+  const documentConfig = companyDocumentConfig(company);
+  const issuerName = textFrom(issuerSnapshot?.nome) || textFrom(documentConfig.medicaoResponsavelNome) || textFrom(emittedBy?.name) || company?.responsavelTecnico || company?.responsavelExecucao || "";
+  const measurementSignatureMode = textFrom(documentConfig.medicaoAssinaturaModo) || "linha";
+  const measurementSignatureUrl = textFrom(documentConfig.medicaoAssinaturaUrl) || textFrom(documentConfig.assinaturaUrl);
   const issuerRole = textFrom(issuerSnapshot?.cargo) || company?.cargoResponsavel || textFrom(emittedBy?.role) || "Responsável pela emissão";
+  const configuredIssuerRole = textFrom(documentConfig.medicaoResponsavelCargo) || issuerRole;
   const logoSrc = companyDocumentLogo(company);
   const traceabilityLabel = `${measurement.numero} • Revisão ${textFrom((snapshot as Record<string, unknown>)?.revisao) || "1"} • Página 1 de 1`;
   const issuePlaceDate = measurementIssuePlaceDate(measurement, company);
@@ -712,10 +716,10 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
           {issuePlaceDate ? (
             <p className="col-span-2 text-right text-[10.5px] font-medium text-slate-700">{issuePlaceDate}</p>
           ) : null}
-          <div className="measurement-signature-box min-h-24 rounded-xl border border-slate-200 p-3.5">
+          <div className={`measurement-signature-box min-h-24 rounded-xl border border-slate-200 p-3.5 ${measurementSignatureMode === "ocultar" ? "hidden" : ""}`}>
             <p className="font-bold text-slate-600">Responsável pela emissão</p>
-            <div className="mt-7 border-t border-slate-300 pt-2 font-bold">{issuerName || "Nome do responsável"}</div>
-            <p className="text-slate-500">{issuerRole}</p>
+            {measurementSignatureMode === "imagem" && measurementSignatureUrl ? <img src={measurementSignatureUrl} alt="Assinatura do responsável pela emissão" className="mt-3 h-10 w-full object-contain object-left" /> : <div className="mt-7 border-t border-slate-300 pt-2 font-bold">{issuerName || "Nome do responsável"}</div>}
+            <p className="text-slate-500">{configuredIssuerRole}</p>
           </div>
           <div className="measurement-signature-box min-h-24 rounded-xl border border-slate-200 p-3.5">
             <p className="font-bold text-slate-600">Aceite do cliente</p>

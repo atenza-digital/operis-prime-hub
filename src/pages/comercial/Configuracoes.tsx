@@ -42,6 +42,9 @@ const defaultEmpresa: EmpresaConfig = {
     exibirFotos: true,
     limiteFotos: 3,
     exibirProdutosQuimicos: true,
+    medicaoResponsavelNome: "",
+    medicaoResponsavelCargo: "Responsável pela emissão",
+    medicaoAssinaturaModo: "linha",
   },
 };
 
@@ -758,6 +761,23 @@ export default function Configuracoes() {
               <div className="space-y-2">
                 <Label>Local de entrega padrão</Label>
                 <Input value={empresa.medicaoLocalEntregaPadrao || ""} onChange={(event) => setEmpresa({ ...empresa, medicaoLocalEntregaPadrao: event.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Responsável pela emissão</Label>
+                <Input value={certificadoConfig.medicaoResponsavelNome || ""} onChange={(event) => updateCertificadoConfig("medicaoResponsavelNome", event.target.value)} placeholder="Nome que aparecerá na assinatura da medição" />
+              </div>
+              <div className="space-y-2">
+                <Label>Cargo na medição</Label>
+                <Input value={certificadoConfig.medicaoResponsavelCargo || ""} onChange={(event) => updateCertificadoConfig("medicaoResponsavelCargo", event.target.value)} placeholder="Ex.: Responsável financeiro" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Assinatura da medição</Label>
+                <select value={certificadoConfig.medicaoAssinaturaModo || "linha"} onChange={(event) => updateCertificadoConfig("medicaoAssinaturaModo", event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <option value="linha">Linha para assinatura física/digital</option>
+                  <option value="imagem">Usar assinatura carregada</option>
+                  <option value="ocultar">Não exibir assinatura</option>
+                </select>
+                <p className="text-xs text-muted-foreground">A imagem usa o asset de assinatura configurado acima.</p>
               </div>
             </CardContent>
           </Card>

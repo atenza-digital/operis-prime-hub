@@ -53,8 +53,13 @@ export default function RelatoriosTecnicos() {
 
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const orderTimestamp = (os: OSApp) => {
+      const value = os.dataExecucao || os.dataEmissao;
+      const timestamp = value ? new Date(value).getTime() : Number.NaN;
+      return Number.isNaN(timestamp) ? 0 : timestamp;
+    };
     return [...orders]
-      .reverse()
+      .sort((a, b) => orderTimestamp(b) - orderTimestamp(a) || String(b.numero || b.id).localeCompare(String(a.numero || a.id), "pt-BR", { numeric: true }))
       .filter((os) => statusFilter === "todas" || os.status === statusFilter)
       .filter((os) => serviceFilter === "todos" || cleanText(os.servico, "") === serviceFilter)
       .filter((os) => {

@@ -260,6 +260,7 @@ Entregue inicialmente em homologacao:
 - Roteiro consolidado de validacao externa v1.6 gerado em `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.6.docx`, cobrindo Administracao, Comercial, Operacional, Qualidade, Relatorios, Medicao, ERP, Recorrencia, isolamento SaaS, R2 e documentos, com prints, usuarios/perfis, criterios esperados e matriz de aceite. Senhas temporarias nao foram gravadas no arquivo por seguranca e devem ser entregues separadamente.
 - Corrigido drift de schema identificado pelo smoke: `ensureDatabaseShape` agora garante as colunas comerciais de servicos de templates antes das consultas do bootstrap.
 - Saneamento controlado de hashes legados de anexos preparado no CI/CD para homologacao: recalcula somente conteudo local persistido, registra auditoria e mantem o smoke bloqueando divergencias remanescentes.
+- Rodada de correcoes para o retorno da validacao v1.6 implementada: endereco da atividade por item comercial, catalogo como origem de nome/unidade, marca-d'agua do certificado com fallback exclusivo do tenant, responsavel configuravel pela emissao da medicao e relatorios ordenados pela data real da OS. Evidencia: `docs/evidencias/etapa9_homologacao/CORRECOES_RETORNO_TARCISIO_V1.6.md`; roteiro de revalidacao: `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.7.docx`.
 
 Backlog da Etapa 8: 36 itens.
 
