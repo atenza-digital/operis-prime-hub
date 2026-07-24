@@ -11,10 +11,10 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "docs" / "cliente" / "homologacao_roteiros"
-OUT = OUT_DIR / "Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.6.docx"
+OUT = OUT_DIR / "Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.7.docx"
 IMG_DIR = ROOT / "docs" / "evidencias" / "auditoria-uiux-local"
 PRINT_DIR = ROOT / "docs" / "evidencias" / "etapa7_homologacao" / "prints_visuais"
-QA_DIR = ROOT / "docs" / "cliente" / "homologacao_roteiros" / "qa_roteiro_completo_v1.6"
+QA_DIR = ROOT / "docs" / "cliente" / "homologacao_roteiros" / "qa_roteiro_completo_v1.7"
 
 GREEN = "087F5B"
 NAVY = "142033"
@@ -183,7 +183,7 @@ def configure_document(doc):
         style.paragraph_format.space_after = Pt(5)
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    footer.text = "Atenza FieldOps | Homologação | Roteiro v1.6"
+    footer.text = "Atenza FieldOps | Homologação | Roteiro v1.7"
     footer.runs[0].font.name = "Arial"
     footer.runs[0].font.size = Pt(8)
     footer.runs[0].font.color.rgb = RGBColor.from_string(GRAY)
@@ -206,7 +206,7 @@ def main():
     run.font.color.rgb = RGBColor.from_string(NAVY)
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = subtitle.add_run("Atenza FieldOps | Homologação Ciperprag | v1.6")
+    r = subtitle.add_run("Atenza FieldOps | Homologação Ciperprag | v1.7")
     r.font.name = "Arial"
     r.font.size = Pt(12)
     r.font.color.rgb = RGBColor.from_string(GREEN)
@@ -339,6 +339,17 @@ def main():
     add_print(doc, PRINT_DIR / "login-saas-sem-ciperprag.png", "Print de referência: login neutro da plataforma SaaS.")
     add_print(doc, PRINT_DIR / "dashboard-sidebar-logo-tenant.png", "Print de referência: logo do tenant após autenticação.")
 
+    add_heading(doc, "9A. Revalidacao das correcoes desta rodada")
+    add_body(doc, "Execute esta secao novamente por causa do retorno da rodada anterior. Registre um resultado separado para cada item e anexe o documento ou print correspondente.")
+    add_table(doc, ["ID", "Acao", "Resultado esperado", "Resultado"], [
+        ["COM-02-R", "Criar uma nova proposta e conferir cada item.", "Nome e unidade vem do catalogo; o cadastro solicita o endereco da atividade; nao ha descricao comercial nem unidade manual na linha.", ""],
+        ["COM-03-R", "Gerar minuta e contrato a partir da proposta.", "Proposta, minuta e contrato mantem servicos, unidades, enderecos e valores sem redigitacao divergente.", ""],
+        ["QL-01-R", "Gerar certificado com o tenant Ciperprag configurado.", "A marca-dagua usa o icone/logo parametrizado do tenant; nao aparece uma logo fixa de outro cliente.", ""],
+        ["FIN-01-R", "Abrir Configuracoes > Medicao e emitir um PDF.", "Responsavel, cargo e modo da assinatura podem ser definidos; o documento usa responsavel pela emissao, nao pela execucao.", ""],
+        ["QL-03-R", "Abrir Relatorios tecnicos.", "As OS mais recentes aparecem no topo pela data de execucao/emissao, independentemente da ordem de cadastro.", ""],
+    ], [0.75, 1.8, 3.75, 0.9])
+    add_callout(doc, "Criterio de revalidacao", "Se qualquer item falhar, registre o numero da proposta/contrato/OS/medicao, a conta utilizada, o passo exato e um print sem senha. Nao considere o fluxo aprovado apenas porque a tela abriu.", "FFF7E0")
+
     add_heading(doc, "10. Matriz consolidada de aceite")
     rows = []
     matrix = [
@@ -384,7 +395,7 @@ def main():
     doc.core_properties.title = "Roteiro Completo de Validação Atenza FieldOps - Ciperprag"
     doc.core_properties.subject = "Homologação funcional, visual e SaaS"
     doc.core_properties.author = "Atenza"
-    doc.core_properties.comments = "Versão 1.6 - homologação"
+    doc.core_properties.comments = "Versão 1.7 - revalidação de correções"
     doc.save(OUT)
     print(OUT)
 

@@ -1586,6 +1586,7 @@ async function getContractTemplates(tenantId) {
         frequencia: row.frequencia,
         descricaoComercial: row.descricao_comercial || "",
         unidadeComercial: row.unidade_comercial || "",
+        enderecoAtividade: row.endereco_atividade || "",
         contratoOperacionalId: row.contrato_operacional_id,
         contratoOperacionalStatus: row.contrato_operacional_status,
         contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
@@ -1627,11 +1628,12 @@ async function buildCommercialDocumentSnapshot(client, { tenantId, templateId })
   const services = serviceRows.map((item) => ({
     id: item.id,
     servicoId: item.servico_id,
-    nome: item.descricao_comercial || item.catalogo_nome || "Serviço não informado",
+    nome: item.catalogo_nome || "Serviço não informado",
     descricaoCatalogo: item.catalogo_descricao || null,
     tipo: item.catalogo_tipo || null,
     quantidade: Number(item.quantidade || 0),
-    unidade: item.unidade_comercial || item.catalogo_unidade || "un.",
+    unidade: item.catalogo_unidade || "un.",
+    enderecoAtividade: item.endereco_atividade || null,
     valorUnitario: Number(item.valor_unitario || 0),
     valorTotal: Number(item.quantidade || 0) * Number(item.valor_unitario || 0),
     frequencia: item.frequencia || null,
@@ -3107,8 +3109,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     );
     for (const servico of body.servicos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
           id,
           servico.servicoId,
@@ -3117,6 +3119,7 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
           servico.frequencia,
           servico.descricaoComercial || null,
           servico.unidadeComercial || null,
+          servico.enderecoAtividade || null,
         ],
       );
     }

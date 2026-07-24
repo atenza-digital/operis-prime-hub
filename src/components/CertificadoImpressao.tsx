@@ -434,7 +434,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     company?.logoUrl,
   );
   const logoSrc = await toBase64Img(logoPrincipalUrl);
-  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl);
+  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl, logoPrincipalUrl);
   const arteFundoSrc = await toBase64Img(arteFundoUrl);
   const seloUrl = firstText(config.seloInstitucionalUrl, snapshotEmpresa.seloInstitucionalUrl);
   const seloSrc = await toBase64Img(seloUrl);

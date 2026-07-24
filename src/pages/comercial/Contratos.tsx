@@ -58,7 +58,7 @@ const statusLabels: Record<string, string> = {
   encerrado: "Encerrado",
 };
 
-const emptyServico: ContratoServico = { servicoId: "", quantidade: 1, valorUnitario: 0, frequencia: "Mensal", descricaoComercial: "", unidadeComercial: "" };
+const emptyServico: ContratoServico = { servicoId: "", quantidade: 1, valorUnitario: 0, frequencia: "Mensal", descricaoComercial: "", unidadeComercial: "", enderecoAtividade: "" };
 const emptyTemplate: Omit<ContratoTemplate, "id"> = {
   numero: "",
   clienteId: "",
@@ -179,7 +179,8 @@ function ProposalDocumentPrint({ item, client, services, company, logoSrc, docum
     ? [client.endereco, client.bairro, `${client.municipio}-${client.uf}`, client.cep].filter(Boolean).join(", ")
     : "";
   const principalContact = client?.contatos?.find((contact) => contact.principal) || client?.contatos?.[0];
-  const locations = item.locaisExecucao?.length ? item.locaisExecucao : clientAddress ? [clientAddress] : [];
+  const activityAddresses = Array.from(new Set(item.servicos.map((service) => cleanText(service.enderecoAtividade)).filter(Boolean)));
+  const locations = item.locaisExecucao?.length ? item.locaisExecucao : activityAddresses.length ? activityAddresses : clientAddress ? [clientAddress] : [];
   const servicesRows = item.servicos.map((service, index) => {
     const catalog = services.find((entry) => entry.id === service.servicoId);
     const total = Number(service.quantidade || 0) * Number(service.valorUnitario || 0);
@@ -252,7 +253,7 @@ function ProposalDocumentPrint({ item, client, services, company, logoSrc, docum
         <div className="mt-3 space-y-2">
           {servicesRows.map(({ catalog, service, index }) => (
             <div key={`${service.servicoId}-${index}`}>
-              <p className="font-bold">{String(index + 1).padStart(2, "0")} - {catalog?.nome || service.descricaoComercial || "Serviço não informado"}</p>
+              <p className="font-bold">{String(index + 1).padStart(2, "0")} - {catalog?.nome || "Serviço não informado"}</p>
               <p className="mt-1 text-slate-700">{catalog?.descricao || `Serviço com frequência ${service.frequencia || "conforme contrato"}.`}</p>
             </div>
           ))}
@@ -276,7 +277,7 @@ function ProposalDocumentPrint({ item, client, services, company, logoSrc, docum
         <h2 className="border-b border-slate-400 pb-1 text-[11px] font-black uppercase">4 - Valor do serviço</h2>
         <table className="mt-3 w-full border-collapse text-[9px]">
           <thead><tr className="bg-[#c6dfb5]"><th className="border border-black px-2 py-1.5 text-left">Item</th><th className="border border-black px-2 py-1.5 text-left">Descrição de serviços</th><th className="border border-black px-2 py-1.5 text-right">Qtd.</th><th className="border border-black px-2 py-1.5 text-left">Frequência</th><th className="border border-black px-2 py-1.5 text-right">Valor unit.</th><th className="border border-black px-2 py-1.5 text-right">Valor total</th></tr></thead>
-          <tbody>{servicesRows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-price-${index}`}><td className="border border-black px-2 py-1.5">{String(index + 1).padStart(2, "0")}</td><td className="border border-black px-2 py-1.5"><strong>{catalog?.nome || service.descricaoComercial || "Serviço não informado"}</strong><br /><span className="text-[8px]">Unidade: {service.unidadeComercial || catalog?.unidade || "un."}</span></td><td className="border border-black px-2 py-1.5 text-right">{service.quantidade}</td><td className="border border-black px-2 py-1.5">{service.frequencia || "-"}</td><td className="border border-black px-2 py-1.5 text-right">{money(Number(service.valorUnitario || 0))}</td><td className="border border-black px-2 py-1.5 text-right font-bold">{money(lineTotal)}</td></tr>)}</tbody>
+          <tbody>{servicesRows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-price-${index}`}><td className="border border-black px-2 py-1.5">{String(index + 1).padStart(2, "0")}</td><td className="border border-black px-2 py-1.5"><strong>{catalog?.nome || "Serviço não informado"}</strong><br /><span className="text-[8px]">Unidade: {catalog?.unidade || "un."}</span></td><td className="border border-black px-2 py-1.5 text-right">{service.quantidade}</td><td className="border border-black px-2 py-1.5">{service.frequencia || "-"}</td><td className="border border-black px-2 py-1.5 text-right">{money(Number(service.valorUnitario || 0))}</td><td className="border border-black px-2 py-1.5 text-right font-bold">{money(lineTotal)}</td></tr>)}</tbody>
           <tfoot><tr><td className="border border-black px-2 py-2 text-right font-bold uppercase" colSpan={5}>Total</td><td className="border border-black px-2 py-2 text-right text-[12px] font-black" style={{ color: primaryColor }}>{money(total)}</td></tr></tfoot>
         </table>
       </section>
@@ -301,7 +302,8 @@ function ProposalReferencePrint({ item, client, services, company, logoSrc, docu
   const address = client ? [client.endereco, client.bairro, `${client.municipio}-${client.uf}`, client.cep].filter(Boolean).map(cleanText).join(", ") : "";
   const companyName = cleanText(company?.razaoSocial || company?.nomeFantasia || "Empresa emissora");
   const contact = [company?.telefone, company?.email].filter(Boolean).map(cleanText).join(" | ");
-  const locations = item.locaisExecucao?.length ? item.locaisExecucao : address ? [address] : [];
+  const activityAddresses = Array.from(new Set(item.servicos.map((service) => cleanText(service.enderecoAtividade)).filter(Boolean)));
+  const locations = item.locaisExecucao?.length ? item.locaisExecucao : activityAddresses.length ? activityAddresses : address ? [address] : [];
   const rows = item.servicos.map((service, index) => {
     const catalog = services.find((entry) => entry.id === service.servicoId);
     const total = Number(service.quantidade || 0) * Number(service.valorUnitario || 0);
@@ -350,8 +352,8 @@ function ProposalReferencePrint({ item, client, services, company, logoSrc, docu
   const paragraphClass = "mt-[7pt] text-justify leading-[1.3] [text-indent:7.5mm]";
   const listClass = "mt-[7pt] list-disc space-y-[4pt] pl-[14pt] leading-[1.24]";
   const tableClass = "mt-[8pt] w-full border-collapse text-[8.7pt] leading-[1.2]";
-  const serviceText = (catalog: BootstrapData["services"][number] | undefined, service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.descricao || service.descricaoComercial || `Execução de ${catalog?.nome || "serviço técnico"}, conforme frequência e condições registradas.`);
-  const serviceName = (catalog: BootstrapData["services"][number] | undefined, service: ContratoTemplate["servicos"][number]) => cleanText(service.descricaoComercial || catalog?.nome || "Serviço técnico");
+  const serviceText = (catalog: BootstrapData["services"][number] | undefined, _service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.descricao || `Execução de ${catalog?.nome || "serviço técnico"}, conforme frequência e condições registradas.`);
+  const serviceName = (catalog: BootstrapData["services"][number] | undefined, _service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.nome || "Serviço técnico");
   const splitActivity = (value: string) => value.split(";").map((line) => cleanText(line.trim())).filter(Boolean);
   const scopeItems = scope.length ? scope.flatMap(splitActivity) : rows.map(({ catalog, service }) => serviceText(catalog, service));
   const conditionItems = conditions.length ? conditions : [
@@ -467,7 +469,7 @@ function ProposalReferencePrint({ item, client, services, company, logoSrc, docu
         <p className={paragraphClass}>Os valores abaixo contemplam o escopo técnico, mobilização, mão de obra, equipamentos ordinários, materiais operacionais e administração necessários, salvo condições expressamente indicadas.</p>
         <table className={tableClass}>
           <thead><tr style={{ backgroundColor: darkColor }} className="text-white"><th className="w-[10mm] px-[7pt] py-[8pt] text-center font-semibold">Item</th><th className="px-[7pt] py-[8pt] text-left font-semibold">Descrição</th><th className="w-[18mm] px-[7pt] py-[8pt] text-center font-semibold">Unid.</th><th className="w-[15mm] px-[7pt] py-[8pt] text-center font-semibold">Qtd.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Valor unit.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Total</th></tr></thead>
-          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-commercial-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{index + 1}</td><td className="px-[7pt] py-[8pt] font-semibold">{serviceName(catalog, service)}</td><td className="px-[7pt] py-[8pt] text-center">{cleanText(service.unidadeComercial || catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></tr>)}</tbody>
+          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-commercial-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{index + 1}</td><td className="px-[7pt] py-[8pt] font-semibold">{serviceName(catalog, service)}</td><td className="px-[7pt] py-[8pt] text-center">{cleanText(catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></tr>)}</tbody>
           <tfoot><tr><td className="px-[8pt] py-[8pt] text-right text-[9.5pt] font-semibold" colSpan={5} style={{ backgroundColor: softColor }}>Valor global da proposta</td><td className="px-[8pt] py-[8pt] text-right text-[11pt] font-bold" style={{ backgroundColor: softColor, color: primaryColor }}>{money(total)}</td></tr></tfoot>
         </table>
 
@@ -526,7 +528,8 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
   const companyName = cleanText(company?.razaoSocial || company?.nomeFantasia || "Empresa emissora");
   const companyDocument = cleanText(company?.cnpj || "");
   const contact = [company?.telefone, company?.email].filter(Boolean).map(cleanText).join(" | ");
-  const locations = item.locaisExecucao?.length ? item.locaisExecucao.map(cleanText) : address ? [address] : [];
+  const activityAddresses = Array.from(new Set(item.servicos.map((service) => cleanText(service.enderecoAtividade)).filter(Boolean)));
+  const locations = item.locaisExecucao?.length ? item.locaisExecucao.map(cleanText) : activityAddresses.length ? activityAddresses : address ? [address] : [];
   const rows = item.servicos.map((service, index) => {
     const catalog = services.find((entry) => entry.id === service.servicoId);
     const total = Number(service.quantidade || 0) * Number(service.valorUnitario || 0);
@@ -545,8 +548,8 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
   const issuePlace = resolveIssuePlace(item, company);
   const issueCity = issuePlace.city;
   const issueState = issuePlace.state;
-  const serviceName = (catalog: BootstrapData["services"][number] | undefined, service: ContratoTemplate["servicos"][number]) => cleanText(service.descricaoComercial || catalog?.nome || "Serviço técnico");
-  const serviceText = (catalog: BootstrapData["services"][number] | undefined, service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.descricao || service.descricaoComercial || `Execução de ${catalog?.nome || "serviço técnico"}, conforme frequência e condições registradas.`);
+  const serviceName = (catalog: BootstrapData["services"][number] | undefined, _service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.nome || "Serviço técnico");
+  const serviceText = (catalog: BootstrapData["services"][number] | undefined, _service: ContratoTemplate["servicos"][number]) => cleanText(catalog?.descricao || `Execução de ${catalog?.nome || "serviço técnico"}, conforme frequência e condições registradas.`);
   const effectiveLogoSrc = logoSrc || buildTenantLogoFallback(companyName, primaryColor);
   const paragraphClass = "mt-[7pt] text-justify leading-[1.3] [text-indent:7.5mm]";
   const listClass = "mt-[7pt] list-disc space-y-[4pt] pl-[14pt] leading-[1.24]";
@@ -708,7 +711,7 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
         <SectionTitle number="04" title="Serviços contratados" compact />
         <table className={tableClass}>
           <thead><tr style={{ backgroundColor: darkColor }} className="text-white"><th className="w-[10mm] px-[7pt] py-[8pt] text-center font-semibold">Item</th><th className="px-[7pt] py-[8pt] text-left font-semibold">Serviço/produto</th><th className="w-[18mm] px-[7pt] py-[8pt] text-center font-semibold">Unid.</th><th className="w-[15mm] px-[7pt] py-[8pt] text-center font-semibold">Qtd.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Unit.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Total</th></tr></thead>
-          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-contract-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{String(index + 1).padStart(2, "0")}</td><td className="px-[7pt] py-[8pt]"><p className="font-semibold">{serviceName(catalog, service)}</p><p className="mt-[2pt] text-[8pt] text-slate-500">{serviceText(catalog, service)}</p></td><td className="px-[7pt] py-[8pt] text-center">{cleanText(service.unidadeComercial || catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></tr>)}</tbody>
+          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-contract-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{String(index + 1).padStart(2, "0")}</td><td className="px-[7pt] py-[8pt]"><p className="font-semibold">{serviceName(catalog, service)}</p><p className="mt-[2pt] text-[8pt] text-slate-500">{serviceText(catalog, service)}</p></td><td className="px-[7pt] py-[8pt] text-center">{cleanText(catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></tr>)}</tbody>
           <tfoot><tr><td className="px-[8pt] py-[8pt] text-right text-[9.5pt] font-semibold" colSpan={5} style={{ backgroundColor: softColor }}>Total geral</td><td className="px-[8pt] py-[8pt] text-right text-[11pt] font-bold" style={{ backgroundColor: softColor, color: primaryColor }}>{money(total)}</td></tr></tfoot>
         </table>
 
@@ -1205,19 +1208,19 @@ export default function Contratos() {
                 <p className="mb-3 text-sm font-semibold">Dados técnicos da proposta</p>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Título / subtítulo da proposta</Label>
+                    <Label>Modelo documental (título automático)</Label>
                     <Input
                       placeholder="Ex.: Serviço mensal de roçagem, aplicação de herbicida e jardinagem semanal"
-                      value={form.titulo || ""}
-                      onChange={(event) => setForm({ ...form, titulo: event.target.value })}
+                      value={form.titulo || "Proposta Técnica e Comercial"}
+                      readOnly
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">
-                    <Label>Objeto</Label>
+                    <Label>Objeto composto pelo catálogo</Label>
                     <Textarea
                       placeholder="Descreva o objeto comercial/técnico da proposta..."
-                      value={form.objeto || ""}
-                      onChange={(event) => setForm({ ...form, objeto: event.target.value })}
+                      value={form.objeto || "Será composto a partir dos serviços selecionados no catálogo."}
+                      readOnly
                       rows={2}
                     />
                   </div>
@@ -1315,7 +1318,7 @@ export default function Contratos() {
                       <Input type="number" step="0.01" value={servico.valorUnitario} onChange={(event) => updateServico(index, "valorUnitario", Number(event.target.value))} />
                     </div>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-[1fr_160px]">
+                  <div className="hidden grid gap-3 md:grid-cols-[1fr_160px]" aria-hidden="true">
                     <div className="space-y-1">
                       <Label className="text-xs">Descrição comercial da linha</Label>
                       <Input
@@ -1332,6 +1335,15 @@ export default function Contratos() {
                         onChange={(event) => updateServico(index, "unidadeComercial", event.target.value)}
                       />
                     </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Endereço da atividade</Label>
+                    <Input
+                      placeholder="Ex.: Unidade, área ou endereço onde o serviço será realizado"
+                      value={servico.enderecoAtividade || ""}
+                      onChange={(event) => updateServico(index, "enderecoAtividade", event.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">A unidade e o nome do serviço vêm do catálogo cadastrado.</p>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="space-y-1 flex-1 mr-3">
