@@ -261,8 +261,9 @@ Entregue inicialmente em homologacao:
 - Corrigido drift de schema identificado pelo smoke: `ensureDatabaseShape` agora garante as colunas comerciais de servicos de templates antes das consultas do bootstrap.
 - Saneamento controlado de hashes legados de anexos preparado no CI/CD para homologacao: recalcula somente conteudo local persistido, registra auditoria e mantem o smoke bloqueando divergencias remanescentes.
 - Rodada de correcoes para o retorno da validacao v1.6 implementada: endereco da atividade por item comercial, catalogo como origem de nome/unidade, marca-d'agua do certificado com fallback exclusivo do tenant, responsavel configuravel pela emissao da medicao e relatorios ordenados pela data real da OS. Evidencia: `docs/evidencias/etapa9_homologacao/CORRECOES_RETORNO_TARCISIO_V1.6.md`; roteiro de revalidacao: `docs/cliente/homologacao_roteiros/Roteiro_Validacao_Completo_Atenza_FieldOps_Ciperprag_v1.7.docx`.
+- Assistente de proposta por PDF implementado como rascunho revisavel: upload validado, leitura estruturada pela API da OpenAI somente no backend, reconciliacao com clientes/servicos ativos do tenant, bloqueio de IDs fora do catalogo, anexacao opcional do PDF de referencia e auditoria sem persistir o conteudo enviado. Evidencia: `docs/evidencias/etapa9_homologacao/ASSISTENTE_PROPOSTA_PDF_V1.md`. Pendente: configurar secret em homologacao e executar validacao com PDFs reais da Ciperprag.
 
-Backlog da Etapa 8: 36 itens.
+Backlog da Etapa 8: 37 itens.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -331,8 +332,8 @@ Todos os itens abaixo estao alocados na Etapa 8:
 
 ## Controle de backlog
 
-- Total de itens mapeados apos atualizacao de UI/UX, fluxo e complemento de medicao: 48.
-- Total de itens remanescentes: 40.
+- Total de itens mapeados apos atualizacao de UI/UX, fluxo, complemento de medicao e assistencia comercial: 49.
+- Total de itens remanescentes: 41.
 - Etapa 7: 5 itens.
-- Etapa 8: 36 itens.
+- Etapa 8: 37 itens.
 - Itens fora de etapa: 0.

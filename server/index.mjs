@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
+import { buildProposalCatalogContext, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -3043,6 +3044,20 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   const id = body.id || makeCompactId("TPL");
   const tenantId = req.auth.user.tenant.id;
   let operationalSync = null;
+  const submittedServices = Array.isArray(body.servicos) ? body.servicos : [];
+  const submittedServiceIds = submittedServices.map((item) => String(item?.servicoId || "").trim()).filter(Boolean);
+  if (body.tipo === "proposta" && (!submittedServiceIds.length || submittedServiceIds.length !== submittedServices.length)) {
+    return res.status(400).json({ error: "A proposta precisa ter ao menos um serviço válido do catálogo." });
+  }
+  if (body.tipo === "proposta" && submittedServiceIds.length) {
+    const { rows: catalogRows } = await query(
+      "SELECT id FROM ciperprag_hub.servicos_catalogo WHERE tenant_id = $1 AND ativo IS TRUE AND id = ANY($2::text[])",
+      [tenantId, submittedServiceIds],
+    );
+    if (catalogRows.length !== new Set(submittedServiceIds).size) {
+      return res.status(400).json({ error: "A proposta contém serviço que não pertence ao catálogo ativo deste tenant." });
+    }
+  }
   const locaisExecucao = Array.isArray(body.locaisExecucao)
     ? body.locaisExecucao.map((item) => String(item || "").trim()).filter(Boolean)
     : [];
@@ -3147,6 +3162,60 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     });
   });
   res.json({ ok: true, id, operationalSync });
+});
+
+app.post("/api/contract-templates/proposal-assist", requirePermission("contratos.manage"), async (req, res) => {
+  if (String(process.env.OPENAI_PROPOSAL_ASSIST_ENABLED).toLowerCase() !== "true") {
+    return res.status(503).json({ error: "A assistência por PDF ainda não está habilitada neste ambiente." });
+  }
+  const fileName = safeFileNamePart(req.body.fileName || "referencia-proposta.pdf");
+  const declaredMimeType = String(req.body.mimeType || "application/pdf").toLowerCase();
+  let parsed;
+  try {
+    parsed = validateAttachmentPayload({
+      contentBase64: req.body.contentBase64,
+      declaredMimeType,
+      allowedMimeTypes: ["application/pdf"],
+      maxBytes: 8 * 1024 * 1024,
+      label: "PDF de referência da proposta",
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+
+  const tenantId = req.auth.user.tenant.id;
+  const [{ rows: clientRows }, { rows: serviceRows }] = await Promise.all([
+    query(`SELECT id, razao_social, nome_fantasia, cnpj, endereco, municipio, uf
+           FROM ciperprag_hub.clientes
+           WHERE tenant_id = $1 AND ativo IS TRUE
+           ORDER BY razao_social LIMIT 250`, [tenantId]),
+    query(`SELECT id, nome, descricao, unidade, tipo, recorrencia_dias, gera_certificado
+           FROM ciperprag_hub.servicos_catalogo
+           WHERE tenant_id = $1 AND ativo IS TRUE
+           ORDER BY nome LIMIT 250`, [tenantId]),
+  ]);
+  const clients = clientRows.map((row) => ({ id: row.id, razaoSocial: row.razao_social, nomeFantasia: row.nome_fantasia, cnpj: row.cnpj, endereco: row.endereco, municipio: row.municipio, uf: row.uf }));
+  const services = serviceRows.map((row) => ({ id: row.id, nome: row.nome, descricao: row.descricao, unidade: row.unidade, tipo: row.tipo, recorrenciaDias: row.recorrencia_dias, geraCertificado: row.gera_certificado }));
+
+  try {
+    const rawDraft = await generateProposalAssistDraft({
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      fileName,
+      buffer: parsed.buffer,
+      context: buildProposalCatalogContext({ clients, services }),
+    });
+    const draft = normalizeProposalAssistDraft(rawDraft, { clients, services });
+    await logAuditEvent(pool, req, {
+      entityType: "proposta",
+      action: "proposal_ai_assist_requested",
+      summary: `Rascunho de proposta extraído de PDF: ${fileName}`,
+      after: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", clienteId: draft.clienteId || null, servicos: draft.servicos.length, camposPendentes: draft.camposPendentes },
+    });
+    return res.json({ ok: true, draft, meta: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", arquivoTemporario: true } });
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : "Não foi possível analisar o PDF." });
+  }
 });
 
 app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contratos.manage"), async (req, res) => {
@@ -3378,19 +3447,19 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
     );
     const template = templates[0];
     if (!template) {
-      const error = new Error("Minuta nao encontrada.");
+      const error = new Error("Proposta ou minuta não encontrada.");
       error.status = 404;
       throw error;
     }
-    if (template.tipo !== "minuta") {
-      const error = new Error("O arquivo original deve ser vinculado a uma minuta.");
+    if (!['minuta', 'proposta'].includes(template.tipo)) {
+      const error = new Error("O arquivo original deve ser vinculado a uma proposta ou minuta.");
       error.status = 400;
       throw error;
     }
     const id = makeId("SRC");
     const storageTarget = createAttachmentStoragePlan({
       tenantSlug,
-      entityType: "minuta",
+      entityType: template.tipo,
       entityId: template.id,
       category: "documento",
       fileName,
@@ -3413,10 +3482,11 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
     await client.query(
       `INSERT INTO ciperprag_hub.evidencias_anexos
        (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
-       VALUES ($1,$2,'minuta',$3,'documento',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,$14)`,
+       VALUES ($1,$2,$3,$4,'documento',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,TRUE,$15)`,
       [
         id,
         tenantId,
+        template.tipo,
         template.id,
         fileName,
         mimeType,
@@ -3432,10 +3502,10 @@ app.post("/api/contract-templates/:id/source-file", requirePermission("contratos
       ],
     );
     await logAuditEvent(client, req, {
-      entityType: "minuta",
+      entityType: template.tipo,
       entityId: template.id,
       action: "source_file_uploaded",
-      summary: `Arquivo original da minuta anexado: ${template.numero || template.id}`,
+      summary: `Arquivo original de ${template.tipo} anexado: ${template.numero || template.id}`,
       after: { attachmentId: id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash },
     });
     return { id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash };

@@ -341,6 +341,30 @@ export interface ContratoTemplate {
   contratosOperacionaisIds?: string[];
 }
 
+export interface ProposalAssistDraft {
+  clienteId: string;
+  clienteNome: string;
+  titulo: string;
+  objeto: string;
+  modalidade: string;
+  validadeDias: number;
+  locaisExecucao: string[];
+  escopoTecnico: string[];
+  condicoesComerciais: string[];
+  servicos: Array<{
+    servicoId: string;
+    servicoNome: string;
+    quantidade: number;
+    valorUnitario: number;
+    frequencia: string;
+    enderecoAtividade: string;
+  }>;
+  observacoes: string[];
+  confianca: "alta" | "media" | "baixa";
+  camposPendentes: string[];
+  avisos: string[];
+}
+
 export interface EmpresaConfig {
   tenantSlug?: string;
   tenantNome?: string;
@@ -786,6 +810,11 @@ export const uploadContractTemplateSourceFile = (id: string, payload: { fileName
   ok: boolean;
   attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string };
 }>(`/contract-templates/${id}/source-file`, { method: "POST", body: JSON.stringify(payload) });
+export const generateProposalFromPdf = (payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
+  ok: boolean;
+  draft: ProposalAssistDraft;
+  meta: { fileName: string; bytes: number; model: string; arquivoTemporario: boolean };
+}>("/contract-templates/proposal-assist", { method: "POST", body: JSON.stringify(payload) });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
