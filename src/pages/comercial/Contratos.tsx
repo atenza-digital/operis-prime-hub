@@ -1242,7 +1242,7 @@ export default function Contratos() {
             {form.tipo === "minuta" || form.tipo === "proposta" ? (
               <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
                 <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><p className="text-sm font-semibold">PDF de referência</p></div>
-                <p className="mt-1 text-xs text-muted-foreground">Anexe a minuta recebida para manter o documento de referência junto ao cadastro. PDF, DOC, DOCX, ODT, PNG ou JPG até 8 MB.</p>
+                 <p className="mt-1 text-xs text-muted-foreground">Anexe um PDF de referência para preencher a proposta a partir dos cadastros do sistema. O arquivo será usado como rascunho e ficará disponível junto ao cadastro após a confirmação.</p>
                 <Input
                   className="mt-3"
                   type="file"
