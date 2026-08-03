@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   generateContractFromProposal,
   generateMinutaFromProposal,
+  generateProposalFromPdf,
   getBootstrap,
   issueContractTemplateDocument,
   saveContractTemplate,
@@ -9,6 +10,7 @@ import {
   type BootstrapData,
   type ContratoServico,
   type ContratoTemplate,
+  type ProposalAssistDraft,
 } from "@/lib/api";
 import { repairMojibake } from "@/lib/repairMojibake";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -27,11 +29,13 @@ import {
   ClipboardCheck,
   FileSignature,
   FileText,
+  FileUp,
   Link2,
   Pencil,
   Plus,
   Search,
   Send,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -739,6 +743,8 @@ export default function Contratos() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Omit<ContratoTemplate, "id">>(emptyTemplate);
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [proposalAssistDraft, setProposalAssistDraft] = useState<ProposalAssistDraft | null>(null);
+  const [analyzingProposal, setAnalyzingProposal] = useState(false);
   const [pdfItem, setPdfItem] = useState<ContratoTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -803,6 +809,7 @@ export default function Contratos() {
       servicos: [{ ...emptyServico }],
     });
     setSourceFile(null);
+    setProposalAssistDraft(null);
     setDialogOpen(true);
   }
 
@@ -811,7 +818,45 @@ export default function Contratos() {
     const { id, ...rest } = item;
     setForm({ ...rest, servicos: rest.servicos.length > 0 ? rest.servicos : [{ ...emptyServico }] });
     setSourceFile(null);
+    setProposalAssistDraft(null);
     setDialogOpen(true);
+  }
+
+  async function handleAnalyzeProposalPdf() {
+    if (!sourceFile) {
+      toast.error("Selecione um PDF de referência antes de analisar.");
+      return;
+    }
+    setAnalyzingProposal(true);
+    try {
+      const contentBase64 = await readFileAsDataUrl(sourceFile);
+      const result = await generateProposalFromPdf({ fileName: sourceFile.name, mimeType: sourceFile.type || "application/pdf", contentBase64 });
+      setProposalAssistDraft(result.draft);
+      setForm((previous) => ({
+        ...previous,
+        clienteId: result.draft.clienteId || previous.clienteId,
+        titulo: result.draft.titulo || previous.titulo,
+        objeto: result.draft.objeto || previous.objeto,
+        modalidade: result.draft.modalidade || previous.modalidade,
+        validadeDias: result.draft.validadeDias || previous.validadeDias,
+        locaisExecucao: result.draft.locaisExecucao.length ? result.draft.locaisExecucao : previous.locaisExecucao,
+        escopoTecnico: result.draft.escopoTecnico.join("\n") || previous.escopoTecnico,
+        condicoesComerciais: result.draft.condicoesComerciais.join("\n") || previous.condicoesComerciais,
+        observacoes: result.draft.observacoes.join("\n") || previous.observacoes,
+        servicos: result.draft.servicos.length ? result.draft.servicos.map((item) => ({
+          servicoId: item.servicoId,
+          quantidade: item.quantidade,
+          valorUnitario: item.valorUnitario,
+          frequencia: item.frequencia,
+          enderecoAtividade: item.enderecoAtividade,
+        })) : previous.servicos,
+      }));
+      toast.success("Rascunho preenchido. Revise os campos pendentes antes de salvar.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível analisar o PDF.");
+    } finally {
+      setAnalyzingProposal(false);
+    }
   }
 
   async function handleSave() {
@@ -820,14 +865,19 @@ export default function Contratos() {
       return;
     }
 
+    if (form.tipo === "proposta" && form.servicos.some((servico) => !servico.servicoId)) {
+      toast.error("Selecione um serviço do catálogo em todas as linhas antes de salvar a proposta.");
+      return;
+    }
+
     setSaving(true);
     try {
       const result = await saveContractTemplate({ ...form, id: editId ?? undefined });
-      if (form.tipo === "minuta" && sourceFile && result.id) {
+      if (["minuta", "proposta"].includes(form.tipo) && sourceFile && result.id) {
         const contentBase64 = await readFileAsDataUrl(sourceFile);
         const uploaded = await uploadContractTemplateSourceFile(result.id, {
           fileName: sourceFile.name,
-          mimeType: sourceFile.type,
+          mimeType: sourceFile.type || (form.tipo === "proposta" ? "application/pdf" : "application/octet-stream"),
           contentBase64,
         });
         toast.success(`Arquivo original anexado. Hash ${uploaded.attachment.hashSha256.slice(0, 12)}...`);
@@ -1189,17 +1239,33 @@ export default function Contratos() {
               </Select>
             </div>
 
-            {form.tipo === "minuta" ? (
+            {form.tipo === "minuta" || form.tipo === "proposta" ? (
               <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4">
-                <p className="text-sm font-semibold">Arquivo original do cliente</p>
+                <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><p className="text-sm font-semibold">PDF de referência</p></div>
                 <p className="mt-1 text-xs text-muted-foreground">Anexe a minuta recebida para manter o documento de referência junto ao cadastro. PDF, DOC, DOCX, ODT, PNG ou JPG até 8 MB.</p>
                 <Input
                   className="mt-3"
                   type="file"
-                  accept="application/pdf,.doc,.docx,.odt,image/png,image/jpeg"
+                  accept={form.tipo === "proposta" ? "application/pdf" : "application/pdf,.doc,.docx,.odt,image/png,image/jpeg"}
                   onChange={(event) => setSourceFile(event.target.files?.[0] || null)}
                 />
-                {sourceFile ? <p className="mt-2 text-xs text-muted-foreground">Selecionado: {sourceFile.name}</p> : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {sourceFile ? <p className="text-xs text-muted-foreground">Selecionado: {sourceFile.name}</p> : null}
+                  {form.tipo === "proposta" ? (
+                    <Button type="button" size="sm" variant="outline" onClick={handleAnalyzeProposalPdf} disabled={!sourceFile || analyzingProposal}>
+                      <FileUp className="mr-2 h-4 w-4" />
+                      {analyzingProposal ? "Analisando PDF..." : "Preencher proposta com PDF"}
+                    </Button>
+                  ) : null}
+                </div>
+                {proposalAssistDraft && form.tipo === "proposta" ? (
+                  <div className="mt-3 rounded-xl border bg-background/80 p-3 text-xs">
+                    <p className="font-semibold">Prévia da leitura</p>
+                    <p className="mt-1 text-muted-foreground">Cliente: {proposalAssistDraft.clienteNome || "não identificado"} · Serviços reconhecidos: {proposalAssistDraft.servicos.length} · Confiança: {proposalAssistDraft.confianca}</p>
+                    {proposalAssistDraft.camposPendentes.length ? <p className="mt-2 text-amber-700">Revisar: {proposalAssistDraft.camposPendentes.join(", ")}.</p> : null}
+                    {proposalAssistDraft.avisos.length ? <p className="mt-1 text-amber-700">Atenção: {proposalAssistDraft.avisos.join(" ")}</p> : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
