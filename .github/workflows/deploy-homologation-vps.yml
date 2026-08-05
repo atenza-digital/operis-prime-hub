@@ -92,7 +92,7 @@ jobs:
             -i ~/.ssh/homolog_vps_key \
             -o StrictHostKeyChecking=accept-new \
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
-            "IMAGE_NAME='${IMAGE_NAME}' CONTAINER_NAME='${CONTAINER_NAME}' TAG='${{ steps.image.outputs.tag }}' APP_PORT='${APP_PORT}' CONTAINER_PORT='${CONTAINER_PORT}' DOCKER_NETWORK='${DOCKER_NETWORK}' bash -s" <<'REMOTE'
+            "IMAGE_NAME='${IMAGE_NAME}' CONTAINER_NAME='${CONTAINER_NAME}' TAG='${{ steps.image.outputs.tag }}' APP_PORT='${APP_PORT}' CONTAINER_PORT='${CONTAINER_PORT}' DOCKER_NETWORK='${DOCKER_NETWORK}' OPENAI_PROPOSAL_ASSIST_ENABLED='${{ vars.OPENAI_PROPOSAL_ASSIST_ENABLED }}' OPENAI_MODEL='${{ vars.OPENAI_MODEL }}' OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           IMAGE="${IMAGE_NAME}:${TAG}"
@@ -113,6 +113,17 @@ jobs:
           grep -v '^PUBLIC_APP_URL=' "$ENV_FILE" > "${ENV_FILE}.next" || true
           mv "${ENV_FILE}.next" "$ENV_FILE"
           printf 'PUBLIC_APP_URL=%s\n' '${{ github.event.inputs.public_url }}' >> "$ENV_FILE"
+          grep -v '^OPENAI_API_KEY=' "$ENV_FILE" > "${ENV_FILE}.next" || true
+          mv "${ENV_FILE}.next" "$ENV_FILE"
+          grep -v '^OPENAI_PROPOSAL_ASSIST_ENABLED=' "$ENV_FILE" > "${ENV_FILE}.next" || true
+          mv "${ENV_FILE}.next" "$ENV_FILE"
+          grep -v '^OPENAI_MODEL=' "$ENV_FILE" > "${ENV_FILE}.next" || true
+          mv "${ENV_FILE}.next" "$ENV_FILE"
+          printf 'OPENAI_PROPOSAL_ASSIST_ENABLED=%s\n' "${OPENAI_PROPOSAL_ASSIST_ENABLED:-false}" >> "$ENV_FILE"
+          printf 'OPENAI_MODEL=%s\n' "${OPENAI_MODEL:-gpt-4o-mini}" >> "$ENV_FILE"
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" >> "$ENV_FILE"
+          fi
           docker stop "$CONTAINER_NAME"
           docker rename "$CONTAINER_NAME" "$PREVIOUS"
 
