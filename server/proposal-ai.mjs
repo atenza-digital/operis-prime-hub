@@ -1,4 +1,15 @@
 const MAX_DRAFT_SERVICES = 30;
+const OPENAI_REQUEST_TIMEOUT_MS = 90_000;
+
+async function fetchWithTimeout(url, init, timeoutMs = OPENAI_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export const PROPOSAL_ASSIST_SCHEMA = {
   type: "object",
@@ -159,7 +170,7 @@ export async function generateProposalAssistDraft({ apiKey, model = "gpt-4o-mini
     const uploadForm = new FormData();
     uploadForm.append("purpose", "user_data");
     uploadForm.append("file", new Blob([buffer], { type: "application/pdf" }), fileName || "referencia.pdf");
-    const uploadResponse = await fetch("https://api.openai.com/v1/files", { method: "POST", headers, body: uploadForm });
+    const uploadResponse = await fetchWithTimeout("https://api.openai.com/v1/files", { method: "POST", headers, body: uploadForm });
     const uploadBody = await uploadResponse.json().catch(() => ({}));
     if (!uploadResponse.ok) throw new Error(uploadBody?.error?.message || "Não foi possível enviar o PDF para análise.");
     fileId = uploadBody.id;
@@ -172,7 +183,7 @@ export async function generateProposalAssistDraft({ apiKey, model = "gpt-4o-mini
       "O resultado é um rascunho para revisão humana e nunca deve ser tratado como proposta aprovada.",
       "Responda exclusivamente no schema estruturado solicitado, em português do Brasil.",
     ].join("\n");
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -187,6 +198,6 @@ export async function generateProposalAssistDraft({ apiKey, model = "gpt-4o-mini
     if (!outputText) throw new Error("A API não retornou um rascunho estruturado.");
     return JSON.parse(outputText);
   } finally {
-    if (fileId) await fetch(`https://api.openai.com/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers }).catch(() => undefined);
+    if (fileId) await fetchWithTimeout(`https://api.openai.com/v1/files/${encodeURIComponent(fileId)}`, { method: "DELETE", headers }, 10_000).catch(() => undefined);
   }
 }

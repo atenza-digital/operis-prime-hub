@@ -13,6 +13,7 @@ import {
   type ProposalAssistDraft,
 } from "@/lib/api";
 import { repairMojibake } from "@/lib/repairMojibake";
+import { calculateProposalContractEstimate, calculateProposalMonthlyTotal } from "@/lib/proposalCalculations";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -749,6 +750,15 @@ export default function Contratos() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const proposalAnalysisRef = useRef<{ controller: AbortController; id: number } | null>(null);
+  const proposalAnalysisSequence = useRef(0);
+
+  function cancelProposalAnalysis() {
+    proposalAnalysisSequence.current += 1;
+    proposalAnalysisRef.current?.controller.abort();
+    proposalAnalysisRef.current = null;
+    setAnalyzingProposal(false);
+  }
 
   async function reload() {
     setLoading(true);
@@ -763,6 +773,10 @@ export default function Contratos() {
 
   useEffect(() => {
     reload();
+  }, []);
+
+  useEffect(() => () => {
+    proposalAnalysisRef.current?.controller.abort();
   }, []);
 
   useEffect(() => {
@@ -796,6 +810,7 @@ export default function Contratos() {
   }, [templates, clients, busca]);
 
   function openNew(tipo: "proposta" | "contrato" | "minuta" = "proposta") {
+    cancelProposalAnalysis();
     setEditId(null);
     const sequenciaAtual = tipo === "proposta" ? (numberingConfig?.propostaUltimo ?? 0) : (numberingConfig?.contratoUltimo ?? 0);
     const formato = tipo === "proposta"
@@ -814,6 +829,7 @@ export default function Contratos() {
   }
 
   function openEdit(item: ContratoTemplate) {
+    cancelProposalAnalysis();
     setEditId(item.id);
     const { id, ...rest } = item;
     setForm({ ...rest, servicos: rest.servicos.length > 0 ? rest.servicos : [{ ...emptyServico }] });
@@ -827,10 +843,23 @@ export default function Contratos() {
       toast.error("Selecione um PDF de referência antes de analisar.");
       return;
     }
+    cancelProposalAnalysis();
+    const controller = new AbortController();
+    const requestId = proposalAnalysisSequence.current;
+    let timedOut = false;
+    proposalAnalysisRef.current = { controller, id: requestId };
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 90_000);
     setAnalyzingProposal(true);
     try {
       const contentBase64 = await readFileAsDataUrl(sourceFile);
-      const result = await generateProposalFromPdf({ fileName: sourceFile.name, mimeType: sourceFile.type || "application/pdf", contentBase64 });
+      const result = await generateProposalFromPdf(
+        { fileName: sourceFile.name, mimeType: sourceFile.type || "application/pdf", contentBase64 },
+        controller.signal,
+      );
+      if (requestId !== proposalAnalysisSequence.current || controller.signal.aborted) return;
       setProposalAssistDraft(result.draft);
       setForm((previous) => ({
         ...previous,
@@ -853,9 +882,18 @@ export default function Contratos() {
       }));
       toast.success("Rascunho preenchido. Revise os campos pendentes antes de salvar.");
     } catch (error) {
+      if (requestId !== proposalAnalysisSequence.current) return;
+      if (controller.signal.aborted) {
+        if (timedOut) toast.error("A análise demorou mais de 90 segundos. Tente novamente com um PDF menor ou mais legível.");
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Não foi possível analisar o PDF.");
     } finally {
-      setAnalyzingProposal(false);
+      window.clearTimeout(timeoutId);
+      if (proposalAnalysisRef.current?.id === requestId) {
+        proposalAnalysisRef.current = null;
+        setAnalyzingProposal(false);
+      }
     }
   }
 
@@ -886,6 +924,7 @@ export default function Contratos() {
         ? ` Operacional: ${result.operationalSync.created} criado(s), ${result.operationalSync.updated} atualizado(s).`
         : "";
       toast.success(`${editId ? "Registro atualizado" : "Registro criado"}.${synced}`);
+      cancelProposalAnalysis();
       setDialogOpen(false);
       await reload();
     } catch (error) {
@@ -974,8 +1013,11 @@ export default function Contratos() {
   }
 
   function calcTotal(servicos: ContratoServico[]) {
-    return servicos.reduce((total, item) => total + item.quantidade * item.valorUnitario, 0);
+    return calculateProposalMonthlyTotal(servicos);
   }
+
+  const proposalMonthlyTotal = calcTotal(form.servicos);
+  const proposalContractEstimate = calculateProposalContractEstimate(form.servicos, form.vigenciaMeses);
 
   const pdfClient = pdfItem ? clients.find((item) => item.id === pdfItem.clienteId) : null;
   const pdfServicos = pdfItem
@@ -1183,7 +1225,10 @@ export default function Contratos() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open) cancelProposalAnalysis();
+        setDialogOpen(open);
+      }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editId ? "Editar" : form.tipo === "contrato" ? "Novo contrato do cliente" : form.tipo === "minuta" ? "Nova minuta" : "Nova proposta"}</DialogTitle>
@@ -1247,15 +1292,22 @@ export default function Contratos() {
                   className="mt-3"
                   type="file"
                   accept={form.tipo === "proposta" ? "application/pdf" : "application/pdf,.doc,.docx,.odt,image/png,image/jpeg"}
-                  onChange={(event) => setSourceFile(event.target.files?.[0] || null)}
+                  onChange={(event) => {
+                    cancelProposalAnalysis();
+                    setProposalAssistDraft(null);
+                    setSourceFile(event.target.files?.[0] || null);
+                  }}
                 />
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {sourceFile ? <p className="text-xs text-muted-foreground">Selecionado: {sourceFile.name}</p> : null}
                   {form.tipo === "proposta" ? (
-                    <Button type="button" size="sm" variant="outline" onClick={handleAnalyzeProposalPdf} disabled={!sourceFile || analyzingProposal}>
-                      <FileUp className="mr-2 h-4 w-4" />
-                      {analyzingProposal ? "Analisando PDF..." : "Preencher proposta com PDF"}
-                    </Button>
+                    <>
+                      <Button type="button" size="sm" variant="outline" onClick={handleAnalyzeProposalPdf} disabled={!sourceFile || analyzingProposal}>
+                        <FileUp className="mr-2 h-4 w-4" />
+                        {analyzingProposal ? "Analisando PDF..." : "Preencher proposta com PDF"}
+                      </Button>
+                      {analyzingProposal ? <Button type="button" size="sm" variant="ghost" onClick={cancelProposalAnalysis}>Cancelar análise</Button> : null}
+                    </>
                   ) : null}
                 </div>
                 {proposalAssistDraft && form.tipo === "proposta" ? (
@@ -1433,12 +1485,29 @@ export default function Contratos() {
                   </div>
                 </div>
               ))}
-              <div className="text-right rounded-lg bg-muted p-3">
-                <span className="text-sm text-muted-foreground mr-3">Valor Total:</span>
-                <span className="text-lg font-bold font-mono">
-                  R$ {calcTotal(form.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+              {form.tipo === "proposta" ? (
+                <div className="grid gap-3 rounded-lg bg-muted p-3 md:grid-cols-2" aria-live="polite">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Valor mensal estimado</p>
+                    <p className="text-lg font-bold tabular-nums">
+                      R$ {proposalMonthlyTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="md:text-right">
+                    <p className="text-xs text-muted-foreground">Valor total estimado do contrato ({Math.max(Number(form.vigenciaMeses) || 0, 0)} meses)</p>
+                    <p className="text-lg font-bold text-primary tabular-nums">
+                      R$ {proposalContractEstimate.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-right rounded-lg bg-muted p-3">
+                  <span className="text-sm text-muted-foreground mr-3">Valor Total:</span>
+                  <span className="text-lg font-bold tabular-nums">
+                    R$ {proposalMonthlyTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1447,7 +1516,7 @@ export default function Contratos() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { cancelProposalAnalysis(); setDialogOpen(false); }}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving}>{saving ? "Salvando..." : editId ? "Salvar" : "Criar"}</Button>
           </DialogFooter>
         </DialogContent>
