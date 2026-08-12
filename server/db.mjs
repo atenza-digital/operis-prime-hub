@@ -56,7 +56,8 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS cor_primaria VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cor_secundaria VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cor_destaque VARCHAR(20),
-    ADD COLUMN IF NOT EXISTS certificado_config JSONB NOT NULL DEFAULT '{}'::jsonb
+    ADD COLUMN IF NOT EXISTS certificado_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS commercial_config JSONB NOT NULL DEFAULT '{}'::jsonb
   `);
 
   await query(`

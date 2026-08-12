@@ -7,6 +7,7 @@ import { authenticateToken, changePassword, hashPassword, loginWithPassword, nor
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 import { buildProposalCatalogContext, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
+import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,10 +50,12 @@ function getPublicBaseUrl(req) {
   return host ? `${proto}://${host}` : "http://localhost:3001";
 }
 
-function normalizeTenantSlug(value) {
-  const slug = String(value || "").trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) return null;
-  return slug;
+async function getCommercialConfig(tenantId, tenantSlug) {
+  const { rows } = await query(
+    "SELECT commercial_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1",
+    [tenantId],
+  );
+  return normalizeCommercialConfig(rows[0]?.commercial_config, tenantSlug);
 }
 
 function getTenantSlugFromRequest(req) {
@@ -1465,6 +1468,7 @@ async function getCompanyConfig(tenantId) {
     telefoneEmergencia: row.telefone_emergencia,
     medicaoFormaPagamentoPadrao: row.medicao_forma_pagamento_padrao,
     medicaoLocalEntregaPadrao: row.medicao_local_entrega_padrao,
+    commercialConfig: normalizeCommercialConfig(row.commercial_config, row.tenant_slug),
     certificadoConfig: row.certificado_config || {},
   };
 }
@@ -2952,8 +2956,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
       medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
-      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $25 ORDER BY id LIMIT 1)`,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $26 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -2979,6 +2983,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.corSecundaria || null,
       body.corDestaque || null,
       JSON.stringify(body.certificadoConfig || {}),
+      JSON.stringify(normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug)),
       tenantId,
     ],
   );
@@ -2997,6 +3002,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       certificadoValidadePadraoDias: body.certificadoValidadePadraoDias ?? 30,
       medicaoFormaPagamentoPadrao: body.medicaoFormaPagamentoPadrao || null,
       corPrimaria: body.corPrimaria || null,
+      commercialConfig: normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug),
       certificadoConfig: body.certificadoConfig || {},
     },
   });
@@ -3043,6 +3049,19 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   const body = req.body;
   const id = body.id || makeCompactId("TPL");
   const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const commercialConfig = await getCommercialConfig(tenantId, tenantSlug);
+  const { rows: existingTemplateRows } = body.id
+    ? await query("SELECT tipo FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2 LIMIT 1", [body.id, tenantId])
+    : { rows: [] };
+  const existingType = existingTemplateRows[0]?.tipo;
+  const changesToRestrictedType = ["contrato", "minuta"].includes(body.tipo) && existingType !== body.tipo;
+  if (changesToRestrictedType && body.tipo === "contrato" && !commercialConfig.allowContractGeneration) {
+    return res.status(403).json({ error: "A geração de contratos está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
+  if (changesToRestrictedType && body.tipo === "minuta" && !commercialConfig.allowMinutaGeneration) {
+    return res.status(403).json({ error: "A geração de minutas está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   let operationalSync = null;
   const submittedServices = Array.isArray(body.servicos) ? body.servicos : [];
   const submittedServiceIds = submittedServices.map((item) => String(item?.servicoId || "").trim()).filter(Boolean);
@@ -3221,6 +3240,10 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
 app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const tenantId = req.auth.user.tenant.id;
+  const commercialConfig = await getCommercialConfig(tenantId, req.auth.user.tenant.slug);
+  if (!commercialConfig.allowMinutaGeneration) {
+    return res.status(403).json({ error: "A geração de minutas está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   const next = await nextSequential("contrato_ultimo", tenantId);
   const year = new Date().getFullYear();
   const number = `MIN-${next}/${year}`;
@@ -3295,6 +3318,10 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
 app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const tenantId = req.auth.user.tenant.id;
+  const commercialConfig = await getCommercialConfig(tenantId, req.auth.user.tenant.slug);
+  if (!commercialConfig.allowContractGeneration) {
+    return res.status(403).json({ error: "A geração de contratos está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   const next = await nextSequential("contrato_ultimo", tenantId);
   const year = new Date().getFullYear();
   const number = `CT-${next}/${year}`;

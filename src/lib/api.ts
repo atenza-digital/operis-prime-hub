@@ -391,6 +391,11 @@ export interface EmpresaConfig {
   telefoneEmergencia?: string;
   medicaoFormaPagamentoPadrao?: string;
   medicaoLocalEntregaPadrao?: string;
+  commercialConfig?: {
+    allowContractGeneration?: boolean;
+    allowMinutaGeneration?: boolean;
+    showMonthlyContractValue?: boolean;
+  };
   certificadoConfig?: {
     templateCodigo?: string;
     templateVersao?: string;

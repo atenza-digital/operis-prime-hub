@@ -36,13 +36,14 @@ Status padrao: proposto, aguardando aprovacao antes de implementacao.
 | AF-P2-006 | Contratos | Biblioteca de clausulas e textos por tenant | Clausulas ainda sao fixas temporarias. Resultado: textos versionados por tenant. Justificativa: SaaS parametrizavel. | Roadmap | Media / P2 / melhoria | Comercial/documentos; comercial/admin; todos tenants | Depende de templates versionados. Risco juridico. Esforco G. | Clausulas editaveis/versionadas com snapshot. | Proposto. |
 | AF-P2-007 | Observabilidade | Implementar logs, uptime e health operacional | Health existe, mas nao painel/alertas. Resultado: operacao assistida. Justificativa: producao SaaS. | Auditoria | Media / P2 / infraestrutura | Plataforma; Atenza; todos tenants | Depende de stack de monitoramento. Risco operacional. Esforco M. | Logs estruturados, alertas e painel simples. | Proposto. |
 | AF-P3-001 | UI refinamento | Aplicar morphismo leve e iconografia padronizada | Refinamento visual desejado, mas nao deve vir antes da fundacao. Resultado: interface mais proprietaria Atenza. Justificativa: qualidade percebida. | Feedback usuario | Baixa / P3 / UI/UX | Global; todos; todos tenants | Depende de design system. Risco baixo. Esforco P. | Padrao visual documentado e aplicado sem prejudicar contraste. | Proposto. |
+| AF-P0-009 | Comercial por tenant | Desativar contratos, minutas e valores mensais por empresa | Permitir que um tenant, como a Ciperprag, opere apenas com propostas sem apagar documentos historicos nem remover o recurso dos demais tenants. Resultado: regra comercial configuravel, aplicada no frontend e backend. | Retorno de Tarcisio/Aline | Alta / P0 / regra de negocio SaaS | Comercial; administrador/comercial; todos tenants | Depende de `empresa_config.commercial_config`. Risco de bloqueio apenas para novos documentos. Esforco P. | Flags por tenant; bloqueio API; historicos preservados; testes multi-tenant. | Implementado; aguarda homologacao. |
 
 ## Resumo
 
 | Prioridade | Quantidade |
 | --- | ---: |
-| P0 | 5 |
+| P0 | 6 |
 | P1 | 8 |
 | P2 | 7 |
 | P3 | 1 |
-| Total | 21 |
+| Total | 22 |

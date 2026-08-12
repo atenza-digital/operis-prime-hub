@@ -177,6 +177,7 @@ type ProposalPrintProps = {
   primaryColor: string;
   representativeName: string;
   representativeRole: string;
+  showContractValues?: boolean;
 };
 
 function ProposalDocumentPrint({ item, client, services, company, logoSrc, documentDate, primaryColor, representativeName, representativeRole }: ProposalPrintProps) {
@@ -527,7 +528,7 @@ function ProposalReferencePrint({ item, client, services, company, logoSrc, docu
   </div>;
 }
 
-function ContractReferencePrint({ item, client, services, company, logoSrc, documentDate, primaryColor, representativeName, representativeRole }: ProposalPrintProps) {
+function ContractReferencePrint({ item, client, services, company, logoSrc, documentDate, primaryColor, representativeName, representativeRole, showContractValues = true }: ProposalPrintProps) {
   const cleanText = (value: unknown) => repairMojibake(String(value || ""));
   const address = client ? [client.endereco, client.bairro, `${client.municipio}-${client.uf}`, client.cep].filter(Boolean).map(cleanText).join(", ") : "";
   const companyName = cleanText(company?.razaoSocial || company?.nomeFantasia || "Empresa emissora");
@@ -541,6 +542,7 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
     return { service, catalog, index, total };
   });
   const total = rows.reduce((sum, row) => sum + row.total, 0);
+  const displayContractValues = showContractValues !== false;
   const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const documentVersion = "Versão 1";
   const needsClosingPage = rows.length > 3;
@@ -559,6 +561,14 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
   const paragraphClass = "mt-[7pt] text-justify leading-[1.3] [text-indent:7.5mm]";
   const listClass = "mt-[7pt] list-disc space-y-[4pt] pl-[14pt] leading-[1.24]";
   const tableClass = "mt-[8pt] w-full border-collapse text-[8.7pt] leading-[1.2]";
+  const summaryItems: Array<[string, string]> = [
+    ["Emissão", documentDate],
+    ["Vigência", `${item.vigenciaMeses || 12} meses`],
+    ...(displayContractValues ? [["Valor total", money(total)] as [string, string]] : []),
+    ["Pagamento", cleanText(item.formaPagamento || "-")],
+    ["Local", locations[0] || "Conforme cadastro do cliente/contrato."],
+    ["Periodicidade", Array.from(new Set(rows.map(({ service }) => service.frequencia).filter(Boolean))).join(", ") || "Conforme itens contratados."],
+  ];
 
   const Header = ({ first = false }: { first?: boolean }) => (
     <header className="border-b pb-[9pt]" style={{ borderColor: primaryColor }}>
@@ -682,7 +692,7 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
 
         <section className="mt-[12pt] rounded-[8px] border border-slate-200 bg-white px-[11pt] py-[9pt]">
           <div className="grid grid-cols-2 gap-x-[16pt] gap-y-[7pt]">
-            {[["Emissão", documentDate], ["Vigência", `${item.vigenciaMeses || 12} meses`], ["Valor total", money(total)], ["Pagamento", cleanText(item.formaPagamento || "-")], ["Local", locations[0] || "Conforme cadastro do cliente/contrato."], ["Periodicidade", Array.from(new Set(rows.map(({ service }) => service.frequencia).filter(Boolean))).join(", ") || "Conforme itens contratados."]].map(([label, value]) => (
+            {summaryItems.map(([label, value]) => (
               <div key={label}>
                 <p className="text-[7.8pt] font-semibold uppercase tracking-[0.04em] text-slate-500">{label}</p>
                 <p className="mt-[1pt] text-[9pt] font-medium leading-[1.18] text-slate-950">{value}</p>
@@ -715,9 +725,9 @@ function ContractReferencePrint({ item, client, services, company, logoSrc, docu
         <Header />
         <SectionTitle number="04" title="Serviços contratados" compact />
         <table className={tableClass}>
-          <thead><tr style={{ backgroundColor: darkColor }} className="text-white"><th className="w-[10mm] px-[7pt] py-[8pt] text-center font-semibold">Item</th><th className="px-[7pt] py-[8pt] text-left font-semibold">Serviço/produto</th><th className="w-[18mm] px-[7pt] py-[8pt] text-center font-semibold">Unid.</th><th className="w-[15mm] px-[7pt] py-[8pt] text-center font-semibold">Qtd.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Unit.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Total</th></tr></thead>
-          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-contract-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{String(index + 1).padStart(2, "0")}</td><td className="px-[7pt] py-[8pt]"><p className="font-semibold">{serviceName(catalog, service)}</p><p className="mt-[2pt] text-[8pt] text-slate-500">{serviceText(catalog, service)}</p></td><td className="px-[7pt] py-[8pt] text-center">{cleanText(catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></tr>)}</tbody>
-          <tfoot><tr><td className="px-[8pt] py-[8pt] text-right text-[9.5pt] font-semibold" colSpan={5} style={{ backgroundColor: softColor }}>Total geral</td><td className="px-[8pt] py-[8pt] text-right text-[11pt] font-bold" style={{ backgroundColor: softColor, color: primaryColor }}>{money(total)}</td></tr></tfoot>
+          <thead><tr style={{ backgroundColor: darkColor }} className="text-white"><th className="w-[10mm] px-[7pt] py-[8pt] text-center font-semibold">Item</th><th className="px-[7pt] py-[8pt] text-left font-semibold">Serviço/produto</th><th className="w-[18mm] px-[7pt] py-[8pt] text-center font-semibold">Unid.</th><th className="w-[15mm] px-[7pt] py-[8pt] text-center font-semibold">Qtd.</th>{displayContractValues ? <><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Unit.</th><th className="w-[25mm] px-[7pt] py-[8pt] text-right font-semibold">Total</th></> : null}</tr></thead>
+          <tbody>{rows.map(({ service, catalog, index, total: lineTotal }) => <tr key={`${service.servicoId}-contract-${index}`} className="break-inside-avoid border-b border-slate-200"><td className="px-[7pt] py-[8pt] text-center">{String(index + 1).padStart(2, "0")}</td><td className="px-[7pt] py-[8pt]"><p className="font-semibold">{serviceName(catalog, service)}</p><p className="mt-[2pt] text-[8pt] text-slate-500">{serviceText(catalog, service)}</p></td><td className="px-[7pt] py-[8pt] text-center">{cleanText(catalog?.unidade || "un.")}</td><td className="px-[7pt] py-[8pt] text-center">{service.quantidade}</td>{displayContractValues ? <><td className="px-[7pt] py-[8pt] text-right">{money(Number(service.valorUnitario || 0))}</td><td className="px-[7pt] py-[8pt] text-right font-semibold">{money(lineTotal)}</td></> : null}</tr>)}</tbody>
+          {displayContractValues ? <tfoot><tr><td className="px-[8pt] py-[8pt] text-right text-[9.5pt] font-semibold" colSpan={5} style={{ backgroundColor: softColor }}>Total geral</td><td className="px-[8pt] py-[8pt] text-right text-[11pt] font-bold" style={{ backgroundColor: softColor, color: primaryColor }}>{money(total)}</td></tr></tfoot> : null}
         </table>
 
         {!needsClosingPage ? <ClosingSections /> : null}
@@ -798,6 +808,9 @@ export default function Contratos() {
   const services = useMemo(() => data?.services ?? [], [data?.services]);
   const companyConfig = data?.companyConfig;
   const numberingConfig = data?.numberingConfig;
+  const allowContractGeneration = companyConfig?.commercialConfig?.allowContractGeneration ?? true;
+  const allowMinutaGeneration = companyConfig?.commercialConfig?.allowMinutaGeneration ?? true;
+  const showMonthlyContractValue = companyConfig?.commercialConfig?.showMonthlyContractValue ?? true;
 
   const filtrados = useMemo(() => {
     return templates.filter((item) => {
@@ -810,6 +823,14 @@ export default function Contratos() {
   }, [templates, clients, busca]);
 
   function openNew(tipo: "proposta" | "contrato" | "minuta" = "proposta") {
+    if (tipo === "contrato" && !allowContractGeneration) {
+      toast.info("A geração de contratos está desativada para esta empresa. Consulte os registros históricos ou ajuste a configuração do tenant.");
+      return;
+    }
+    if (tipo === "minuta" && !allowMinutaGeneration) {
+      toast.info("A geração de minutas está desativada para esta empresa. Consulte os registros históricos ou ajuste a configuração do tenant.");
+      return;
+    }
     cancelProposalAnalysis();
     setEditId(null);
     const sequenciaAtual = tipo === "proposta" ? (numberingConfig?.propostaUltimo ?? 0) : (numberingConfig?.contratoUltimo ?? 0);
@@ -903,6 +924,15 @@ export default function Contratos() {
       return;
     }
 
+    if (!editId && form.tipo === "contrato" && !allowContractGeneration) {
+      toast.error("A geração de contratos está desativada para esta empresa.");
+      return;
+    }
+    if (!editId && form.tipo === "minuta" && !allowMinutaGeneration) {
+      toast.error("A geração de minutas está desativada para esta empresa.");
+      return;
+    }
+
     if (form.tipo === "proposta" && form.servicos.some((servico) => !servico.servicoId)) {
       toast.error("Selecione um serviço do catálogo em todas as linhas antes de salvar a proposta.");
       return;
@@ -935,6 +965,10 @@ export default function Contratos() {
   }
 
   async function handleGenerateContract(item: ContratoTemplate) {
+    if (!allowContractGeneration) {
+      toast.info("A geração de contratos está desativada para esta empresa.");
+      return;
+    }
     try {
       const result = await generateContractFromProposal(item.id);
       const synced = result.operationalSync && !result.operationalSync.skipped
@@ -948,6 +982,10 @@ export default function Contratos() {
   }
 
   async function handleGenerateMinuta(item: ContratoTemplate) {
+    if (!allowMinutaGeneration) {
+      toast.info("A geração de minutas está desativada para esta empresa.");
+      return;
+    }
     try {
       const result = await generateMinutaFromProposal(item.id);
       toast.success(`Minuta ${result.numero} gerada a partir da proposta ${item.numero}. Revise e aprove a minuta antes do contrato final.`);
@@ -1047,8 +1085,8 @@ export default function Contratos() {
           <p className="text-muted-foreground text-sm">Fluxo comercial integrado: proposta aprovada, minuta revisada, contrato vigente e operação liberada por item contratado.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => openNew("minuta")}><ClipboardCheck className="h-4 w-4 mr-2" />Minuta do cliente</Button>
-          <Button variant="outline" onClick={() => openNew("contrato")}><FileSignature className="h-4 w-4 mr-2" />Contrato direto</Button>
+          {allowMinutaGeneration ? <Button variant="outline" onClick={() => openNew("minuta")}><ClipboardCheck className="h-4 w-4 mr-2" />Minuta do cliente</Button> : null}
+          {allowContractGeneration ? <Button variant="outline" onClick={() => openNew("contrato")}><FileSignature className="h-4 w-4 mr-2" />Contrato direto</Button> : null}
           <Button onClick={() => openNew("proposta")}><Plus className="h-4 w-4 mr-2" />Nova Proposta</Button>
         </div>
       </div>
@@ -1056,7 +1094,11 @@ export default function Contratos() {
       <Card className="print:hidden border-primary/20 bg-primary/[0.03]">
         <CardContent className="pt-5">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {commercialFlow.map((step) => (
+            {commercialFlow.filter((step) => {
+              if (step.title.includes("minuta")) return allowMinutaGeneration;
+              if (step.title.includes("Contrato final")) return allowContractGeneration;
+              return true;
+            }).map((step) => (
               <div key={step.title} className="rounded-2xl border bg-card p-4">
                 <div className="flex items-center gap-2">
                   <div className="rounded-xl bg-primary/10 p-2 text-primary">
@@ -1069,7 +1111,9 @@ export default function Contratos() {
             ))}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Caminho recomendado: envie a proposta, marque como aprovada após aceite, gere a minuta, aprove a minuta e só então gere o contrato final que libera o saldo operacional.
+            {allowMinutaGeneration && allowContractGeneration
+              ? "Caminho recomendado: envie a proposta, marque como aprovada após aceite, gere a minuta, aprove a minuta e só então gere o contrato final que libera o saldo operacional."
+              : "Para esta empresa, o sistema mantém propostas e documentos históricos disponíveis, mas a geração de novos contratos/minutas está desativada."}
           </p>
         </CardContent>
       </Card>
@@ -1116,7 +1160,9 @@ export default function Contratos() {
                       </TableCell>
                       <TableCell className="text-xs">{item.servicos.length} serviço(s)</TableCell>
                       <TableCell className="font-mono text-sm font-bold">
-                        R$ {calcTotal(item.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {item.tipo !== "proposta" && !showMonthlyContractValue
+                          ? <span className="text-muted-foreground">Não exibido</span>
+                          : <>R$ {calcTotal(item.servicos).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</>}
                       </TableCell>
                       <TableCell className="text-xs">
                         {item.tipo === "proposta" ? `${item.validadeDias || 30} dias` : `${item.vigenciaMeses} meses`}
@@ -1164,7 +1210,7 @@ export default function Contratos() {
                               </Button>
                             </>
                           )}
-                          {item.tipo === "proposta" && item.status === "aprovado" && (
+                          {allowMinutaGeneration && item.tipo === "proposta" && item.status === "aprovado" && (
                             <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => handleGenerateMinuta(item)}>
                               <ClipboardCheck className="h-3 w-3" />
                               Gerar minuta
@@ -1176,7 +1222,7 @@ export default function Contratos() {
                               Aprovar minuta
                             </Button>
                           )}
-                          {item.tipo === "minuta" && ["aprovado", "vigente"].includes(item.status) && (
+                          {allowContractGeneration && item.tipo === "minuta" && ["aprovado", "vigente"].includes(item.status) && (
                             <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => handleGenerateContract(item)}>
                               <ArrowRight className="h-3 w-3" />
                               Gerar contrato
@@ -1219,6 +1265,7 @@ export default function Contratos() {
                   primaryColor={commercialPrimary}
                   representativeName={representativeName}
                   representativeRole={representativeRole}
+                  showContractValues={showMonthlyContractValue}
                 />
               </>
           )}
@@ -1257,8 +1304,8 @@ export default function Contratos() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contrato">Contrato</SelectItem>
-                    <SelectItem value="minuta">Minuta / modelo do cliente</SelectItem>
+                    {(allowContractGeneration || form.tipo === "contrato") ? <SelectItem value="contrato">Contrato</SelectItem> : null}
+                    {(allowMinutaGeneration || form.tipo === "minuta") ? <SelectItem value="minuta">Minuta / modelo do cliente</SelectItem> : null}
                     <SelectItem value="proposta">Proposta</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1470,7 +1517,9 @@ export default function Contratos() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Subtotal</p>
-                      <p className="font-mono font-bold text-sm">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>
+                      {form.tipo !== "proposta" && !showMonthlyContractValue
+                        ? <p className="text-sm text-muted-foreground">Não exibido</p>
+                        : <p className="font-mono font-bold text-sm">R$ {(servico.quantidade * servico.valorUnitario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</p>}
                       {servico.contratoOperacionalId ? (
                         <Badge variant="secondary" className="mt-1 text-[10px]">
                           Operacional {servico.contratoOperacionalId}
@@ -1500,12 +1549,16 @@ export default function Contratos() {
                     </p>
                   </div>
                 </div>
-              ) : (
+              ) : showMonthlyContractValue ? (
                 <div className="text-right rounded-lg bg-muted p-3">
                   <span className="text-sm text-muted-foreground mr-3">Valor Total:</span>
                   <span className="text-lg font-bold tabular-nums">
                     R$ {proposalMonthlyTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                   </span>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-muted p-3 text-right text-sm text-muted-foreground">
+                  Valores mensais ocultos para esta empresa.
                 </div>
               )}
             </div>
