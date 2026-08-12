@@ -8,6 +8,7 @@ import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 import { buildProposalCatalogContext, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
+import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2159,7 +2160,7 @@ async function getAuditLogsForTenant(tenantId, filters = {}) {
   }));
 }
 
-async function getBootstrap(tenantId) {
+async function getBootstrap(tenantId, permissions = []) {
   const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
     await Promise.all([
       getCompanyConfig(tenantId),
@@ -2184,16 +2185,16 @@ async function getBootstrap(tenantId) {
     numberingConfig,
     clients,
     services,
-    contracts,
+    contracts: sanitizeContracts(contracts, permissions),
     schedules,
     orders,
     certificates,
     technicians,
     vehicles,
     allocations,
-    contractTemplates,
+    contractTemplates: sanitizeContractTemplates(contractTemplates, permissions),
     recurrenceSuggestions,
-    measurements,
+    measurements: sanitizeMeasurements(measurements, permissions),
     attachments,
   };
 }
@@ -2395,7 +2396,7 @@ app.post("/api/auth/change-password", async (req, res) => {
 
 app.get("/api/bootstrap", async (_req, res) => {
   if (_req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
-  res.json(await getBootstrap(_req.auth.user.tenant.id));
+  res.json(await getBootstrap(_req.auth.user.tenant.id, _req.auth.user.permissoes));
 });
 
 app.get("/api/audit-logs", requirePermission("auditoria.view"), async (req, res) => {

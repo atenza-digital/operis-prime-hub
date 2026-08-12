@@ -14,7 +14,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-CTR-001 | Proposta aprovada pode gerar contrato. | Regra geral | Comercial | Proposta, contrato | Comercial | Proposta com cliente e itens | Contrato criado | Contrato do cliente | Status aprovado | Parcial | `/api/contract-templates/:id/generate-contract` | Parcial | Aceite formal |
 | RN-CTR-002 | Contrato vigente deve liberar saldo operacional. | Regra geral | Comercial/Operacional | Contrato, saldo | Comercial/operacional | Contrato vigente | Agenda pode usar item | Sem saldo/vencido | Quantidade e executado | Parcial | sync operacional | Sim | Regra de cancelamento |
-| RN-CTR-003 | Valores comerciais nao devem ser visiveis a perfis sem permissao. | Decisao confirmada | Comercial | Contrato | Operacional | Perfil sem valor | Ocultar valores | Admin/comercial/financeiro | API e UI | Pendente | auditoria | Sim por permissao | Modelo de permissao final |
+| RN-CTR-003 | Valores comerciais nao devem ser visiveis a perfis sem permissao. | Decisao confirmada | Comercial | Contrato | Operacional | Perfil sem valor | Ocultar valores | Admin/comercial/financeiro | API e UI | Implementado | `server/commercial-visibility.mjs`, `/api/bootstrap` | Sim por permissao | Validar matriz final |
 
 ## Agendamento
 
@@ -47,7 +47,7 @@
 | ID | Descricao | Origem | Modulo | Entidades | Perfis | Pre-condicoes | Resultado | Excecoes | Validacoes | Status | Evidencia | Configuravel por tenant | Duvidas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-MED-001 | Medicao consolida OS encerradas por cliente e periodo. | Regra geral | Financeiro | OS, medicao | Financeiro | OS encerrada | Medicao gerada | OS cancelada | Periodo/cliente/status | Parcial | `/api/measurements/generate` | Sim | Agrupar por contrato? |
-| RN-MED-002 | Mesma OS nao deve entrar em duas medicoes ativas. | Regra geral | Financeiro | OS, medicao_itens | Financeiro | OS ja medida | Bloqueio/alerta | Medicao cancelada | Unicidade logica | Pendente | auditoria | Nao | Regra de cancelamento |
+| RN-MED-002 | Mesma OS nao deve entrar em duas medicoes ativas. | Regra geral | Financeiro | OS, medicao_itens | Financeiro | OS ja medida | Bloqueio/alerta | Medicao cancelada | Unicidade logica | Implementado | `ux_medicao_itens_tenant_os_ativa`, `/api/measurements/generate` | Nao | Regra de cancelamento definida |
 | RN-MED-003 | Medicao acompanha NF/pagamento sem substituir ERP. | Confirmada | Financeiro | Medicao | Financeiro | Medicao emitida | Status financeiro operacional | Cancelada | Status permitido | Parcial | `/api/measurements/:id/financial` | Sim | Nomes finais dos status |
 
 ## SaaS

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Award,
@@ -118,6 +118,18 @@ function getInitials(name?: string) {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+}
+
+function AppPageFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center px-4 py-12">
+      <div className="w-full max-w-xl space-y-3" aria-live="polite" aria-busy="true">
+        <div className="h-8 w-2/5 animate-pulse rounded-lg bg-muted" />
+        <div className="h-4 w-3/5 animate-pulse rounded bg-muted" />
+        <div className="h-40 animate-pulse rounded-2xl border bg-card/70" />
+      </div>
+    </div>
+  );
 }
 
 function NavLink({
@@ -414,7 +426,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="scrollbar-light flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">{children}</div>
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
+            <Suspense fallback={<AppPageFallback />}>{children}</Suspense>
+          </div>
         </main>
       </div>
     </div>
