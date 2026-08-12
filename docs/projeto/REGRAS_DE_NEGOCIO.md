@@ -40,7 +40,7 @@
 | RN-CER-001 | Certificado so pode ser emitido para servico elegivel. | Regra geral | Qualidade | Servico, OS, certificado | Qualidade/admin | OS encerrada e servico elegivel | Certificado emitido | Revogacao | `geraCertificado` | Parcial | `/api/orders/:id/certificado` | Sim | Certificado manual? |
 | RN-CER-002 | Certificado deve ter hash e QR Code publico. | Regra geral | Qualidade | Certificado | Qualidade/publico | Certificado emitido | Validacao publica | Revogado/vencido | Hash unico | Parcial | `/api/certificates/:hash` | Nao/tema sim | URL publica final |
 | RN-CER-003 | Fotos do certificado devem vir das evidencias da OS, ate limite configurado. | Requisito configuravel | Qualidade | OS, anexo | Qualidade | Fotos anexadas | Fotos no certificado | Sem fotos | Tipo e quantidade | Parcial | CertificadoImpressao | Sim | Limite por tenant |
-| RN-CER-004 | Revogacao/reemissao deve preservar historico. | Regra geral | Qualidade | Certificado | Admin/qualidade | Certificado emitido | Status revogado/reemitido | Erro operacional | Motivo obrigatorio | Planejada | migrations status | Sim | Modelo juridico |
+| RN-CER-004 | Revogacao/reemissao deve preservar historico. | Regra geral | Qualidade | Certificado | Admin/qualidade | Certificado emitido | Status revogado/reemitido e vinculo entre origem/substituto | Erro operacional | Motivo obrigatorio, tenant e auditoria | Implementado | `PATCH /api/certificates/:id/revoke`, `POST /api/certificates/:id/reissue`, migration 027 | Sim | Modelo juridico |
 
 ## Medicao
 

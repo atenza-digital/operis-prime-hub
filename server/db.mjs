@@ -406,7 +406,9 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
     ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT
+    ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT,
+    ADD COLUMN IF NOT EXISTS substituido_por_id VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS substitui_certificado_id VARCHAR(30)
   `);
 
   await query(`

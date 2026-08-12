@@ -8,7 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
 - Proxima etapa recomendada: executar a rodada externa completa com a Ciperprag usando o roteiro consolidado, registrar evidencias e corrigir somente reprovacoes ou observacoes confirmadas.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 40.
+- Itens de backlog remanescentes: 39.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -267,8 +267,9 @@ Entregue inicialmente em homologacao:
 - P0.4 de confidencialidade comercial implementado no bootstrap: usuarios sem `contratos.manage` nao recebem valores unitarios de contratos/propostas; usuarios sem `medicoes.manage` nao recebem totais ou valores de medicao. A filtragem ocorre no backend, com testes automatizados e evidencia em `docs/evidencias/etapa9_homologacao/VISIBILIDADE_VALORES_POR_PERFIL_2026-08-12.md`. Aguarda validacao de perfis na homologacao.
 - Auditoria do backlog confirmou que P0.5 de duplicidade de OS em medicao ja estava implementado por transacao e indice unico `tenant_id + os_id` para medicoes ativas; a regra foi formalizada na matriz de negocio e mantida como item coberto por teste.
 - P1.3 recebeu mitigacao tecnica para troca de telas autenticadas: o `AppLayout` permanece montado e o carregamento do modulo ocorre em um fallback local com skeleton, evitando substituir a tela inteira durante a navegacao. A validacao visual final permanece na homologacao.
+- P1.6 recebeu ciclo formal de certificado: revogacao com motivo, reemissao a partir da OS de origem, vinculo entre certificado substituido e substituto, auditoria e filtro/status no modulo de certificados. A validacao publica continua informando quando o documento foi revogado. Evidencia em `docs/evidencias/etapa9_homologacao/REVOGACAO_REEMISSAO_CERTIFICADOS_2026-08-12.md`; aguarda homologacao externa.
 
-Backlog da Etapa 8: 37 itens.
+Backlog da Etapa 8: 36 itens.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -285,7 +286,6 @@ Backlog da Etapa 8: 37 itens.
 - Criar biblioteca de condicoes comerciais padrao por tenant.
 - Parametrizar textos executivos da proposta por tenant e por tipo de servico.
 - Implementar assinatura eletronica/digital ou trilha formal de aceite.
-- Implementar revogacao/substituicao formal de certificados e documentos.
 - Concluir hardening de medicao para producao: PDF server-side imutavel em R2 por ambiente/tenant, revisao/substituicao formal com vinculo historico e motivo, snapshot definitivo com cidade/data/responsavel/condicoes de contrato, separacao ou subtotal de contratos com condicoes incompatíveis, protecao contra duplicidade em nivel de item/saldo executado, permissões granulares no backend para valores e acoes financeiras, e matriz automatizada com 1, 5, 15, 30 e 100 itens validando paginacao, cabecalho repetido, total somente na ultima pagina e assinatura sem orfandade.
 - Evoluir OS para selecao obrigatoria/guiada de local, tag/equipamento e evidencias por checklist.
 - Evoluir POP com historico visual, anexos aprovados, fluxo de aprovacao, assinatura e bloqueio de edicao retroativa. Incluir descricoes curtas e acessiveis para usuarios nao tecnicos explicando POP, EPIs, normas, checklist e campos tecnicos; permitir upload de POP em PDF/DOCX/imagem para clientes que ja possuem documentos prontos e querem apenas controlar versoes/anexos pelo sistema, sem obrigar cadastro estruturado completo no primeiro uso.

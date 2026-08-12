@@ -1232,6 +1232,8 @@ async function getCertificates(tenantId) {
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
+    substituidoPorId: row.substituido_por_id,
+    substituiCertificadoId: row.substitui_certificado_id,
   }));
 }
 
@@ -1306,10 +1308,12 @@ async function getCertificateByHash(hash) {
     emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
     validadeDias: Number(row.validade_dias || 0),
     validadeAte,
-    status: row.status === "revogado" ? "expired" : buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
+    status: row.status === "revogado" ? "revoked" : buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
     certificateStatus: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
+    substituidoPorId: row.substituido_por_id,
+    substituiCertificadoId: row.substitui_certificado_id,
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
@@ -4169,6 +4173,127 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
     return { hash: certificateHash, hashes: certificateResult.hashes };
   });
   res.json({ ok: true, hash: certificateResponse.hash, hashes: certificateResponse.hashes });
+});
+
+app.patch("/api/certificates/:id/revoke", requirePermission("certificados.manage"), async (req, res) => {
+  const certificateId = String(req.params.id || "").trim();
+  const reason = String(req.body.motivo || "").trim();
+  if (!reason || reason.length < 5) return res.status(400).json({ error: "Informe um motivo com pelo menos 5 caracteres para revogar o certificado." });
+  const tenantId = req.auth.user.tenant.id;
+  const { rows } = await query(
+    "SELECT id, hash, numero, status, os_id, os_numero, cliente_nome, servico FROM ciperprag_hub.certificados WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+    [certificateId, tenantId],
+  );
+  const certificate = rows[0];
+  if (!certificate) return res.status(404).json({ error: "Certificado nao encontrado." });
+  if (certificate.status === "revogado") return res.status(409).json({ error: "Este certificado ja esta revogado." });
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET status = 'revogado', revogado_em = NOW(), motivo_revogacao = $1
+       WHERE id = $2 AND tenant_id = $3 AND status = 'emitido'`,
+      [reason, certificateId, tenantId],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "certificado",
+      entityId: certificateId,
+      action: "certificate_revoked",
+      summary: `Certificado ${certificate.numero || certificate.hash} revogado`,
+      before: { status: certificate.status },
+      after: { status: "revogado", motivo: reason, hash: certificate.hash, osId: certificate.os_id },
+    });
+  });
+  res.json({ ok: true, id: certificateId, status: "revogado" });
+});
+
+app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage"), async (req, res) => {
+  const certificateId = String(req.params.id || "").trim();
+  const reason = String(req.body.motivo || "").trim();
+  if (!reason || reason.length < 5) return res.status(400).json({ error: "Informe um motivo com pelo menos 5 caracteres para reemitir o certificado." });
+  const tenantId = req.auth.user.tenant.id;
+
+  const result = await withTransaction(async (client) => {
+    const { rows: certificateRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.certificados WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [certificateId, tenantId],
+    );
+    const certificate = certificateRows[0];
+    if (!certificate) {
+      const error = new Error("Certificado nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+    if (certificate.status === "revogado") {
+      const error = new Error("Este certificado ja esta revogado e nao pode ser reemitido novamente.");
+      error.status = 409;
+      throw error;
+    }
+
+    const { rows: orderRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [certificate.os_id, tenantId],
+    );
+    const order = orderRows[0];
+    if (!order) {
+      const error = new Error("A OS de origem do certificado nao foi encontrada.");
+      error.status = 409;
+      throw error;
+    }
+
+    const originalPrimaryCertificateHash = order.certificado_hash;
+    const replacementOrder = {
+      ...order,
+      certificado_hash: null,
+      tag_equipamento_servico: certificate.tag_equipamento_servico || null,
+      tags: certificate.tag_equipamento_servico || null,
+    };
+    const issued = await issueCertificateForOrder(client, replacementOrder, {
+      tenantId,
+      tenantSlug: req.auth.user.tenant.slug,
+      userId: req.auth.user.id,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    if (originalPrimaryCertificateHash !== certificate.hash) {
+      await client.query(
+        "UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3",
+        [order.id, originalPrimaryCertificateHash, tenantId],
+      );
+    }
+    const { rows: replacementRows } = await client.query(
+      "SELECT id, numero, hash FROM ciperprag_hub.certificados WHERE tenant_id = $1 AND hash = ANY($2::text[]) ORDER BY emitido_em DESC",
+      [tenantId, issued.hashes],
+    );
+    const replacement = replacementRows[0];
+    if (!replacement) {
+      const error = new Error("Nao foi possivel localizar o certificado reemitido.");
+      error.status = 500;
+      throw error;
+    }
+
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET status = 'revogado', revogado_em = NOW(), motivo_revogacao = $1, substituido_por_id = $2
+       WHERE id = $3 AND tenant_id = $4`,
+      [`${reason} Substituido por ${replacement.numero || replacement.hash}.`, replacement.id, certificateId, tenantId],
+    );
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET substitui_certificado_id = $1
+       WHERE tenant_id = $2 AND hash = ANY($3::text[])`,
+      [certificateId, tenantId, issued.hashes],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "certificado",
+      entityId: certificateId,
+      action: "certificate_reissued",
+      summary: `Certificado ${certificate.numero || certificate.hash} substituido por ${replacement.numero || replacement.hash}`,
+      before: { status: certificate.status, hash: certificate.hash },
+      after: { status: "revogado", replacementId: replacement.id, replacementHashes: issued.hashes, motivo: reason },
+    });
+    return { oldId: certificateId, replacementId: replacement.id, hash: issued.primaryHash, hashes: issued.hashes };
+  });
+  res.json({ ok: true, ...result });
 });
 
 app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {

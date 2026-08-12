@@ -228,6 +228,8 @@ export interface CertificadoApp {
   status?: "emitido" | "revogado";
   revogadoEm?: string | null;
   motivoRevogacao?: string | null;
+  substituidoPorId?: string | null;
+  substituiCertificadoId?: string | null;
   fotos?: string[];
 }
 
@@ -250,13 +252,15 @@ export interface CertificateVerification {
   emitidoEm: string;
   validadeDias: number;
   validadeAte?: string | null;
-  status: "valid" | "expired";
+  status: "valid" | "expired" | "revoked";
   produtosQuimicos?: string[];
   produtosDetalhados?: Array<Record<string, string>>;
   snapshotDados?: Record<string, unknown>;
   certificateStatus?: "emitido" | "revogado";
   revogadoEm?: string | null;
   motivoRevogacao?: string | null;
+  substituidoPorId?: string | null;
+  substituiCertificadoId?: string | null;
   tagEquipamentoServico?: string;
   quantidade?: number;
   unidade?: string;
@@ -830,6 +834,8 @@ export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders
 export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string }) =>
   api<{ ok: boolean; certificateHash?: string; certificateHashes?: string[] }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
 export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string; hashes?: string[] }>(`/orders/${id}/certificado`, { method: "POST" });
+export const revokeCertificate = (id: string, motivo: string) => api<{ ok: boolean; id: string; status: "revogado" }>(`/certificates/${encodeURIComponent(id)}/revoke`, { method: "PATCH", body: JSON.stringify({ motivo }) });
+export const reissueCertificate = (id: string, motivo: string) => api<{ ok: boolean; oldId: string; replacementId: string; hash: string; hashes?: string[] }>(`/certificates/${encodeURIComponent(id)}/reissue`, { method: "POST", body: JSON.stringify({ motivo }) });
 export const getCertificateVerification = (hash: string) =>
   api<{ ok: boolean; certificate: CertificateVerification; verifiedAt: string }>(`/certificates/${encodeURIComponent(hash)}`);
 export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dismiss") =>
