@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, BookOpen, Briefcase, ClipboardCheck, FlaskConical, HardHat, Pencil, Plus, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BookOpen, Briefcase, ClipboardCheck, FileUp, FlaskConical, HardHat, Pencil, Plus, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { getBootstrap, saveService, type ServicoCatalogo } from "@/lib/api";
+import { getBootstrap, saveService, uploadServicePopFile, type EvidenciaAnexoApp, type ServicoCatalogo } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -42,6 +42,15 @@ const emptyServico: Omit<ServicoCatalogo, "id"> = {
 };
 
 type ProdutoDetalhado = NonNullable<ServicoCatalogo["produtosDetalhados"]>[number];
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+    reader.readAsDataURL(file);
+  });
+}
 
 function TagEditor({
   label,
@@ -168,6 +177,7 @@ function ProductDetailsEditor({
 
 export default function Servicos() {
   const [lista, setLista] = useState<ServicoCatalogo[]>([]);
+  const [anexos, setAnexos] = useState<EvidenciaAnexoApp[]>([]);
   const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -175,12 +185,14 @@ export default function Servicos() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [popFile, setPopFile] = useState<File | null>(null);
 
   async function reload() {
     setLoading(true);
     try {
       const data = await getBootstrap();
       setLista(data.services);
+      setAnexos(data.attachments);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar serviços");
     } finally {
@@ -197,6 +209,7 @@ export default function Servicos() {
   function openNew() {
     setEditId(null);
     setForm({ ...emptyServico });
+    setPopFile(null);
     setDialogOpen(true);
   }
 
@@ -210,6 +223,7 @@ export default function Servicos() {
       popResponsabilidades: rest.popResponsabilidades || [],
       popMateriais: rest.popMateriais || [],
     });
+    setPopFile(null);
     setDialogOpen(true);
   }
 
@@ -221,7 +235,14 @@ export default function Servicos() {
 
     setSaving(true);
     try {
-      await saveService({ ...form, id: editId ?? undefined });
+      const saved = await saveService({ ...form, id: editId ?? undefined }) as { id?: string };
+      if (popFile) {
+        await uploadServicePopFile(saved.id || editId || "", {
+          fileName: popFile.name,
+          mimeType: popFile.type || "application/octet-stream",
+          contentBase64: await readFileAsDataUrl(popFile),
+        });
+      }
       toast.success(editId ? "Serviço atualizado" : "Serviço cadastrado");
       setDialogOpen(false);
       await reload();
@@ -257,7 +278,9 @@ export default function Servicos() {
             <div className="py-12 text-center text-sm text-muted-foreground">Carregando serviços...</div>
           ) : filtrados.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Nenhum serviço encontrado.</div>
-          ) : filtrados.map((servico) => (
+          ) : filtrados.map((servico) => {
+            const popAnexos = anexos.filter((anexo) => anexo.entidadeTipo === "servico_pop" && anexo.entidadeId === servico.popId && anexo.categoria === "pop_aprovado");
+            return (
             <div key={servico.id} className="overflow-hidden rounded-lg border">
               <div className="flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-muted/30" onClick={() => setExpandedId(expandedId === servico.id ? null : servico.id)}>
                 <div className="min-w-0 flex-1">
@@ -325,6 +348,12 @@ export default function Servicos() {
                       {servico.popAplicacao ? <p className="mt-1 text-xs text-muted-foreground"><strong>Aplicação:</strong> {servico.popAplicacao}</p> : null}
                       {servico.popMateriais?.length ? <p className="mt-1 text-xs text-muted-foreground"><strong>Materiais:</strong> {servico.popMateriais.join(", ")}</p> : null}
                       {servico.popResponsabilidades?.length ? <p className="mt-1 text-xs text-muted-foreground"><strong>Responsabilidades:</strong> {servico.popResponsabilidades.join(", ")}</p> : null}
+                      {popAnexos.length > 0 ? (
+                        <div className="mt-3 border-t pt-3">
+                          <p className="text-xs font-semibold text-primary">Arquivo(s) do POP</p>
+                          {popAnexos.map((anexo) => <p key={anexo.id} className="mt-1 break-all text-xs text-muted-foreground">{anexo.nomeArquivo} · SHA-256 {anexo.hashSha256?.slice(0, 12) || "pendente"}...</p>)}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -347,7 +376,8 @@ export default function Servicos() {
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
@@ -416,7 +446,13 @@ export default function Servicos() {
             <div className="space-y-4 rounded-lg border p-3">
               <div>
                 <p className="flex items-center gap-1.5 text-sm font-semibold"><BookOpen className="h-4 w-4 text-primary" /> POP versionado</p>
-                <p className="text-xs text-muted-foreground">A versão ativa alimenta a impressão da OS e o checklist de encerramento.</p>
+                <p className="text-xs text-muted-foreground">POP é o Procedimento Operacional Padrão: orienta a equipe sobre como executar o serviço com segurança e consistência. A versão ativa alimenta a OS e o checklist de encerramento.</p>
+              </div>
+              <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
+                <Label className="flex items-center gap-2 text-sm font-semibold"><FileUp className="h-4 w-4 text-primary" /> Anexar POP pronto</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Se a empresa já possui o POP, envie PDF, DOCX, ODT, PNG ou JPG. O arquivo será guardado no histórico do tenant; o cadastro detalhado abaixo é opcional.</p>
+                <Input type="file" accept="application/pdf,.pdf,.docx,.doc,.odt,.png,.jpg,.jpeg" className="mt-3" onChange={(event) => setPopFile(event.target.files?.[0] || null)} />
+                {popFile ? <p className="mt-2 text-xs font-medium text-primary">Selecionado: {popFile.name}</p> : null}
               </div>
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="space-y-2">

@@ -789,6 +789,10 @@ export const resetUserPassword = (id: string) =>
   api<{ ok: boolean; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
+export const uploadServicePopFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
+  ok: boolean;
+  attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string; popId: string };
+}>(`/services/${encodeURIComponent(id)}/pop-file`, { method: "POST", body: JSON.stringify(payload) });
 export const saveTechnician = (payload: Partial<Tecnico>) => api("/technicians", { method: "POST", body: JSON.stringify(payload) });
 export const saveVehicle = (payload: Partial<Veiculo>) => api("/vehicles", { method: "POST", body: JSON.stringify(payload) });
 export const saveAllocation = (payload: Partial<AlocacaoSemanal>) => api("/allocations", { method: "POST", body: JSON.stringify(payload) });

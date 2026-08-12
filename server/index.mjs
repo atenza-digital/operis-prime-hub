@@ -2873,6 +2873,95 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   res.json({ ok: true, id });
 });
 
+app.post("/api/services/:id/pop-file", requirePermission("servicos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const fileName = safeFileNamePart(req.body.fileName || "pop-aprovado");
+  const mimeType = String(req.body.mimeType || "application/octet-stream").toLowerCase();
+  const { rows: companyRows } = await query("SELECT certificado_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const uploadPolicy = resolveAttachmentPolicy("servico_pop.pop_aprovado", companyRows[0]?.certificado_config || {});
+  let parsed;
+  try {
+    parsed = validateAttachmentPayload({
+      contentBase64: req.body.contentBase64,
+      declaredMimeType: mimeType,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
+      label: "arquivo do POP",
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+
+  const hash = sha256Hex(parsed.buffer);
+  const attachment = await withTransaction(async (client) => {
+    const { rows: serviceRows } = await client.query(
+      "SELECT id, nome, descricao, pop_ativo_id FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [req.params.id, tenantId],
+    );
+    const service = serviceRows[0];
+    if (!service) {
+      const error = new Error("Servico nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    let popId = service.pop_ativo_id;
+    let popVersion = "001";
+    if (!popId) {
+      popId = makeId("POP");
+      await client.query(
+        `INSERT INTO ciperprag_hub.servico_pops
+         (id, tenant_id, servico_id, codigo, titulo, versao, status, objetivo, aprovado_em)
+         VALUES ($1,$2,$3,$4,$5,$6,'ativo',$7,CURRENT_DATE)`,
+        [popId, tenantId, service.id, `POP-${service.id}`, service.nome, "001", service.descricao || "Procedimento Operacional Padrao"],
+      );
+      await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = $2 WHERE id = $1 AND tenant_id = $3", [service.id, popId, tenantId]);
+    } else {
+      const { rows: popRows } = await client.query(
+        "SELECT versao FROM ciperprag_hub.servico_pops WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+        [popId, tenantId],
+      );
+      popVersion = popRows[0]?.versao || popVersion;
+    }
+
+    const id = makeId("POPFILE");
+    const storageTarget = createAttachmentStoragePlan({ tenantSlug, entityType: "servico_pop", entityId: popId, category: "pop_aprovado", fileName, hashSha256: hash });
+    const persisted = await persistAttachmentContent({
+      storagePlan: storageTarget,
+      buffer: parsed.buffer,
+      contentBase64: parsed.dataUrl,
+      mimeType,
+      hashSha256: hash,
+      fileName,
+      metadata: {
+        origem: "pop_pronto_anexado_ao_catalogo",
+        servicoId: service.id,
+        servicoNome: service.nome,
+        popId,
+        popVersion,
+        hashSha256: hash,
+        ...buildAttachmentSecurityMetadata(uploadPolicy),
+      },
+    });
+    await client.query(
+      `INSERT INTO ciperprag_hub.evidencias_anexos
+       (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+       VALUES ($1,$2,'servico_pop',$3,'pop_aprovado',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,$14)`,
+      [id, tenantId, popId, fileName, mimeType, parsed.bytes, persisted.contentBase64, JSON.stringify(persisted.metadata), hash, persisted.provider, persisted.bucket, persisted.key, persisted.etag, req.auth.user.id],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "servico_pop",
+      entityId: popId,
+      action: "pop_file_uploaded",
+      summary: `Arquivo de POP anexado ao servico ${service.nome || service.id}`,
+      after: { attachmentId: id, serviceId: service.id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash },
+    });
+    return { id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash, popId };
+  });
+  res.json({ ok: true, attachment });
+});
+
 app.post("/api/technicians", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;

@@ -8,7 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
 - Proxima etapa recomendada: executar a rodada externa completa com a Ciperprag usando o roteiro consolidado, registrar evidencias e corrigir somente reprovacoes ou observacoes confirmadas.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 39.
+- Itens de backlog remanescentes: 38.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
@@ -268,8 +268,9 @@ Entregue inicialmente em homologacao:
 - Auditoria do backlog confirmou que P0.5 de duplicidade de OS em medicao ja estava implementado por transacao e indice unico `tenant_id + os_id` para medicoes ativas; a regra foi formalizada na matriz de negocio e mantida como item coberto por teste.
 - P1.3 recebeu mitigacao tecnica para troca de telas autenticadas: o `AppLayout` permanece montado e o carregamento do modulo ocorre em um fallback local com skeleton, evitando substituir a tela inteira durante a navegacao. A validacao visual final permanece na homologacao.
 - P1.6 recebeu ciclo formal de certificado: revogacao com motivo, reemissao a partir da OS de origem, vinculo entre certificado substituido e substituto, auditoria e filtro/status no modulo de certificados. A validacao publica continua informando quando o documento foi revogado. Evidencia em `docs/evidencias/etapa9_homologacao/REVOGACAO_REEMISSAO_CERTIFICADOS_2026-08-12.md`; aguarda homologacao externa.
+- P1.5 recebeu ajuda contextual no catalogo e upload opcional de POP pronto por servico. O arquivo e validado por tipo, assinatura, tamanho e politica do tenant, salvo com hash/storage planejado e auditado; quando necessario, o sistema cria o POP minimo para manter o fluxo simples. Evidencia em `docs/evidencias/etapa9_homologacao/UPLOAD_POP_CATALOGO_2026-08-12.md`; aguarda homologacao externa.
 
-Backlog da Etapa 8: 36 itens.
+Backlog da Etapa 8: 35 itens ativos nesta frente; os demais itens permanecem mapeados abaixo para execucao gradual.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -338,7 +339,7 @@ Todos os itens abaixo estao alocados na Etapa 8:
 ## Controle de backlog
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo, complemento de medicao e assistencia comercial: 49.
-- Total de itens remanescentes: 41.
+- Total de itens remanescentes: 38.
 - Etapa 7: 5 itens.
-- Etapa 8: 37 itens.
+- Etapa 8: 35 itens.
 - Itens fora de etapa: 0.

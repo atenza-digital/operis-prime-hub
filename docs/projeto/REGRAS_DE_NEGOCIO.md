@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-COM-001 | Cliente deve existir antes de proposta, contrato, agendamento ou OS. | Regra geral | Comercial | Cliente | Comercial/admin | Dados minimos do cliente | Cliente disponivel no fluxo | Cliente inativo | CNPJ/nome/endereco conforme regra | Parcial | `/api/clients` | Parcial | Campos obrigatorios por segmento |
 | RN-COM-002 | Servicos/produtos devem alimentar proposta, contrato, OS e certificado. | Regra geral | Comercial | Servico, POP | Comercial/qualidade | Servico ativo | Catalogo reutilizavel | Servico avulso | Nome, unidade, certificado, POP | Parcial | `/api/services` | Sim | Como tratar servico especifico |
-| RN-COM-003 | POP, EPI e normas devem ser claros para usuarios nao tecnicos. | Auditoria | Comercial | Servico, POP | Comercial/qualidade | Campo tecnico visivel | Ajuda contextual | Cliente sem POP | Microcopy e anexos | Planejada | feedback cliente | Sim | Formatos de upload |
+| RN-COM-003 | POP, EPI e normas devem ser claros para usuarios nao tecnicos. | Auditoria | Comercial | Servico, POP | Comercial/qualidade | Campo tecnico visivel | Ajuda contextual e upload opcional de POP pronto | Cliente sem POP | Microcopy, assinatura do arquivo, tamanho, MIME e tenant | Implementado | `POST /api/services/:id/pop-file`, politica `servico_pop.pop_aprovado`, auditoria | Sim | Antivirus/quarentena futura |
 
 ## Contratos
 
