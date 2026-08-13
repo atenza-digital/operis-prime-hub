@@ -1013,7 +1013,19 @@ async function getServices(tenantId) {
       p.procedimentos AS active_pop_procedimentos,
       p.checklist_itens AS active_pop_checklist_itens,
       p.aprovado_por AS active_pop_aprovado_por,
-      p.aprovado_em AS active_pop_aprovado_em
+      p.aprovado_em AS active_pop_aprovado_em,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'produtoId', sp.produto_id,
+          'quantidadePrevista', sp.quantidade_prevista,
+          'unidade', COALESCE(sp.unidade, pe.unidade),
+          'produtoNome', pe.nome,
+          'produtoCodigo', pe.codigo
+        ) ORDER BY pe.nome)
+        FROM ciperprag_hub.servicos_catalogo_produtos sp
+        JOIN ciperprag_hub.produtos_estoque pe ON pe.id = sp.produto_id AND pe.tenant_id = sp.tenant_id
+        WHERE sp.servico_id = s.id AND sp.tenant_id = $1
+      ), '[]'::jsonb) AS estoque_produtos
     FROM ciperprag_hub.servicos_catalogo s
     LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id AND p.tenant_id = $1
     WHERE s.tenant_id = $1
@@ -1049,7 +1061,46 @@ async function getServices(tenantId) {
     popMateriais: row.active_pop_materiais ?? [],
     popAprovadoPor: row.active_pop_aprovado_por,
     popAprovadoEm: row.active_pop_aprovado_em?.toISOString?.().split("T")[0] ?? row.active_pop_aprovado_em,
+    produtosEstoque: Array.isArray(row.estoque_produtos) ? row.estoque_produtos : normalizeJsonArray(row.estoque_produtos),
     ativo: row.ativo,
+  }));
+}
+
+async function getStockProducts(tenantId) {
+  const { rows } = await query(`
+    SELECT
+      p.*,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'id', m.id,
+          'tipo', m.tipo,
+          'quantidade', m.quantidade,
+          'saldoAnterior', m.saldo_anterior,
+          'saldoPosterior', m.saldo_posterior,
+          'osId', m.os_id,
+          'servicoId', m.servico_id,
+          'observacao', m.observacao,
+          'criadoEm', m.criado_em
+        ) ORDER BY m.criado_em DESC)
+        FROM ciperprag_hub.estoque_movimentacoes m
+        WHERE m.produto_id = p.id AND m.tenant_id = p.tenant_id
+        LIMIT 20
+      ), '[]'::jsonb) AS movimentos
+    FROM ciperprag_hub.produtos_estoque p
+    WHERE p.tenant_id = $1
+    ORDER BY p.ativo DESC, p.nome
+  `, [tenantId]);
+  return rows.map((row) => ({
+    id: row.id,
+    codigo: row.codigo,
+    nome: row.nome,
+    descricao: row.descricao || "",
+    unidade: row.unidade || "un.",
+    quantidadeAtual: Number(row.quantidade_atual || 0),
+    estoqueMinimo: Number(row.estoque_minimo || 0),
+    ativo: row.ativo,
+    movimentos: Array.isArray(row.movimentos) ? row.movimentos : normalizeJsonArray(row.movimentos),
+    atualizadoEm: row.atualizado_em?.toISOString?.() ?? row.atualizado_em,
   }));
 }
 
@@ -1544,6 +1595,7 @@ async function getContractTemplates(tenantId) {
       s.frequencia,
       s.descricao_comercial,
       s.unidade_comercial,
+      s.enderecos_atividade,
       o.id AS contrato_operacional_id,
       o.status AS contrato_operacional_status,
       o.executado AS contrato_operacional_executado
@@ -1597,6 +1649,7 @@ async function getContractTemplates(tenantId) {
         descricaoComercial: row.descricao_comercial || "",
         unidadeComercial: row.unidade_comercial || "",
         enderecoAtividade: row.endereco_atividade || "",
+        enderecosAtividade: [row.endereco_atividade, ...(Array.isArray(row.enderecos_atividade) ? row.enderecos_atividade : normalizeJsonArray(row.enderecos_atividade))].filter(Boolean),
         contratoOperacionalId: row.contrato_operacional_id,
         contratoOperacionalStatus: row.contrato_operacional_status,
         contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
@@ -1644,6 +1697,7 @@ async function buildCommercialDocumentSnapshot(client, { tenantId, templateId })
     quantidade: Number(item.quantidade || 0),
     unidade: item.catalogo_unidade || "un.",
     enderecoAtividade: item.endereco_atividade || null,
+    enderecosAtividade: [item.endereco_atividade, ...(Array.isArray(item.enderecos_atividade) ? item.enderecos_atividade : normalizeJsonArray(item.enderecos_atividade))].filter(Boolean),
     valorUnitario: Number(item.valor_unitario || 0),
     valorTotal: Number(item.quantidade || 0) * Number(item.valor_unitario || 0),
     frequencia: item.frequencia || null,
@@ -2165,12 +2219,13 @@ async function getAuditLogsForTenant(tenantId, filters = {}) {
 }
 
 async function getBootstrap(tenantId, permissions = []) {
-  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
+  const [companyConfig, numberingConfig, clients, services, stockProducts, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
     await Promise.all([
       getCompanyConfig(tenantId),
       getNumberingConfig(tenantId),
       getClients(tenantId),
       getServices(tenantId),
+      getStockProducts(tenantId),
       getContracts(tenantId),
       getSchedules(tenantId),
       getOrders(tenantId),
@@ -2189,6 +2244,7 @@ async function getBootstrap(tenantId, permissions = []) {
     numberingConfig,
     clients,
     services,
+    stockProducts,
     contracts: sanitizeContracts(contracts, permissions),
     schedules,
     orders,
@@ -2774,6 +2830,25 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     );
     assertTenantWrite(serviceRowCount, "Servico");
 
+    const estoqueProdutos = Array.isArray(body.produtosEstoque) ? body.produtosEstoque : [];
+    await client.query("DELETE FROM ciperprag_hub.servicos_catalogo_produtos WHERE servico_id = $1 AND tenant_id = $2", [id, tenantId]);
+    for (const item of estoqueProdutos) {
+      const produtoId = String(item.produtoId || "").trim();
+      const quantidadePrevista = Number(item.quantidadePrevista || 0);
+      if (!produtoId || !Number.isFinite(quantidadePrevista) || quantidadePrevista <= 0) continue;
+      const { rowCount: productCount } = await client.query("SELECT 1 FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2", [produtoId, tenantId]);
+      if (!productCount) {
+        const error = new Error("Um dos produtos vinculados ao servico nao pertence a este tenant.");
+        error.status = 400;
+        throw error;
+      }
+      await client.query(
+        `INSERT INTO ciperprag_hub.servicos_catalogo_produtos (tenant_id, servico_id, produto_id, quantidade_prevista, unidade)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [tenantId, id, produtoId, quantidadePrevista, item.unidade || null],
+      );
+    }
+
     const hasPopData = Boolean(
       body.popCodigo ||
       body.popTitulo ||
@@ -2871,6 +2946,115 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     });
   });
   res.json({ ok: true, id });
+});
+
+app.post("/api/stock/products", requirePermission("servicos.manage"), async (req, res) => {
+  const body = req.body || {};
+  const tenantId = req.auth.user.tenant.id;
+  const id = body.id || makeId("PROD");
+  const codigo = String(body.codigo || "").trim();
+  const nome = String(body.nome || "").trim();
+  if (!codigo || !nome) return res.status(400).json({ error: "Codigo e nome do produto sao obrigatorios." });
+  const quantidadeAtual = Number(body.quantidadeAtual ?? 0);
+  const estoqueMinimo = Number(body.estoqueMinimo ?? 0);
+  if (!Number.isFinite(quantidadeAtual) || quantidadeAtual < 0 || !Number.isFinite(estoqueMinimo) || estoqueMinimo < 0) {
+    return res.status(400).json({ error: "Informe quantidades de estoque validas." });
+  }
+
+  await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [id, tenantId],
+    );
+    const before = beforeRows[0] || null;
+    if (before && body.quantidadeAtual !== undefined && Number(before.quantidade_atual) !== quantidadeAtual) {
+      const error = new Error("Altere o saldo usando uma movimentacao de estoque.");
+      error.status = 400;
+      throw error;
+    }
+    const result = await client.query(
+      `INSERT INTO ciperprag_hub.produtos_estoque
+        (id, tenant_id, codigo, nome, descricao, unidade, quantidade_atual, estoque_minimo, ativo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         codigo = EXCLUDED.codigo,
+         nome = EXCLUDED.nome,
+         descricao = EXCLUDED.descricao,
+         unidade = EXCLUDED.unidade,
+         estoque_minimo = EXCLUDED.estoque_minimo,
+         ativo = EXCLUDED.ativo,
+         atualizado_em = NOW()
+       WHERE ciperprag_hub.produtos_estoque.tenant_id = EXCLUDED.tenant_id`,
+      [id, tenantId, codigo, nome, body.descricao || null, body.unidade || "un.", before ? before.quantidade_atual : quantidadeAtual, estoqueMinimo, body.ativo ?? true],
+    );
+    assertTenantWrite(result.rowCount, "Produto");
+    await logAuditEvent(client, req, {
+      entityType: "produto_estoque",
+      entityId: id,
+      action: before ? "stock_product_updated" : "stock_product_created",
+      summary: `${before ? "Produto de estoque atualizado" : "Produto de estoque criado"}: ${nome}`,
+      before,
+      after: { id, codigo, nome, unidade: body.unidade || "un.", estoqueMinimo, ativo: body.ativo ?? true },
+    });
+  });
+  res.json({ ok: true, id });
+});
+
+app.post("/api/stock/movements", requirePermission("servicos.manage", "os.close"), async (req, res) => {
+  const body = req.body || {};
+  const tenantId = req.auth.user.tenant.id;
+  const type = String(body.tipo || "").trim().toLowerCase();
+  const quantity = Number(body.quantidade);
+  if (!["entrada", "saida", "ajuste", "devolucao", "perda"].includes(type) || !Number.isFinite(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: "Tipo e quantidade da movimentacao sao obrigatorios." });
+  }
+
+  const movement = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      "SELECT * FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+      [body.produtoId, tenantId],
+    );
+    const product = rows[0];
+    if (!product) {
+      const error = new Error("Produto de estoque nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+    const before = Number(product.quantidade_atual || 0);
+    const after = type === "ajuste"
+      ? quantity
+      : before + (["entrada", "devolucao"].includes(type) ? quantity : -quantity);
+    if (after < 0) {
+      const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${before} ${product.unidade}.`);
+      error.status = 400;
+      throw error;
+    }
+    if (body.osId) {
+      const { rowCount } = await client.query("SELECT 1 FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [body.osId, tenantId]);
+      if (!rowCount) {
+        const error = new Error("OS vinculada ao movimento nao encontrada neste tenant.");
+        error.status = 400;
+        throw error;
+      }
+    }
+    await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, after, tenantId]);
+    const id = makeId("MOV");
+    await client.query(
+      `INSERT INTO ciperprag_hub.estoque_movimentacoes
+       (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, tenantId, product.id, type, quantity, before, after, body.osId || null, body.servicoId || null, body.observacao || null, req.auth.user.id],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "estoque_movimentacao",
+      entityId: id,
+      action: "stock_movement_created",
+      summary: `Movimentacao ${type} de ${product.nome}`,
+      after: { produtoId: product.id, tipo: type, quantidade: quantity, saldoAnterior: before, saldoPosterior: after, osId: body.osId || null },
+    });
+    return { id, produtoId: product.id, tipo: type, quantidade: quantity, saldoAnterior: before, saldoPosterior: after };
+  });
+  res.json({ ok: true, movement });
 });
 
 app.post("/api/services/:id/pop-file", requirePermission("servicos.manage"), async (req, res) => {
@@ -3237,8 +3421,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     );
     for (const servico of body.servicos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [
           id,
           servico.servicoId,
@@ -3248,6 +3432,7 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
           servico.descricaoComercial || null,
           servico.unidadeComercial || null,
           servico.enderecoAtividade || null,
+          JSON.stringify(Array.isArray(servico.enderecosAtividade) ? servico.enderecosAtividade.filter(Boolean) : (servico.enderecoAtividade ? [servico.enderecoAtividade] : [])),
         ],
       );
     }
@@ -4028,7 +4213,7 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
 
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
-  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao } = req.body;
+  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
   const tenantId = req.auth.user.tenant.id;
 
   const response = await withTransaction(async (client) => {
@@ -4312,6 +4497,38 @@ app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage
       const error = new Error("Certificado nao encontrado.");
       error.status = 404;
       throw error;
+    }
+
+    const stockUsage = Array.isArray(produtosUtilizados) ? produtosUtilizados : [];
+    if (!isNotExecuted && stockUsage.length) {
+      for (const usage of stockUsage) {
+        const usageQuantity = Number(usage.quantidade || 0);
+        if (!usage.produtoId || !Number.isFinite(usageQuantity) || usageQuantity <= 0) continue;
+        const { rows: productRows } = await client.query(
+          "SELECT id, nome, quantidade_atual, unidade FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+          [usage.produtoId, tenantId],
+        );
+        const product = productRows[0];
+        if (!product) {
+          const error = new Error("Produto utilizado nao pertence a este tenant.");
+          error.status = 400;
+          throw error;
+        }
+        const beforeStock = Number(product.quantidade_atual || 0);
+        const afterStock = beforeStock - usageQuantity;
+        if (afterStock < 0) {
+          const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${beforeStock} ${product.unidade}.`);
+          error.status = 400;
+          throw error;
+        }
+        await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, afterStock, tenantId]);
+        await client.query(
+          `INSERT INTO ciperprag_hub.estoque_movimentacoes
+           (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
+           VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
+          [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
+        );
+      }
     }
     if (certificate.status === "revogado") {
       const error = new Error("Este certificado ja esta revogado e nao pode ser reemitido novamente.");

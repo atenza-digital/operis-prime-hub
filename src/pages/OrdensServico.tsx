@@ -126,6 +126,7 @@ export default function OrdensServico() {
   const [naoExecutada, setNaoExecutada] = useState(false);
   const [motivoNaoExecucao, setMotivoNaoExecucao] = useState("");
   const [fotos, setFotos] = useState<{ preview: string; base64: string }[]>([]);
+  const [produtosUtilizados, setProdutosUtilizados] = useState<Array<{ produtoId: string; quantidade: number }>>([]);
   const [encerrada, setEncerrada] = useState(false);
   const [certHash, setCertHash] = useState("");
   const [certHashes, setCertHashes] = useState<string[]>([]);
@@ -207,6 +208,7 @@ export default function OrdensServico() {
     setNaoExecutada(false);
     setMotivoNaoExecucao("");
     setFotos([]);
+    setProdutosUtilizados((service?.produtosEstoque || []).map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidadePrevista || 0) })));
     setEncerrada(false);
     setCertHash("");
     setCertHashes([]);
@@ -234,6 +236,7 @@ export default function OrdensServico() {
         checklistRespostas: checklist,
         naoExecutada,
         motivoNaoExecucao,
+        produtosUtilizados,
       });
       setCertHash(response.certificateHash || "");
       setCertHashes(response.certificateHashes || (response.certificateHash ? [response.certificateHash] : []));
@@ -435,6 +438,16 @@ export default function OrdensServico() {
                   <p className="flex items-center gap-1.5 font-semibold"><BookOpen className="h-3.5 w-3.5 text-primary" /> POP vinculado</p>
                   <p className="mt-1 text-muted-foreground">{servicoSelecionado.popCodigo || "POP"} {servicoSelecionado.popVersao ? `· versão ${servicoSelecionado.popVersao}` : ""}</p>
                   {servicoSelecionado.popTitulo ? <p className="font-medium">{cleanText(servicoSelecionado.popTitulo)}</p> : null}
+                </div>
+              ) : null}
+              {servicoSelecionado?.produtosEstoque?.length ? (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label className="flex items-center gap-1.5"><ClipboardList className="h-3.5 w-3.5" /> Produtos utilizados</Label>
+                  <p className="text-[11px] text-muted-foreground">Os valores informados serão baixados do estoque e vinculados a esta OS.</p>
+                  {servicoSelecionado.produtosEstoque.map((item) => {
+                    const usage = produtosUtilizados.find((entry) => entry.produtoId === item.produtoId);
+                    return <div key={item.produtoId} className="flex items-center gap-2"><span className="min-w-0 flex-1 text-xs">{cleanText(item.produtoNome || item.produtoCodigo || item.produtoId)}</span><Input className="h-8 w-24" type="number" min="0" step="0.001" value={usage?.quantidade ?? 0} onChange={(event) => setProdutosUtilizados((current) => current.map((entry) => entry.produtoId === item.produtoId ? { ...entry, quantidade: Number(event.target.value) } : entry))} /><span className="text-[11px] text-muted-foreground">{item.unidade || "un."}</span></div>;
+                  })}
                 </div>
               ) : null}
               {checklist.length > 0 ? (

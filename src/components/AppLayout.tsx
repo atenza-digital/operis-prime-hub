@@ -16,6 +16,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Package,
   Receipt,
   Settings,
   ShieldCheck,
@@ -52,6 +53,7 @@ const navGroups = [
     items: [
       { to: "/comercial/clientes", label: "Clientes", icon: Users, permission: "clientes.manage" },
       { to: "/comercial/servicos", label: "Serviços", icon: ClipboardList, permission: "servicos.manage" },
+      { to: "/comercial/produtos", label: "Produtos e estoque", icon: Package, permission: "servicos.manage" },
       { to: "/comercial/contratos", label: "Contratos e Propostas", icon: BriefcaseBusiness, permission: "contratos.manage" },
       { to: "/comercial/configuracoes", label: "Parâmetros do tenant", icon: Settings, permission: "configuracoes.manage" },
     ],
@@ -99,6 +101,7 @@ const routeMeta: Record<string, { section: string; title: string; description: s
   "/equipes": { section: "Operacional", title: "Equipes e veículos", description: "Cadastre técnicos, veículos e dados de apoio da equipe de campo." },
   "/comercial/clientes": { section: "Comercial", title: "Clientes", description: "Cadastros, contatos, locais e equipamentos atendidos." },
   "/comercial/servicos": { section: "Comercial", title: "Serviços", description: "Catálogo técnico que alimenta propostas, contratos, OS e certificados." },
+  "/comercial/produtos": { section: "Comercial", title: "Produtos e estoque", description: "Cadastre insumos, acompanhe saldo e registre entradas e saídas vinculadas à operação." },
   "/comercial/contratos": { section: "Comercial", title: "Contratos e Propostas", description: "Da proposta aprovada ao contrato operacional disponível para agenda." },
   "/comercial/configuracoes": { section: "Comercial", title: "Parâmetros do tenant", description: "Identidade visual, numeração, assinaturas e dados documentais." },
   "/usuarios": { section: "Administração", title: "Usuários e perfis", description: "Gerencie contas, papéis, permissões e reset de senha." },

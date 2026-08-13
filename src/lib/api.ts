@@ -91,7 +91,37 @@ export interface ServicoCatalogo {
   popMateriais?: string[];
   popAprovadoPor?: string;
   popAprovadoEm?: string;
+  produtosEstoque?: Array<{
+    produtoId: string;
+    produtoNome?: string;
+    produtoCodigo?: string;
+    quantidadePrevista: number;
+    unidade?: string;
+  }>;
   ativo: boolean;
+}
+
+export interface ProdutoEstoqueApp {
+  id: string;
+  codigo: string;
+  nome: string;
+  descricao: string;
+  unidade: string;
+  quantidadeAtual: number;
+  estoqueMinimo: number;
+  ativo: boolean;
+  atualizadoEm?: string;
+  movimentos: Array<{
+    id: string;
+    tipo: "entrada" | "saida" | "ajuste" | "devolucao" | "perda";
+    quantidade: number;
+    saldoAnterior: number;
+    saldoPosterior: number;
+    osId?: string | null;
+    servicoId?: string | null;
+    observacao?: string | null;
+    criadoEm?: string;
+  }>;
 }
 
 export interface Contrato {
@@ -312,6 +342,7 @@ export interface ContratoServico {
   descricaoComercial?: string;
   unidadeComercial?: string;
   enderecoAtividade?: string;
+  enderecosAtividade?: string[];
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -364,6 +395,13 @@ export interface ProposalAssistDraft {
     enderecoAtividade: string;
   }>;
   observacoes: string[];
+  coberturaDocumento?: {
+    paginasAnalisadas: number | null;
+    tabelasEncontradas: number;
+    itensExtraidos: number;
+    regrasFrequencia: string[];
+    camposNaoInterpretados: string[];
+  };
   confianca: "alta" | "media" | "baixa";
   camposPendentes: string[];
   avisos: string[];
@@ -543,6 +581,7 @@ export interface BootstrapData {
   numberingConfig: NumeracaoConfig | null;
   clients: Cliente[];
   services: ServicoCatalogo[];
+  stockProducts: ProdutoEstoqueApp[];
   contracts: Contrato[];
   schedules: AgendamentoApp[];
   orders: OSApp[];
@@ -789,6 +828,15 @@ export const resetUserPassword = (id: string) =>
   api<{ ok: boolean; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
+export const saveStockProduct = (payload: Partial<ProdutoEstoqueApp>) => api<{ ok: boolean; id: string }>("/stock/products", { method: "POST", body: JSON.stringify(payload) });
+export const createStockMovement = (payload: {
+  produtoId: string;
+  tipo: ProdutoEstoqueApp["movimentos"][number]["tipo"];
+  quantidade: number;
+  osId?: string;
+  servicoId?: string;
+  observacao?: string;
+}) => api<{ ok: boolean; movement: { id: string; saldoPosterior: number } }>("/stock/movements", { method: "POST", body: JSON.stringify(payload) });
 export const uploadServicePopFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
   ok: boolean;
   attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string; popId: string };
@@ -835,7 +883,7 @@ export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendame
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string }) =>
+export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string; produtosUtilizados?: Array<{ produtoId: string; quantidade: number }> }) =>
   api<{ ok: boolean; certificateHash?: string; certificateHashes?: string[] }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
 export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string; hashes?: string[] }>(`/orders/${id}/certificado`, { method: "POST" });
 export const revokeCertificate = (id: string, motivo: string) => api<{ ok: boolean; id: string; status: "revogado" }>(`/certificates/${encodeURIComponent(id)}/revoke`, { method: "PATCH", body: JSON.stringify({ motivo }) });

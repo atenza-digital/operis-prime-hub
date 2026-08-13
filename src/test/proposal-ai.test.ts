@@ -58,6 +58,13 @@ describe("assistente de propostas por PDF", () => {
         condicoesComerciais: [],
         servicos: [],
         observacoes: [],
+        coberturaDocumento: {
+          paginasAnalisadas: 1,
+          tabelasEncontradas: 0,
+          itensExtraidos: 0,
+          regrasFrequencia: [],
+          camposNaoInterpretados: [],
+        },
         confianca: "media",
         camposPendentes: ["serviços"],
         avisos: [],

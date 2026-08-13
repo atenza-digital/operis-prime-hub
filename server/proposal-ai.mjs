@@ -14,7 +14,7 @@ async function fetchWithTimeout(url, init, timeoutMs = OPENAI_REQUEST_TIMEOUT_MS
 export const PROPOSAL_ASSIST_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["clienteId", "clienteNome", "clienteCnpj", "titulo", "objeto", "modalidade", "validadeDias", "locaisExecucao", "escopoTecnico", "condicoesComerciais", "servicos", "observacoes", "confianca", "camposPendentes", "avisos"],
+  required: ["clienteId", "clienteNome", "clienteCnpj", "titulo", "objeto", "modalidade", "validadeDias", "locaisExecucao", "escopoTecnico", "condicoesComerciais", "servicos", "observacoes", "coberturaDocumento", "confianca", "camposPendentes", "avisos"],
   properties: {
     clienteId: { type: ["string", "null"] },
     clienteNome: { type: ["string", "null"] },
@@ -43,6 +43,18 @@ export const PROPOSAL_ASSIST_SCHEMA = {
       },
     },
     observacoes: { type: "array", items: { type: "string" } },
+    coberturaDocumento: {
+      type: "object",
+      additionalProperties: false,
+      required: ["paginasAnalisadas", "tabelasEncontradas", "itensExtraidos", "regrasFrequencia", "camposNaoInterpretados"],
+      properties: {
+        paginasAnalisadas: { type: ["integer", "null"] },
+        tabelasEncontradas: { type: "integer" },
+        itensExtraidos: { type: "integer" },
+        regrasFrequencia: { type: "array", items: { type: "string" } },
+        camposNaoInterpretados: { type: "array", items: { type: "string" } },
+      },
+    },
     confianca: { type: "string", enum: ["alta", "media", "baixa"] },
     camposPendentes: { type: "array", items: { type: "string" } },
     avisos: { type: "array", items: { type: "string" } },
@@ -124,6 +136,9 @@ export function buildProposalCatalogContext({ clients = [], services = [] } = {}
 export function normalizeProposalAssistDraft(input = {}, { clients = [], services = [] } = {}) {
   const warnings = lines(input.avisos);
   const pending = lines(input.camposPendentes);
+  const coverageInput = input.coberturaDocumento || {};
+  const coveragePending = lines(coverageInput.camposNaoInterpretados);
+  coveragePending.forEach((item) => pending.push(`PDF: ${item}`));
   const client = matchClient(input, clients, warnings);
   if (!client) pending.push("cliente");
   const normalizedServices = uniqueById((Array.isArray(input.servicos) ? input.servicos : []).slice(0, MAX_DRAFT_SERVICES).map((item) => {
@@ -155,6 +170,13 @@ export function normalizeProposalAssistDraft(input = {}, { clients = [], service
     condicoesComerciais: lines(input.condicoesComerciais),
     servicos: normalizedServices,
     observacoes: lines(input.observacoes),
+    coberturaDocumento: {
+      paginasAnalisadas: finiteNumber(coverageInput.paginasAnalisadas, null),
+      tabelasEncontradas: Math.max(0, Number(coverageInput.tabelasEncontradas || 0)),
+      itensExtraidos: Math.max(0, Number(coverageInput.itensExtraidos || normalizedServices.length)),
+      regrasFrequencia: lines(coverageInput.regrasFrequencia),
+      camposNaoInterpretados: coveragePending,
+    },
     confianca: ["alta", "media", "baixa"].includes(input.confianca) ? input.confianca : "baixa",
     camposPendentes: [...new Set(pending)],
     avisos: [...new Set(warnings)],
@@ -182,6 +204,9 @@ export async function generateProposalAssistDraft({ apiKey, model = "gpt-4o-mini
       "Se não houver correspondência inequívoca, retorne null e registre o campo em camposPendentes.",
       "O resultado é um rascunho para revisão humana e nunca deve ser tratado como proposta aprovada.",
       "Responda exclusivamente no schema estruturado solicitado, em português do Brasil.",
+      "Percorra o arquivo inteiro, de todas as paginas, incluindo cabecalhos, rodapes, tabelas, anexos e observacoes.",
+      "Informe coberturaDocumento com paginas analisadas, tabelas encontradas, itens extraidos, regras de frequencia e campos nao interpretados.",
+      "Nao descarte linhas de tabelas: quando uma linha nao puder ser associada ao catalogo, registre-a em camposNaoInterpretados.",
     ].join("\n");
     const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
       method: "POST",

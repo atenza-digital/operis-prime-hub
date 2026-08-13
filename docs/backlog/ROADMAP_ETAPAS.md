@@ -338,6 +338,35 @@ Todos os itens abaixo estao alocados na Etapa 8:
 
 ## Controle de backlog
 
+## Atualizacao de pendencias da Aline - 12/08/2026
+
+Esta rodada incorporou as pendencias operacionais recebidas da Aline sem remover recursos historicos nem criar uma base local de dados.
+
+Entregue nesta rodada:
+
+- Catalogo de produtos de estoque persistido no PostgreSQL por tenant, com codigo, unidade, saldo atual, estoque minimo e ativo/inativo.
+- Historico de entradas, saidas, ajustes, devolucoes e perdas com saldo anterior/posterior, usuario, OS, servico e auditoria.
+- Nova tela Comercial > Produtos e estoque, com cadastro, alerta de estoque baixo e movimentacao protegida.
+- Vinculo de produtos previstos ao cadastro de servicos e exibicao do consumo no encerramento da OS.
+- Baixa de estoque transacional no encerramento da OS, vinculada a OS e servico, com bloqueio de saldo insuficiente.
+- Calculo de proposta por frequencia de cada item; frequencias como `120 dias` deixam de ser multiplicadas automaticamente por 12.
+- Uma atividade da proposta pode ter varios enderecos, um por linha, preservando o primeiro endereco por compatibilidade e levando a lista ao snapshot documental.
+- Assistente de PDF passou a exigir cobertura declarada do arquivo, incluindo paginas, tabelas, itens, regras de frequencia e campos nao interpretados; o resultado continua sendo rascunho sujeito a revisao humana.
+
+Pendencias remanescentes, por prioridade:
+
+- P0: validar a migracao idempotente da estrutura de estoque na base de homologacao e executar smoke autenticado de cadastro, movimento e baixa por OS.
+- P0: completar a leitura deterministica do PDF com extracao local das tabelas e preservacao do documento original como anexo imutavel; a assistencia atual melhora a cobertura solicitada ao modelo, mas nao substitui essa etapa.
+- P1: permitir selecionar locais cadastrados do cliente diretamente na atividade e no agendamento, em vez de depender somente de texto livre.
+- P1: finalizar a tela de historico/paginacao de movimentacoes e relatorio de consumo por periodo/OS.
+- P1: gerar PDF server-side imutavel para OS, proposta, certificado, medicao e relatorio, mantendo os layouts aprovados.
+- P1: concluir a matriz externa com Tarcisio/Aline cobrindo Produtos, Estoque, frequencia, PDF completo, multiplos enderecos e baixa na OS.
+- P2: aplicar catalogo de clausulas e parametros comerciais por tenant quando a empresa habilitar contratos/minutas; Ciperprag permanece com esses recursos inativos conforme configuracao.
+- P2: concluir painel Atenza de tenants, planos, pagamento, suspensao e suporte.
+- P2: SMTP transacional, Minha conta, troca de e-mail e login Google continuam planejados, sem bloquear o fluxo operacional atual.
+
+Contagem desta atualizacao: 8 itens remanescentes diretamente relacionados ao retorno Aline, com 5 frentes tecnicas ja entregues nesta rodada e 3 validacoes/fechamentos ainda necessarios antes do aceite final do P0.
+
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo, complemento de medicao e assistencia comercial: 49.
 - Total de itens remanescentes: 38.
 - Etapa 7: 5 itens.

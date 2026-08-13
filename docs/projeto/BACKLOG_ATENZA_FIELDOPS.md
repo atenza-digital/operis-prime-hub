@@ -40,6 +40,26 @@ Status padrao: proposto, aguardando aprovacao antes de implementacao.
 
 ## Resumo
 
+## Atualizacao operacional - retorno Aline (12/08/2026)
+
+Itens implementados nesta rodada e rastreados na Etapa 8:
+
+- Catalogo de produtos e estoque por tenant, com saldo minimo, movimentos auditados e baixa transacional na OS.
+- Relacao de produtos previstos por servico e consumo real informado no encerramento.
+- Calculo de totais por frequencia individual do servico, incluindo frequencias manuais em dias.
+- Multiplos enderecos por atividade de proposta, preservados no snapshot.
+- Assistente de PDF com declaracao de cobertura, tabelas, paginas, itens, regras de frequencia e pendencias de interpretacao.
+
+Itens ainda pendentes para aceite:
+
+- Smoke na homologacao com migracao idempotente e teste de estoque ponta a ponta.
+- Extracao deterministica local das tabelas e preservacao do PDF original como anexo imutavel.
+- Selecao de locais cadastrados no cliente diretamente na atividade/agendamento.
+- Historico/relatorio de consumo por periodo e OS.
+- Roteiro de revalidacao com Tarcisio/Aline e evidencias visuais.
+
+Esses itens nao substituem nem removem backlog anterior; apenas atualizam o status das frentes relacionadas ao retorno da Ciperprag.
+
 | Prioridade | Quantidade |
 | --- | ---: |
 | P0 | 6 |

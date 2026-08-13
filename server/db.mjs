@@ -650,8 +650,65 @@ export async function ensureDatabaseShape() {
     ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates_servicos
     ADD COLUMN IF NOT EXISTS descricao_comercial TEXT,
     ADD COLUMN IF NOT EXISTS unidade_comercial TEXT,
-    ADD COLUMN IF NOT EXISTS endereco_atividade TEXT
+    ADD COLUMN IF NOT EXISTS endereco_atividade TEXT,
+    ADD COLUMN IF NOT EXISTS enderecos_atividade JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
+
+  // Catalog and stock are tenant-scoped so the commercial catalog can feed
+  // field execution without keeping operational quantities in the browser.
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.produtos_estoque (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      codigo VARCHAR(60) NOT NULL,
+      nome TEXT NOT NULL,
+      descricao TEXT,
+      unidade VARCHAR(30) NOT NULL DEFAULT 'un.',
+      quantidade_atual NUMERIC(12,3) NOT NULL DEFAULT 0,
+      estoque_minimo NUMERIC(12,3) NOT NULL DEFAULT 0,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT produtos_estoque_quantidade_check CHECK (quantidade_atual >= 0),
+      CONSTRAINT produtos_estoque_minimo_check CHECK (estoque_minimo >= 0),
+      CONSTRAINT produtos_estoque_codigo_unique UNIQUE (tenant_id, codigo)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.servicos_catalogo_produtos (
+      id BIGSERIAL PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      servico_id VARCHAR(20) NOT NULL REFERENCES ciperprag_hub.servicos_catalogo(id) ON DELETE CASCADE,
+      produto_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.produtos_estoque(id) ON DELETE CASCADE,
+      quantidade_prevista NUMERIC(12,3) NOT NULL DEFAULT 1,
+      unidade VARCHAR(30),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT servicos_catalogo_produtos_qty_check CHECK (quantidade_prevista > 0),
+      CONSTRAINT servicos_catalogo_produtos_unique UNIQUE (tenant_id, servico_id, produto_id)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.estoque_movimentacoes (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      produto_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.produtos_estoque(id),
+      tipo VARCHAR(20) NOT NULL,
+      quantidade NUMERIC(12,3) NOT NULL,
+      saldo_anterior NUMERIC(12,3) NOT NULL,
+      saldo_posterior NUMERIC(12,3) NOT NULL,
+      os_id VARCHAR(30),
+      servico_id VARCHAR(20),
+      observacao TEXT,
+      criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT estoque_movimentacoes_tipo_check CHECK (tipo IN ('entrada','saida','ajuste','devolucao','perda')),
+      CONSTRAINT estoque_movimentacoes_quantidade_check CHECK (quantidade > 0),
+      CONSTRAINT estoque_movimentacoes_saldo_check CHECK (saldo_anterior >= 0 AND saldo_posterior >= 0)
+    )
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_produtos_estoque_tenant ON ciperprag_hub.produtos_estoque(tenant_id, ativo, nome)");
+  await query("CREATE INDEX IF NOT EXISTS idx_estoque_movimentos_produto ON ciperprag_hub.estoque_movimentacoes(tenant_id, produto_id, criado_em DESC)");
+  await query("CREATE INDEX IF NOT EXISTS idx_servicos_catalogo_produtos_servico ON ciperprag_hub.servicos_catalogo_produtos(tenant_id, servico_id)");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos DROP CONSTRAINT IF EXISTS evidencias_anexos_entidade_check");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos ADD CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta','minuta'))");
 

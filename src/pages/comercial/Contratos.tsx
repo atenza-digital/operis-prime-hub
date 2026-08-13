@@ -13,7 +13,7 @@ import {
   type ProposalAssistDraft,
 } from "@/lib/api";
 import { repairMojibake } from "@/lib/repairMojibake";
-import { calculateProposalContractEstimate, calculateProposalMonthlyTotal } from "@/lib/proposalCalculations";
+import { calculateProposalContractEstimate, calculateProposalMonthlyTotal, frequencyOccurrences } from "@/lib/proposalCalculations";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +63,7 @@ const statusLabels: Record<string, string> = {
   encerrado: "Encerrado",
 };
 
-const emptyServico: ContratoServico = { servicoId: "", quantidade: 1, valorUnitario: 0, frequencia: "Mensal", descricaoComercial: "", unidadeComercial: "", enderecoAtividade: "" };
+const emptyServico: ContratoServico = { servicoId: "", quantidade: 1, valorUnitario: 0, frequencia: "Mensal", descricaoComercial: "", unidadeComercial: "", enderecoAtividade: "", enderecosAtividade: [] };
 const emptyTemplate: Omit<ContratoTemplate, "id"> = {
   numero: "",
   clienteId: "",
@@ -1361,6 +1361,7 @@ export default function Contratos() {
                   <div className="mt-3 rounded-xl border bg-background/80 p-3 text-xs">
                     <p className="font-semibold">Prévia da leitura</p>
                     <p className="mt-1 text-muted-foreground">Cliente: {proposalAssistDraft.clienteNome || "não identificado"} · Serviços reconhecidos: {proposalAssistDraft.servicos.length} · Confiança: {proposalAssistDraft.confianca}</p>
+                    {proposalAssistDraft.coberturaDocumento ? <p className="mt-1 text-muted-foreground">Cobertura: {proposalAssistDraft.coberturaDocumento.paginasAnalisadas ?? "?"} pagina(s), {proposalAssistDraft.coberturaDocumento.tabelasEncontradas} tabela(s), {proposalAssistDraft.coberturaDocumento.itensExtraidos} item(ns).</p> : null}
                     {proposalAssistDraft.camposPendentes.length ? <p className="mt-2 text-amber-700">Revisar: {proposalAssistDraft.camposPendentes.join(", ")}.</p> : null}
                     {proposalAssistDraft.avisos.length ? <p className="mt-1 text-amber-700">Atenção: {proposalAssistDraft.avisos.join(" ")}</p> : null}
                   </div>
@@ -1508,6 +1509,16 @@ export default function Contratos() {
                       value={servico.enderecoAtividade || ""}
                       onChange={(event) => updateServico(index, "enderecoAtividade", event.target.value)}
                     />
+                    <Label className="text-xs">Outros endereÃ§os da mesma atividade (um por linha)</Label>
+                    <Textarea
+                      placeholder="Unidade 2\nUnidade 3"
+                      value={joinLines(servico.enderecosAtividade || [])}
+                      onChange={(event) => setForm((prev) => ({
+                        ...prev,
+                        servicos: prev.servicos.map((item, itemIndex) => itemIndex === index ? { ...item, enderecosAtividade: splitLines(event.target.value) } : item),
+                      }))}
+                      rows={2}
+                    />
                     <p className="text-[11px] text-muted-foreground">A unidade e o nome do serviço vêm do catálogo cadastrado.</p>
                   </div>
                   <div className="flex items-center justify-between">
@@ -1537,16 +1548,17 @@ export default function Contratos() {
               {form.tipo === "proposta" ? (
                 <div className="grid gap-3 rounded-lg bg-muted p-3 md:grid-cols-2" aria-live="polite">
                   <div>
-                    <p className="text-xs text-muted-foreground">Valor mensal estimado</p>
+                    <p className="text-xs text-muted-foreground">Valor por ciclo</p>
                     <p className="text-lg font-bold tabular-nums">
                       R$ {proposalMonthlyTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                   <div className="md:text-right">
-                    <p className="text-xs text-muted-foreground">Valor total estimado do contrato ({Math.max(Number(form.vigenciaMeses) || 0, 0)} meses)</p>
+                    <p className="text-xs text-muted-foreground">Total pela frequência cadastrada ({Math.max(Number(form.vigenciaMeses) || 0, 0)} meses)</p>
                     <p className="text-lg font-bold text-primary tabular-nums">
                       R$ {proposalContractEstimate.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Ex.: 120 dias = {frequencyOccurrences("120 dias", form.vigenciaMeses)} ocorrências no período.</p>
                   </div>
                 </div>
               ) : showMonthlyContractValue ? (

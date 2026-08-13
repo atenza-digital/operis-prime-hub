@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, BookOpen, Briefcase, ClipboardCheck, FileUp, FlaskConical, HardHat, Pencil, Plus, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { getBootstrap, saveService, uploadServicePopFile, type EvidenciaAnexoApp, type ServicoCatalogo } from "@/lib/api";
+import { getBootstrap, saveService, uploadServicePopFile, type EvidenciaAnexoApp, type ProdutoEstoqueApp, type ServicoCatalogo } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -38,6 +38,7 @@ const emptyServico: Omit<ServicoCatalogo, "id"> = {
   popMateriais: [],
   popAprovadoPor: "",
   popAprovadoEm: "",
+  produtosEstoque: [],
   ativo: true,
 };
 
@@ -177,6 +178,7 @@ function ProductDetailsEditor({
 
 export default function Servicos() {
   const [lista, setLista] = useState<ServicoCatalogo[]>([]);
+  const [stockProducts, setStockProducts] = useState<ProdutoEstoqueApp[]>([]);
   const [anexos, setAnexos] = useState<EvidenciaAnexoApp[]>([]);
   const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -192,6 +194,7 @@ export default function Servicos() {
     try {
       const data = await getBootstrap();
       setLista(data.services);
+      setStockProducts(data.stockProducts || []);
       setAnexos(data.attachments);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar serviços");
@@ -222,6 +225,7 @@ export default function Servicos() {
       popVersao: rest.popVersao || "001",
       popResponsabilidades: rest.popResponsabilidades || [],
       popMateriais: rest.popMateriais || [],
+      produtosEstoque: rest.produtosEstoque || [],
     });
     setPopFile(null);
     setDialogOpen(true);
@@ -493,6 +497,41 @@ export default function Servicos() {
             <TagEditor label="Produtos químicos" icon={FlaskConical} values={form.produtosQuimicos} onChange={(values) => setForm({ ...form, produtosQuimicos: values })} />
             <TagEditor label="EPIs obrigatórios" icon={HardHat} values={form.epis} onChange={(values) => setForm({ ...form, epis: values })} />
             <ProductDetailsEditor values={form.produtosDetalhados || []} onChange={(values) => setForm({ ...form, produtosDetalhados: values })} />
+            <div className="space-y-3 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-semibold">Produtos de estoque usados no serviço</p>
+                <p className="text-xs text-muted-foreground">Relacione os insumos previstos. A baixa real acontece por movimentação, normalmente ao encerrar a OS.</p>
+              </div>
+              {stockProducts.filter((item) => item.ativo).length === 0 ? (
+                <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">Cadastre produtos em Produtos e estoque para relacioná-los ao serviço.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {stockProducts.filter((item) => item.ativo).map((product) => {
+                    const linked = (form.produtosEstoque || []).find((item) => item.produtoId === product.id);
+                    return (
+                      <div key={product.id} className="flex items-center gap-3 rounded-md border p-2">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(linked)}
+                          onChange={(event) => {
+                            const current = form.produtosEstoque || [];
+                            setForm({
+                              ...form,
+                              produtosEstoque: event.target.checked
+                                ? [...current, { produtoId: product.id, produtoNome: product.nome, unidade: product.unidade, quantidadePrevista: 1 }]
+                                : current.filter((item) => item.produtoId !== product.id),
+                            });
+                          }}
+                        />
+                        <span className="min-w-0 flex-1 text-xs"><strong>{product.nome}</strong><span className="ml-1 text-muted-foreground">({product.codigo})</span></span>
+                        {linked ? <Input className="h-8 w-24 text-xs" type="number" min="0.001" step="0.001" value={linked.quantidadePrevista} onChange={(event) => setForm({ ...form, produtosEstoque: (form.produtosEstoque || []).map((item) => item.produtoId === product.id ? { ...item, quantidadePrevista: Number(event.target.value) } : item) })} /> : null}
+                        {linked ? <span className="text-[11px] text-muted-foreground">{product.unidade}</span> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <TagEditor label="Riscos" icon={AlertTriangle} values={form.riscos} onChange={(values) => setForm({ ...form, riscos: values })} />
             <TagEditor label="Normas aplicáveis" icon={BookOpen} values={form.normasAplicaveis} onChange={(values) => setForm({ ...form, normasAplicaveis: values })} />
             <TagEditor label="Procedimentos da OS" icon={Briefcase} values={form.procedimentos} onChange={(values) => setForm({ ...form, procedimentos: values })} />
