@@ -23,7 +23,7 @@ Status padrao: proposto, aguardando aprovacao antes de implementacao.
 | AF-P1-001 | Navegacao | Reorganizar menu e arquitetura de informacao | Dashboard deve ser independente; menus devem ser Comercial, Operacional, Financeiro, Administracao; accordion deve recolher outros. Resultado: navegacao clara. Justificativa: reduzir confusao de usuarios. | Auditoria, feedback usuario | Alta / P1 / UI/UX | Global; todos; todos tenants | Depende de decisoes de modulo. Risco de retrabalho se a arquitetura de informacao nao for aprovada. Esforco M. | Menu sem Inicio; nomes coerentes; screenshots desktop/mobile; teste de navegacao. | Proposto; decidir posicao de auditorias. |
 | AF-P1-002 | UX base | Definir padrao pagina, modal, drawer e wizard | Algumas telas parecem abrir por cima de outras. Resultado: guia e aplicacao inicial em fluxos criticos. Justificativa: produto mais intuitivo. | Auditoria | Alta / P1 / UI/UX | Global; todos; todos tenants | Depende de design system. Risco de inconsistencia. Esforco M. | Guia documentado; Agendamento/OS/Contratos seguem padrao; testes visuais. | Proposto. |
 | AF-P1-003 | Performance percebida | Eliminar flicker de troca de telas autenticadas | `Suspense` global causa sensacao de reload. Resultado: layout persistente com skeleton local/prefetch. Justificativa: experiencia profissional. | Auditoria tecnica | Alta / P1 / refatoracao | Global; todos; todos tenants | Depende de estrutura de rotas. Risco baixo. Esforco M. | Navegacao sem fallback tela inteira; teste visual. | Proposto. |
-| AF-P1-004 | Documentos | Implementar PDF server-side com snapshot imutavel | Documentos ainda dependem em parte do navegador. Resultado: PDF gerado no servidor, versionado, com hash e snapshot. Justificativa: rastreabilidade e padrao documental. | Roadmap/auditoria | Critica / P1 / infraestrutura | Documentos; admin/qualidade/financeiro; todos tenants | Depende de templates versionados e storage. Risco alto se feito sem validacao visual. Esforco G. | OS, certificado, medicao, proposta e contrato salvos como anexos imutaveis. | Proposto. |
+| AF-P1-004 | Documentos | Implementar PDF server-side com snapshot imutavel | Documentos ainda dependiam em parte do navegador. Resultado tecnico entregue: PDF renderizado pelo Chromium no servidor, com hash, snapshot e anexo imutavel. | Roadmap/auditoria | Critica / P1 / infraestrutura | Documentos; admin/qualidade/financeiro; todos tenants | A validacao visual completa dos cinco modelos e o R2 definitivo permanecem como hardening. Esforco G. | OS, certificado, medicao, proposta e contrato gerados server-side; teste de assinatura `%PDF-`; hash persistido. | Implementado tecnicamente; aguarda smoke visual em homologacao. |
 | AF-P1-005 | Servicos e POP | Adicionar ajuda acessivel e upload de POP pronto | Usuarios nao tecnicos perguntam o que e POP/EPI/normas. Resultado: descricoes curtas e upload PDF/DOCX/imagem. Justificativa: reduz barreira de adocao. | Feedback cliente | Alta / P1 / melhoria | Comercial/qualidade; comercial/admin; todos tenants | Depende de storage/validacao se houver upload. Risco de arquivo inseguro. Esforco M. | Microcopy visivel; upload aceito; POP anexado ao servico; testes de arquivo. | Implementado; upload por tenant com hash, assinatura de arquivo, politica configuravel e auditoria; aguarda homologacao. |
 | AF-P1-006 | Certificados | Evoluir revogacao, reemissao e validade publica | Certificado tem hash/QR, mas precisa tratamento de revogado/vencido/reemitido. Resultado: validacao publica confiavel. Justificativa: antifraude. | Auditoria | Critica / P1 / regra de negocio | Qualidade; qualidade/admin/publico; todos tenants | Depende de snapshot imutavel. Risco juridico. Esforco M. | Certificado revogado aparece como revogado; reemissao vinculada; testes publicos. | Implementado; endpoints protegidos, motivo obrigatorio, vinculo de substituicao e auditoria; aguarda homologacao externa. |
 | AF-P1-007 | Administracao SaaS | Criar base do painel Atenza para tenants | Falta administrar clientes SaaS, planos, suspensao e suporte. Resultado: operacao SaaS gerenciavel. Justificativa: produto vendavel. | Auditoria/roadmap | Critica / P1 / infraestrutura | Plataforma; Atenza; todos tenants | Depende de modelo comercial. Risco de operar manualmente. Esforco G. | CRUD tenant, status, plano, bloqueio, auditoria global. | Proposto; decidir modelo de plano. |
@@ -45,18 +45,20 @@ Status padrao: proposto, aguardando aprovacao antes de implementacao.
 Itens implementados nesta rodada e rastreados na Etapa 8:
 
 - Catalogo de produtos e estoque por tenant, com saldo minimo, movimentos auditados e baixa transacional na OS.
+- Smoke transacional de estoque executado no banco configurado, com entrada de 12 unidades, saida de 3 unidades, saldo final 9 e limpeza automatica.
 - Relacao de produtos previstos por servico e consumo real informado no encerramento.
+- Relatorio server-side de consumo por periodo, produto e OS, com resumo por tipo de movimento.
 - Calculo de totais por frequencia individual do servico, incluindo frequencias manuais em dias.
 - Multiplos enderecos por atividade de proposta, preservados no snapshot.
-- Assistente de PDF com declaracao de cobertura, tabelas, paginas, itens, regras de frequencia e pendencias de interpretacao.
+- Locais cadastrados do cliente selecionaveis no agendamento e propagados para OS e recorrencia.
+- Assistente de PDF com extracao deterministica local de tabelas/texto, cobertura de paginas/itens e preservacao do PDF original com hash SHA-256.
+- PDFs historicos renderizados server-side e persistidos como `application/pdf` imutavel, com o renderizador coberto por teste de assinatura `%PDF-`.
 
 Itens ainda pendentes para aceite:
 
-- Smoke na homologacao com migracao idempotente e teste de estoque ponta a ponta.
-- Extracao deterministica local das tabelas e preservacao do PDF original como anexo imutavel.
-- Selecao de locais cadastrados no cliente diretamente na atividade/agendamento.
-- Historico/relatorio de consumo por periodo e OS.
-- Roteiro de revalidacao com Tarcisio/Aline e evidencias visuais.
+- Executar o smoke de estoque no container publicado pela pipeline de homologacao, apos merge/review do PR.
+- Validar visualmente os PDFs server-side dos cinco modelos contra as referencias aprovadas.
+- Executar revalidacao externa com Tarcisio/Aline cobrindo estoque, importacao de PDF, locais, consumo e documentos.
 
 Esses itens nao substituem nem removem backlog anterior; apenas atualizam o status das frentes relacionadas ao retorno da Ciperprag.
 

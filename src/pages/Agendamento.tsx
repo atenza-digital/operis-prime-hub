@@ -117,6 +117,7 @@ export default function Agendamento() {
   const [clienteId, setClienteId] = useState("");
   const [contratoId, setContratoId] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
+  const [localId, setLocalId] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
   const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
@@ -241,6 +242,7 @@ export default function Agendamento() {
     setContratoId("");
     setDataAgendada("");
     setLocalExecucao("");
+    setLocalId("");
     setTagsSelecionadas([]);
     setObservacao("");
     setTecnicosSelecionados([]);
@@ -267,6 +269,7 @@ export default function Agendamento() {
         servico: contratoAtivo.servico,
         tipo: contratoAtivo.tipo,
         dataAgendada,
+        localId: localId || undefined,
         localExecucao,
         tags: tagsSelecionadas.join(", "),
         observacao,
@@ -415,7 +418,7 @@ export default function Agendamento() {
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
-                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
                   <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
                   <SelectContent>
                     {contratosCliente.map((item) => {
@@ -445,8 +448,13 @@ export default function Agendamento() {
 
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-              {locaisContrato.length > 0 ? (
-                <Select value={localExecucao} onValueChange={setLocalExecucao} disabled={!contratoId}>
+              {locaisCliente.length > 0 ? (
+                <Select value={localId} onValueChange={(value) => { const local = locaisCliente.find((item) => item.id === value); setLocalId(value); setLocalExecucao(local ? [local.nome, local.endereco].filter(Boolean).join(" - ") : ""); }} disabled={!contratoId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
+                  <SelectContent>{locaisCliente.map((item) => <SelectItem key={item.id || item.nome} value={item.id || item.nome}>{item.nome}{item.endereco ? ` - ${item.endereco}` : ""}</SelectItem>)}</SelectContent>
+                </Select>
+              ) : locaisContrato.length > 0 ? (
+                <Select value={localExecucao} onValueChange={(value) => { setLocalId(""); setLocalExecucao(value); }} disabled={!contratoId}>
                   <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
                   <SelectContent>{locaisContrato.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
                 </Select>

@@ -32,5 +32,11 @@ jobs:
       - name: Test
         run: npm test -- --run
 
+      - name: Deterministic proposal PDF extraction
+        run: npm run test:proposal-pdf
+
+      - name: Server-side PDF renderer
+        run: npm run test:server-pdf
+
       - name: Build
         run: npm run build

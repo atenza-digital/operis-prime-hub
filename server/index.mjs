@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
-import { buildProposalCatalogContext, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
+import { buildProposalCatalogContext, extractProposalPdfDeterministically, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
+import { renderHtmlToPdf } from "./render-pdf.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,16 @@ const COMMERCIAL_DOCUMENT_TEMPLATES = {
   contrato: { code: "contrato-prestacao-servicos", version: "p0-ciperprag-v1" },
   minuta: { code: "minuta-contrato-cliente", version: "p0-ciperprag-v1" },
 };
+
+function buildProposalPdfCoverage(deterministic, aiCoverage = {}) {
+  return {
+    paginasAnalisadas: deterministic?.paginasAnalisadas ?? aiCoverage.paginasAnalisadas ?? null,
+    tabelasEncontradas: Math.max(Number(deterministic?.tabelasEncontradas || 0), Number(aiCoverage.tabelasEncontradas || 0)),
+    itensExtraidos: Math.max(Number(deterministic?.itensExtraidos || 0), Number(aiCoverage.itensExtraidos || 0)),
+    regrasFrequencia: Array.isArray(aiCoverage.regrasFrequencia) ? aiCoverage.regrasFrequencia : [],
+    camposNaoInterpretados: Array.isArray(aiCoverage.camposNaoInterpretados) ? aiCoverage.camposNaoInterpretados : [],
+  };
+}
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
@@ -279,6 +290,7 @@ function encodeBinaryDocument(buffer, mimeType) {
     hash: sha256Hex(buffer),
   };
 }
+
 
 function createPdfBuffer() {
   throw new Error("PDF server-side por desenho manual desativado. Usar template visual aprovado.");
@@ -553,7 +565,8 @@ async function saveImmutableDocumentAttachment(client, {
   storage = null,
   metadata = {},
 }) {
-  const encoded = encodeHtmlDocument(html);
+  const pdfBuffer = await renderHtmlToPdf(html);
+  const encoded = encodeBinaryDocument(pdfBuffer, "application/pdf");
   const snapHash = snapshot ? snapshotHash(snapshot) : null;
   const templateCode = template?.code || null;
   const templateVersion = template?.version || null;
@@ -567,14 +580,14 @@ async function saveImmutableDocumentAttachment(client, {
   });
   const persisted = await persistAttachmentContent({
     storagePlan: storageTarget,
-    buffer: Buffer.from(html, "utf8"),
+    buffer: pdfBuffer,
     contentBase64: encoded.dataUrl,
-    mimeType: "text/html",
+    mimeType: "application/pdf",
     hashSha256: encoded.hash,
     fileName,
     metadata: {
       ...metadata,
-      formato: "html_historico",
+      formato: "pdf_server_side",
       hashSha256: encoded.hash,
       snapshotHashSha256: snapHash,
       templateCodigo: templateCode,
@@ -585,7 +598,7 @@ async function saveImmutableDocumentAttachment(client, {
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
      (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
-     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'text/html',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)
     ON CONFLICT (id) DO NOTHING`,
     [
       attachmentId,
@@ -1066,6 +1079,52 @@ async function getServices(tenantId) {
   }));
 }
 
+async function persistProposalPdfImport(client, { tenantId, userId, fileName, parsed, deterministic }) {
+  const hash = sha256Hex(parsed.buffer);
+  const existing = await client.query(
+    `SELECT id FROM ciperprag_hub.proposta_pdf_importacoes WHERE tenant_id = $1 AND hash_sha256 = $2 LIMIT 1`,
+    [tenantId, hash],
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+  const id = makeId("PIMP");
+  await client.query(
+    `INSERT INTO ciperprag_hub.proposta_pdf_importacoes
+      (id, tenant_id, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, hash_sha256, texto_extraido, paginas_analisadas, tabelas_encontradas, itens_extraidos, cobertura, criado_por)
+     VALUES ($1,$2,$3,'application/pdf',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      id,
+      tenantId,
+      fileName,
+      parsed.bytes,
+      parsed.dataUrl,
+      hash,
+      deterministic?.textoExtraido || null,
+      deterministic?.paginasAnalisadas || null,
+      Number(deterministic?.tabelasEncontradas || 0),
+      Number(deterministic?.itensExtraidos || 0),
+      JSON.stringify({
+        fonte: "pdf-parse-local",
+        tabelas: deterministic?.tabelas || [],
+        linhasDeterministicas: deterministic?.linhasDeterministicas || [],
+        metadadosPdf: deterministic?.metadadosPdf || {},
+      }),
+      userId || null,
+    ],
+  );
+  return id;
+}
+
+async function finalizeProposalPdfImport(client, { id, templateId = null, coverage, status = "analisado" }) {
+  if (!id) return;
+  await client.query(
+    `UPDATE ciperprag_hub.proposta_pdf_importacoes
+     SET template_id = COALESCE($2, template_id), paginas_analisadas = COALESCE($3, paginas_analisadas),
+         tabelas_encontradas = $4, itens_extraidos = $5, cobertura = $6, status = $7, analisado_em = NOW()
+     WHERE id = $1`,
+    [id, templateId, coverage?.paginasAnalisadas || null, Number(coverage?.tabelasEncontradas || 0), Number(coverage?.itensExtraidos || 0), JSON.stringify(coverage || {}), status],
+  );
+}
+
 async function getStockProducts(tenantId) {
   const { rows } = await query(`
     SELECT
@@ -1082,9 +1141,13 @@ async function getStockProducts(tenantId) {
           'observacao', m.observacao,
           'criadoEm', m.criado_em
         ) ORDER BY m.criado_em DESC)
-        FROM ciperprag_hub.estoque_movimentacoes m
-        WHERE m.produto_id = p.id AND m.tenant_id = p.tenant_id
-        LIMIT 20
+        FROM (
+          SELECT *
+          FROM ciperprag_hub.estoque_movimentacoes
+          WHERE produto_id = p.id AND tenant_id = p.tenant_id
+          ORDER BY criado_em DESC
+          LIMIT 20
+        ) m
       ), '[]'::jsonb) AS movimentos
     FROM ciperprag_hub.produtos_estoque p
     WHERE p.tenant_id = $1
@@ -1146,6 +1209,7 @@ async function getSchedules(tenantId) {
     servico: row.servico,
     tipo: row.tipo,
     dataAgendada: row.data_agendada?.toISOString?.().split("T")[0] ?? row.data_agendada,
+    localId: row.local_id,
     localExecucao: row.local_execucao,
     tags: row.tags,
     observacao: row.observacao,
@@ -1476,7 +1540,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
         userId,
         entityType: "certificado",
         entityId: certId,
-        fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
+        fileName: `certificado-${certNumber.replaceAll("/", "-")}.pdf`,
         html: buildHistoricalCertificateHtml(snapshot, certificate),
         metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id, tagEquipamentoServico: tag },
       });
@@ -1596,6 +1660,7 @@ async function getContractTemplates(tenantId) {
       s.descricao_comercial,
       s.unidade_comercial,
       s.enderecos_atividade,
+      s.locais_ids,
       o.id AS contrato_operacional_id,
       o.status AS contrato_operacional_status,
       o.executado AS contrato_operacional_executado
@@ -1629,6 +1694,7 @@ async function getContractTemplates(tenantId) {
         validadeDias: Number(row.validade_dias ?? 30),
         modalidade: row.modalidade || "",
         locaisExecucao: Array.isArray(row.locais_execucao) ? row.locais_execucao : [],
+        sourcePdfImportId: row.source_pdf_import_id || undefined,
         escopoTecnico: row.escopo_tecnico || "",
         condicoesComerciais: row.condicoes_comerciais || "",
         operacionalizado: false,
@@ -1650,6 +1716,7 @@ async function getContractTemplates(tenantId) {
         unidadeComercial: row.unidade_comercial || "",
         enderecoAtividade: row.endereco_atividade || "",
         enderecosAtividade: [row.endereco_atividade, ...(Array.isArray(row.enderecos_atividade) ? row.enderecos_atividade : normalizeJsonArray(row.enderecos_atividade))].filter(Boolean),
+        localIds: Array.isArray(row.locais_ids) ? row.locais_ids : normalizeJsonArray(row.locais_ids),
         contratoOperacionalId: row.contrato_operacional_id,
         contratoOperacionalStatus: row.contrato_operacional_status,
         contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
@@ -1995,6 +2062,7 @@ async function getRecurrenceSuggestions(tenantId) {
     servico: row.servico,
     tipo: row.tipo,
     localExecucao: row.local_execucao,
+    localId: row.local_id,
     tags: row.tags,
     observacao: row.observacao,
     tecnicosIds: row.tecnicos_ids ?? [],
@@ -2314,8 +2382,8 @@ async function upsertSchedule(body, tenantId) {
   }
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
-    (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18, NOW()))
+    (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19, NOW()))
     ON CONFLICT (id) DO UPDATE SET
       contrato_id=EXCLUDED.contrato_id,
       cliente_id=EXCLUDED.cliente_id,
@@ -2324,6 +2392,7 @@ async function upsertSchedule(body, tenantId) {
       servico=EXCLUDED.servico,
       tipo=EXCLUDED.tipo,
       data_agendada=EXCLUDED.data_agendada,
+      local_id=EXCLUDED.local_id,
       local_execucao=EXCLUDED.local_execucao,
       tags=EXCLUDED.tags,
       observacao=EXCLUDED.observacao,
@@ -2343,6 +2412,7 @@ async function upsertSchedule(body, tenantId) {
       body.servico,
       body.tipo,
       body.dataAgendada,
+      body.localId || null,
       body.localExecucao,
       body.tags || null,
       body.observacao || null,
@@ -2532,6 +2602,33 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Storage-Provider", hasR2Content && !hasDatabaseContent ? "r2" : "database");
   if (attachment.hash_sha256) res.setHeader("X-Document-Hash-Sha256", attachment.hash_sha256);
+  res.send(decoded.buffer);
+});
+
+app.get("/api/proposal-pdf-imports/:id/download", requirePermission("contratos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const { rows } = await query(
+    `SELECT id, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, hash_sha256
+     FROM ciperprag_hub.proposta_pdf_importacoes
+     WHERE id = $1 AND tenant_id = $2
+     LIMIT 1`,
+    [req.params.id, tenantId],
+  );
+  const original = rows[0];
+  if (!original) return res.status(404).json({ error: "PDF original nao encontrado." });
+  const decoded = decodeStoredAttachmentContent(original.conteudo_base64);
+  await logAuditEvent(null, req, {
+    entityType: "proposta_pdf_importacao",
+    entityId: original.id,
+    action: "proposal_source_pdf_download",
+    summary: `PDF original da proposta consultado: ${original.nome_arquivo}`,
+    after: { nomeArquivo: original.nome_arquivo, hashSha256: original.hash_sha256 },
+  });
+  res.setHeader("Content-Type", original.mime_type || decoded.mimeType || "application/pdf");
+  res.setHeader("Content-Length", decoded.buffer.length);
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(String(original.nome_arquivo || `${original.id}.pdf`).replaceAll('"', ""))}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (original.hash_sha256) res.setHeader("X-Document-Hash-Sha256", original.hash_sha256);
   res.send(decoded.buffer);
 });
 
@@ -3057,6 +3154,61 @@ app.post("/api/stock/movements", requirePermission("servicos.manage", "os.close"
   res.json({ ok: true, movement });
 });
 
+app.get("/api/stock/report", requirePermission("servicos.manage", "medicoes.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const dateFrom = String(req.query.dateFrom || "").trim() || null;
+  const dateTo = String(req.query.dateTo || "").trim() || null;
+  const productId = String(req.query.productId || "").trim() || null;
+  const osId = String(req.query.osId || "").trim() || null;
+  const { rows } = await query(
+    `SELECT m.id, m.produto_id, p.codigo, p.nome AS produto_nome, p.unidade,
+            m.tipo, m.quantidade, m.saldo_anterior, m.saldo_posterior,
+            m.os_id, o.numero AS os_numero, m.servico_id, s.nome AS servico_nome,
+            m.observacao, m.criado_em
+     FROM ciperprag_hub.estoque_movimentacoes m
+     JOIN ciperprag_hub.produtos_estoque p ON p.id = m.produto_id AND p.tenant_id = m.tenant_id
+     LEFT JOIN ciperprag_hub.ordens_servico o ON o.id = m.os_id AND o.tenant_id = m.tenant_id
+     LEFT JOIN ciperprag_hub.servicos_catalogo s ON s.id = m.servico_id AND s.tenant_id = m.tenant_id
+     WHERE m.tenant_id = $1
+       AND ($2::date IS NULL OR m.criado_em::date >= $2::date)
+       AND ($3::date IS NULL OR m.criado_em::date <= $3::date)
+       AND ($4::text IS NULL OR m.produto_id = $4)
+       AND ($5::text IS NULL OR m.os_id = $5)
+     ORDER BY m.criado_em DESC, m.id DESC
+     LIMIT 1000`,
+    [tenantId, dateFrom, dateTo, productId, osId],
+  );
+  const movements = rows.map((row) => ({
+    id: row.id,
+    produtoId: row.produto_id,
+    codigo: row.codigo,
+    produtoNome: row.produto_nome,
+    unidade: row.unidade,
+    tipo: row.tipo,
+    quantidade: Number(row.quantidade),
+    saldoAnterior: Number(row.saldo_anterior),
+    saldoPosterior: Number(row.saldo_posterior),
+    osId: row.os_id,
+    osNumero: row.os_numero,
+    servicoId: row.servico_id,
+    servicoNome: row.servico_nome,
+    observacao: row.observacao,
+    criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
+  }));
+  const summary = movements.reduce((acc, item) => {
+    const key = item.produtoId;
+    if (!acc[key]) acc[key] = { produtoId: key, produtoNome: item.produtoNome, unidade: item.unidade, entradas: 0, saidas: 0, ajustes: 0, perdas: 0, devolucoes: 0, movimentos: 0 };
+    acc[key].movimentos += 1;
+    if (item.tipo === "entrada") acc[key].entradas += item.quantidade;
+    if (item.tipo === "saida") acc[key].saidas += item.quantidade;
+    if (item.tipo === "ajuste") acc[key].ajustes += item.quantidade;
+    if (item.tipo === "perda") acc[key].perdas += item.quantidade;
+    if (item.tipo === "devolucao") acc[key].devolucoes += item.quantidade;
+    return acc;
+  }, {});
+  res.json({ ok: true, filters: { dateFrom, dateTo, productId, osId }, movements, summary: Object.values(summary) });
+});
+
 app.post("/api/services/:id/pop-file", requirePermission("servicos.manage"), async (req, res) => {
   const tenantId = req.auth.user.tenant.id;
   const tenantSlug = req.auth.user.tenant.slug;
@@ -3365,9 +3517,9 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19)
        ON CONFLICT (id) DO UPDATE SET
          numero=EXCLUDED.numero,
          cliente_id=EXCLUDED.cliente_id,
@@ -3384,7 +3536,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
          modalidade=EXCLUDED.modalidade,
          locais_execucao=EXCLUDED.locais_execucao,
          escopo_tecnico=EXCLUDED.escopo_tecnico,
-         condicoes_comerciais=EXCLUDED.condicoes_comerciais
+         condicoes_comerciais=EXCLUDED.condicoes_comerciais,
+         source_pdf_import_id=EXCLUDED.source_pdf_import_id
        WHERE ciperprag_hub.contratos_templates.tenant_id = EXCLUDED.tenant_id`,
       [
         id,
@@ -3405,9 +3558,18 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         JSON.stringify(locaisExecucao),
         body.escopoTecnico || null,
         body.condicoesComerciais || null,
+        body.sourcePdfImportId || null,
       ],
     );
     assertTenantWrite(templateRowCount, "Modelo comercial");
+    if (body.sourcePdfImportId) {
+      await client.query(
+        `UPDATE ciperprag_hub.proposta_pdf_importacoes
+         SET template_id = $1
+         WHERE id = $2 AND tenant_id = $3`,
+        [id, body.sourcePdfImportId, tenantId],
+      );
+    }
     await client.query(
       `DELETE FROM ciperprag_hub.contratos_templates_servicos s
        WHERE s.template_id = $1
@@ -3421,8 +3583,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     );
     for (const servico of body.servicos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           id,
           servico.servicoId,
@@ -3433,6 +3595,7 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
           servico.unidadeComercial || null,
           servico.enderecoAtividade || null,
           JSON.stringify(Array.isArray(servico.enderecosAtividade) ? servico.enderecosAtividade.filter(Boolean) : (servico.enderecoAtividade ? [servico.enderecoAtividade] : [])),
+          JSON.stringify(Array.isArray(servico.localIds) ? servico.localIds.filter(Boolean) : []),
         ],
       );
     }
@@ -3482,6 +3645,28 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
   }
 
   const tenantId = req.auth.user.tenant.id;
+  let deterministic;
+  try {
+    deterministic = await extractProposalPdfDeterministically(parsed.buffer);
+  } catch (error) {
+    deterministic = {
+      paginasAnalisadas: null,
+      textoExtraido: "",
+      tabelasEncontradas: 0,
+      itensExtraidos: 0,
+      tabelas: [],
+      linhasDeterministicas: [],
+      metadadosPdf: {},
+      erro: error instanceof Error ? error.message : "Falha na extração determinística",
+    };
+  }
+  const sourceImportId = await withTransaction((client) => persistProposalPdfImport(client, {
+    tenantId,
+    userId: req.auth.user.id,
+    fileName,
+    parsed,
+    deterministic,
+  }));
   const [{ rows: clientRows }, { rows: serviceRows }] = await Promise.all([
     query(`SELECT id, razao_social, nome_fantasia, cnpj, endereco, municipio, uf
            FROM ciperprag_hub.clientes
@@ -3503,15 +3688,23 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
       buffer: parsed.buffer,
       context: buildProposalCatalogContext({ clients, services }),
     });
-    const draft = normalizeProposalAssistDraft(rawDraft, { clients, services });
+    const coverage = buildProposalPdfCoverage(deterministic, rawDraft.coberturaDocumento);
+    const draft = normalizeProposalAssistDraft({
+      ...rawDraft,
+      coberturaDocumento: coverage,
+      sourceImportId,
+      originalPdfHashSha256: sha256Hex(parsed.buffer),
+    }, { clients, services });
+    await withTransaction((client) => finalizeProposalPdfImport(client, { id: sourceImportId, coverage }));
     await logAuditEvent(pool, req, {
       entityType: "proposta",
       action: "proposal_ai_assist_requested",
       summary: `Rascunho de proposta extraído de PDF: ${fileName}`,
-      after: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", clienteId: draft.clienteId || null, servicos: draft.servicos.length, camposPendentes: draft.camposPendentes },
+      after: { fileName, bytes: parsed.bytes, sourceImportId, originalPdfHashSha256: draft.originalPdfHashSha256, coberturaDocumento: coverage, model: process.env.OPENAI_MODEL || "gpt-4o-mini", clienteId: draft.clienteId || null, servicos: draft.servicos.length, camposPendentes: draft.camposPendentes },
     });
-    return res.json({ ok: true, draft, meta: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", arquivoTemporario: true } });
+    return res.json({ ok: true, draft, meta: { fileName, bytes: parsed.bytes, sourceImportId, originalPdfHashSha256: draft.originalPdfHashSha256, deterministic: { paginasAnalisadas: deterministic.paginasAnalisadas, tabelasEncontradas: deterministic.tabelasEncontradas, itensExtraidos: deterministic.itensExtraidos }, model: process.env.OPENAI_MODEL || "gpt-4o-mini", arquivoTemporario: false } });
   } catch (error) {
+    await withTransaction((client) => finalizeProposalPdfImport(client, { id: sourceImportId, status: "erro", coverage: { ...deterministic, erro: error instanceof Error ? error.message : "Falha na analise" } })).catch(() => undefined);
     return res.status(502).json({ error: error instanceof Error ? error.message : "Não foi possível analisar o PDF." });
   }
 });
@@ -3537,9 +3730,9 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,'minuta',$5,$6,$7,'rascunho',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+       VALUES ($1,$2,$3,$4,'minuta',$5,$6,$7,'rascunho',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17)`,
       [
         newId,
         tenantId,
@@ -3557,6 +3750,7 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
         JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
         item.escopo_tecnico,
         item.condicoes_comerciais,
+        item.source_pdf_import_id,
       ],
     );
     const { rows: services } = await client.query(
@@ -3569,8 +3763,8 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
     );
     for (const service of services) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           newId,
           service.servico_id,
@@ -3579,6 +3773,9 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
           service.frequencia,
           service.descricao_comercial,
           service.unidade_comercial,
+          service.endereco_atividade,
+          service.enderecos_atividade || "[]",
+          service.locais_ids || "[]",
         ],
       );
     }
@@ -3616,9 +3813,9 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17)`,
       [
         newId,
         tenantId,
@@ -3636,6 +3833,7 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
         JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
         item.escopo_tecnico,
         item.condicoes_comerciais,
+        item.source_pdf_import_id,
       ],
     );
     const { rows: services } = await client.query(
@@ -3648,8 +3846,8 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
     );
     for (const service of services) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           newId,
           service.servico_id,
@@ -3658,6 +3856,9 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
           service.frequencia,
           service.descricao_comercial,
           service.unidade_comercial,
+          service.endereco_atividade,
+          service.enderecos_atividade || "[]",
+          service.locais_ids || "[]",
         ],
       );
     }
@@ -3686,7 +3887,7 @@ app.post("/api/contract-templates/:id/issue-document", requirePermission("contra
     }
     const entityType = snapshot.documento.tipo;
     const template = COMMERCIAL_DOCUMENT_TEMPLATES[entityType];
-    const fileName = `${entityType}-${safeFileNamePart(snapshot.documento.numero || snapshot.documento.id)}.html`;
+    const fileName = `${entityType}-${safeFileNamePart(snapshot.documento.numero || snapshot.documento.id)}.pdf`;
     const html = buildCommercialDocumentHtml(snapshot);
     const attachment = await saveImmutableDocumentAttachment(client, {
       tenantId,
@@ -3945,7 +4146,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       userId: req.auth.user.id,
       entityType: "medicao",
       entityId: id,
-      fileName: `medicao-${number.replaceAll("/", "-")}.html`,
+      fileName: `medicao-${number.replaceAll("/", "-")}.pdf`,
       html: buildHistoricalMeasurementHtml(snapshot, { id, numero: number, cliente_nome: clienteNome, periodo_inicio: dataInicio, periodo_fim: dataFim, total }),
       metadata: { origem: "geracao_medicao", numero: number, periodo: { inicio: dataInicio, fim: dataFim } },
     });
@@ -4145,9 +4346,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const orderId = makeId("OSDB");
     await client.query(
       `INSERT INTO ciperprag_hub.ordens_servico
-      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,CURRENT_DATE,1,$23,'aberta',$24)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,'aberta',$25)`,
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -4341,13 +4542,51 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_encerrado_em = NOW() WHERE id = $1 AND tenant_id = $3",
       [orderId, JSON.stringify(snapshot), tenantId],
     );
+
+    const stockUsage = Array.isArray(produtosUtilizados) ? produtosUtilizados : [];
+    if (!isNotExecuted && stockUsage.length) {
+      const { rows: existingMovements } = await client.query(
+        "SELECT produto_id FROM ciperprag_hub.estoque_movimentacoes WHERE tenant_id = $1 AND os_id = $2 AND tipo = 'saida' LIMIT 1",
+        [tenantId, orderId],
+      );
+      if (existingMovements.length === 0) {
+        for (const usage of stockUsage) {
+          const usageQuantity = Number(usage.quantidade || 0);
+          if (!usage.produtoId || !Number.isFinite(usageQuantity) || usageQuantity <= 0) continue;
+          const { rows: productRows } = await client.query(
+            "SELECT id, nome, quantidade_atual, unidade FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+            [usage.produtoId, tenantId],
+          );
+          const product = productRows[0];
+          if (!product) {
+            const error = new Error("Produto utilizado nao pertence a este tenant.");
+            error.status = 400;
+            throw error;
+          }
+          const beforeStock = Number(product.quantidade_atual || 0);
+          const afterStock = beforeStock - usageQuantity;
+          if (afterStock < 0) {
+            const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${beforeStock} ${product.unidade}.`);
+            error.status = 400;
+            throw error;
+          }
+          await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, afterStock, tenantId]);
+          await client.query(
+            `INSERT INTO ciperprag_hub.estoque_movimentacoes
+             (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
+             VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
+            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
+          );
+        }
+      }
+    }
     await saveImmutableDocumentAttachment(client, {
       tenantId,
       tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "os",
       entityId: orderId,
-      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.html`,
+      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.pdf`,
       html: buildHistoricalOrderHtml(snapshot, updatedOrderRows[0]),
       metadata: { origem: "encerramento_os", osNumero: updatedOrderRows[0].numero, dataExecucao },
     });
@@ -4400,9 +4639,9 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     if (!isNotExecuted && recorrenciaDias > 0) {
       await client.query(
         `INSERT INTO ciperprag_hub.recorrencia_sugestoes
-         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pendente')`,
-        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
+         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'pendente')`,
+        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_id || null, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
       );
     }
     await logAuditEvent(client, req, {
@@ -4499,37 +4738,6 @@ app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage
       throw error;
     }
 
-    const stockUsage = Array.isArray(produtosUtilizados) ? produtosUtilizados : [];
-    if (!isNotExecuted && stockUsage.length) {
-      for (const usage of stockUsage) {
-        const usageQuantity = Number(usage.quantidade || 0);
-        if (!usage.produtoId || !Number.isFinite(usageQuantity) || usageQuantity <= 0) continue;
-        const { rows: productRows } = await client.query(
-          "SELECT id, nome, quantidade_atual, unidade FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
-          [usage.produtoId, tenantId],
-        );
-        const product = productRows[0];
-        if (!product) {
-          const error = new Error("Produto utilizado nao pertence a este tenant.");
-          error.status = 400;
-          throw error;
-        }
-        const beforeStock = Number(product.quantidade_atual || 0);
-        const afterStock = beforeStock - usageQuantity;
-        if (afterStock < 0) {
-          const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${beforeStock} ${product.unidade}.`);
-          error.status = 400;
-          throw error;
-        }
-        await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, afterStock, tenantId]);
-        await client.query(
-          `INSERT INTO ciperprag_hub.estoque_movimentacoes
-           (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
-           VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
-          [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
-        );
-      }
-    }
     if (certificate.status === "revogado") {
       const error = new Error("Este certificado ja esta revogado e nao pode ser reemitido novamente.");
       error.status = 409;
@@ -4633,9 +4841,9 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
       }
       await client.query(
         `INSERT INTO ciperprag_hub.agendamentos
-         (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'agendado',NOW())`,
-        [newId, tenantId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
+         (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'agendado',NOW())`,
+        [newId, tenantId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_id || null, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
       );
       await client.query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'confirmada' WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
       await logAuditEvent(client, req, {

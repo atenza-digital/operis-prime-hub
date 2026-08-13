@@ -12,6 +12,8 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 
+Atualizacao consolidada de 13/08/2026: as cinco frentes tecnicas do retorno da Aline (estoque, importacao deterministica de PDF, locais no agendamento, consumo e PDFs server-side) foram implementadas e testadas localmente. Permanecem tres validacoes de aceite: smoke no container publicado via CI/CD, conferencia visual dos PDFs server-side e revalidacao externa com Tarcisio/Aline.
+
 ## Etapa 1 de 8 - Correcoes P0 de seguranca e consistencia
 
 Status: concluida.
@@ -90,7 +92,7 @@ Entregue:
 - Download/visualizacao segura de anexos autenticados via `/api/attachments/:id/download`.
 - Auditoria de downloads e visualizacoes de anexos.
 - Tela de Auditoria de Anexos com filtros, hash parcial, categoria, imutabilidade e download.
-- OS, certificado e medicao possuem documentos historicos imutaveis em HTML com hash.
+- OS, certificado, medicao, proposta e contrato possuem documentos historicos renderizados server-side em PDF, com hash, snapshot e flag de imutabilidade.
 - Validacao publica de certificado exibe metadados de integridade quando houver documento imutavel.
 - Certificado tem QR Code com rota publica de validacao.
 - Certificado usa configuracao documental por tenant (`empresa_config.certificado_config`), fotos dinamicas da OS e ate 3 imagens.
@@ -101,7 +103,7 @@ Entregue:
 
 Observacao de fechamento:
 
-- A geracao de PDF binario server-side para todos os documentos nao foi marcada como concluida nesta etapa porque o criterio visual exige renderizacao fiel dos templates aprovados. O backend mantem funcoes de PDF manual desativadas por seguranca visual. Esse trabalho foi realocado para a Etapa 8, junto com hardening, storage e governanca de producao.
+- A renderizacao binaria server-side foi implementada nesta etapa de hardening com Chromium e teste automatizado. A homologacao visual dos cinco modelos, R2 definitivo, templates versionados e historico de versoes continuam como criterios de producao.
 
 ## Etapa 7 de 8 - QA, testes E2E e homologacao guiada
 
@@ -331,14 +333,14 @@ O aceite externo deve classificar cada item como aprovado, aprovado com observac
 Todos os itens abaixo estao alocados na Etapa 8:
 
 - SMTP/e-mails transacionais usando remetente padrao da plataforma, preferencialmente `noreply@atenza.digital`, para convite de usuario, reset de senha, confirmacao/solicitacao de alteracao de e-mail e avisos operacionais. Futuramente permitir remetente/domino do tenant quando houver configuracao validada de DNS, SPF, DKIM e DMARC.
-- Estoque simples.
+- Evolucao avancada de estoque, incluindo lotes, validade, inventario, transferencias e multi-almoxarifado.
 - Help center e onboarding guiado.
 - Renomear fisicamente a pasta local do projeto.
 - Minha conta e politica visual de senha, incluindo visualizar dados do proprio perfil, redefinir senha, solicitar/alterar e-mail com confirmacao por e-mail transacional da Atenza (`noreply@atenza.digital`) conforme politica do tenant e validar permissoes de autogerenciamento.
 
 ## Controle de backlog
 
-## Atualizacao de pendencias da Aline - 12/08/2026
+## Atualizacao de pendencias da Aline - 13/08/2026
 
 Esta rodada incorporou as pendencias operacionais recebidas da Aline sem remover recursos historicos nem criar uma base local de dados.
 
@@ -352,20 +354,22 @@ Entregue nesta rodada:
 - Calculo de proposta por frequencia de cada item; frequencias como `120 dias` deixam de ser multiplicadas automaticamente por 12.
 - Uma atividade da proposta pode ter varios enderecos, um por linha, preservando o primeiro endereco por compatibilidade e levando a lista ao snapshot documental.
 - Assistente de PDF passou a exigir cobertura declarada do arquivo, incluindo paginas, tabelas, itens, regras de frequencia e campos nao interpretados; o resultado continua sendo rascunho sujeito a revisao humana.
+- Extracao local deterministica agora preserva texto e tabelas delimitadas do PDF antes da chamada de IA, com hash e conteudo original persistidos em `proposta_pdf_importacoes`.
+- Locais cadastrados do cliente podem ser selecionados no agendamento e seguem para OS, recorrencia e itens comerciais.
+- Historico de consumo server-side por periodo, produto e OS foi adicionado ao modulo Produtos e estoque.
+- Documentos historicos passaram a ser renderizados como PDF no servidor e persistidos como anexos imutaveis.
+- Smoke transacional de estoque executado localmente com limpeza automatica; a mesma verificacao foi adicionada ao workflow de deploy de homologacao.
 
 Pendencias remanescentes, por prioridade:
 
-- P0: validar a migracao idempotente da estrutura de estoque na base de homologacao e executar smoke autenticado de cadastro, movimento e baixa por OS.
-- P0: completar a leitura deterministica do PDF com extracao local das tabelas e preservacao do documento original como anexo imutavel; a assistencia atual melhora a cobertura solicitada ao modelo, mas nao substitui essa etapa.
-- P1: permitir selecionar locais cadastrados do cliente diretamente na atividade e no agendamento, em vez de depender somente de texto livre.
-- P1: finalizar a tela de historico/paginacao de movimentacoes e relatorio de consumo por periodo/OS.
-- P1: gerar PDF server-side imutavel para OS, proposta, certificado, medicao e relatorio, mantendo os layouts aprovados.
-- P1: concluir a matriz externa com Tarcisio/Aline cobrindo Produtos, Estoque, frequencia, PDF completo, multiplos enderecos e baixa na OS.
+- P0: executar o smoke de estoque no container publicado pela pipeline de homologacao apos merge/review do PR.
+- P1: validar visualmente os PDFs server-side dos modelos aprovados e confirmar que a renderizacao preserva o layout esperado.
+- P1: concluir a matriz externa com Tarcisio/Aline cobrindo Produtos, Estoque, frequencia, importacao de PDF, locais, consumo e documentos.
 - P2: aplicar catalogo de clausulas e parametros comerciais por tenant quando a empresa habilitar contratos/minutas; Ciperprag permanece com esses recursos inativos conforme configuracao.
 - P2: concluir painel Atenza de tenants, planos, pagamento, suspensao e suporte.
 - P2: SMTP transacional, Minha conta, troca de e-mail e login Google continuam planejados, sem bloquear o fluxo operacional atual.
 
-Contagem desta atualizacao: 8 itens remanescentes diretamente relacionados ao retorno Aline, com 5 frentes tecnicas ja entregues nesta rodada e 3 validacoes/fechamentos ainda necessarios antes do aceite final do P0.
+Contagem desta atualizacao: 3 validacoes remanescentes diretamente relacionadas ao retorno Aline; as 5 frentes tecnicas desta rodada foram implementadas e testadas localmente.
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo, complemento de medicao e assistencia comercial: 49.
 - Total de itens remanescentes: 38.

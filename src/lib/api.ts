@@ -162,6 +162,7 @@ export interface AgendamentoApp {
   tipo: "sanitario" | "manutencao";
   dataAgendada: string;
   localExecucao: string;
+  localId?: string;
   tags?: string;
   observacao?: string;
   tecnicosIds?: string[];
@@ -343,6 +344,7 @@ export interface ContratoServico {
   unidadeComercial?: string;
   enderecoAtividade?: string;
   enderecosAtividade?: string[];
+  localIds?: string[];
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -374,6 +376,7 @@ export interface ContratoTemplate {
   issuingBranchId?: string;
   operacionalizado?: boolean;
   contratosOperacionaisIds?: string[];
+  sourcePdfImportId?: string;
 }
 
 export interface ProposalAssistDraft {
@@ -402,6 +405,8 @@ export interface ProposalAssistDraft {
     regrasFrequencia: string[];
     camposNaoInterpretados: string[];
   };
+  sourceImportId?: string;
+  originalPdfHashSha256?: string;
   confianca: "alta" | "media" | "baixa";
   camposPendentes: string[];
   avisos: string[];
@@ -837,6 +842,34 @@ export const createStockMovement = (payload: {
   servicoId?: string;
   observacao?: string;
 }) => api<{ ok: boolean; movement: { id: string; saldoPosterior: number } }>("/stock/movements", { method: "POST", body: JSON.stringify(payload) });
+export interface StockReportMovement {
+  id: string;
+  produtoId: string;
+  codigo: string;
+  produtoNome: string;
+  unidade: string;
+  tipo: ProdutoEstoqueApp["movimentos"][number]["tipo"];
+  quantidade: number;
+  saldoAnterior: number;
+  saldoPosterior: number;
+  osId?: string | null;
+  osNumero?: string | null;
+  servicoId?: string | null;
+  servicoNome?: string | null;
+  observacao?: string | null;
+  criadoEm?: string;
+}
+export const getStockReport = (params: { dateFrom?: string; dateTo?: string; productId?: string; osId?: string } = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => value && search.set(key, value));
+  const queryString = search.toString();
+  return api<{
+    ok: boolean;
+    filters: Record<string, string | null>;
+    movements: StockReportMovement[];
+    summary: Array<{ produtoId: string; produtoNome: string; unidade: string; entradas: number; saidas: number; ajustes: number; perdas: number; devolucoes: number; movimentos: number }>;
+  }>(`/stock/report${queryString ? `?${queryString}` : ""}`);
+};
 export const uploadServicePopFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
   ok: boolean;
   attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string; popId: string };

@@ -1,3 +1,5 @@
+import { PDFParse } from "pdf-parse";
+
 const MAX_DRAFT_SERVICES = 30;
 const OPENAI_REQUEST_TIMEOUT_MS = 90_000;
 
@@ -80,6 +82,73 @@ function lines(value) {
 function finiteNumber(value, fallback = null) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizePdfTableRows(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((row) => (Array.isArray(row) ? row.map((cell) => text(cell)) : []))
+    .filter((row) => row.some(Boolean));
+}
+
+function extractDelimitedTextTables(value) {
+  const tables = [];
+  let current = [];
+  const flush = () => {
+    if (current.length >= 2) tables.push(current);
+    current = [];
+  };
+  for (const line of String(value || "").split(/\r?\n/)) {
+    if (!line.includes("\t")) {
+      flush();
+      continue;
+    }
+    const row = line.split(/\t+/).map((cell) => text(cell)).filter(Boolean);
+    if (row.length >= 2) current.push(row);
+    else flush();
+  }
+  flush();
+  return tables;
+}
+
+/**
+ * Extracts the PDF with a deterministic local parser before any AI call.
+ * The result is kept as evidence so the operator can see what was actually read.
+ */
+export async function extractProposalPdfDeterministically(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error("PDF vazio.");
+  // Keep parsing in the Node process. The pdf.js worker path can fail on
+  // server runtimes that cannot clone the configured PDF source object.
+  const parser = new PDFParse({ data: buffer, disableWorker: true, isEvalSupported: false });
+  try {
+    // PDFParse caches the document, but its methods are not safe to load in
+    // parallel on every Node/pdf.js combination. Keep the extraction order
+    // deterministic and avoid racing the document worker initialization.
+    const textResult = await parser.getText();
+    const infoResult = await parser.getInfo({ parsePageInfo: true });
+    const tableResult = await parser.getTable().catch(() => ({ pages: [] }));
+    const pages = Array.isArray(textResult?.pages) ? textResult.pages : [];
+    const parserTables = (tableResult?.pages || []).flatMap((page) => Array.isArray(page?.tables) ? page.tables : [])
+      .map(normalizePdfTableRows)
+      .filter((table) => table.length > 0);
+    // Some PDFs are visually tabular but do not expose table objects through
+    // pdf.js. Their text extractor still preserves column separators, so keep
+    // this deterministic fallback before the AI reconciliation step.
+    const tables = [...parserTables, ...extractDelimitedTextTables(textResult?.text)];
+    const tableRows = tables.flat();
+    const textValue = text(textResult?.text);
+    return {
+      paginasAnalisadas: Number(infoResult?.total || pages.length || 0) || null,
+      textoExtraido: textValue,
+      tabelasEncontradas: tables.length,
+      itensExtraidos: Math.max(0, tableRows.length - tables.length),
+      tabelas: tables.slice(0, 50),
+      linhasDeterministicas: tableRows.slice(0, 500),
+      metadadosPdf: infoResult?.info || {},
+    };
+  } finally {
+    await parser.destroy();
+  }
 }
 
 function uniqueById(items) {
@@ -177,6 +246,8 @@ export function normalizeProposalAssistDraft(input = {}, { clients = [], service
       regrasFrequencia: lines(coverageInput.regrasFrequencia),
       camposNaoInterpretados: coveragePending,
     },
+    sourceImportId: text(input.sourceImportId),
+    originalPdfHashSha256: text(input.originalPdfHashSha256),
     confianca: ["alta", "media", "baixa"].includes(input.confianca) ? input.confianca : "baixa",
     camposPendentes: [...new Set(pending)],
     avisos: [...new Set(warnings)],

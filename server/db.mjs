@@ -276,8 +276,16 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS veiculo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS veiculo_descricao TEXT,
     ADD COLUMN IF NOT EXISTS os_id VARCHAR(30),
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)
   `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.ordens_servico
+    ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_agendamentos_local ON ciperprag_hub.agendamentos(tenant_id, local_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_ordens_servico_local ON ciperprag_hub.ordens_servico(tenant_id, local_id)");
 
   await query(`
     DO $$
@@ -651,8 +659,41 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS descricao_comercial TEXT,
     ADD COLUMN IF NOT EXISTS unidade_comercial TEXT,
     ADD COLUMN IF NOT EXISTS endereco_atividade TEXT,
-    ADD COLUMN IF NOT EXISTS enderecos_atividade JSONB NOT NULL DEFAULT '[]'::jsonb
+    ADD COLUMN IF NOT EXISTS enderecos_atividade JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS locais_ids JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)");
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates
+    ADD COLUMN IF NOT EXISTS source_pdf_import_id VARCHAR(40)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.proposta_pdf_importacoes (
+      id VARCHAR(40) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      template_id VARCHAR(30),
+      nome_arquivo TEXT NOT NULL,
+      mime_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+      tamanho_bytes INTEGER NOT NULL,
+      conteudo_base64 TEXT NOT NULL,
+      hash_sha256 VARCHAR(64) NOT NULL,
+      texto_extraido TEXT,
+      paginas_analisadas INTEGER,
+      tabelas_encontradas INTEGER NOT NULL DEFAULT 0,
+      itens_extraidos INTEGER NOT NULL DEFAULT 0,
+      cobertura JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status VARCHAR(20) NOT NULL DEFAULT 'recebido',
+      criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      analisado_em TIMESTAMPTZ,
+      CONSTRAINT proposta_pdf_importacoes_status_check CHECK (status IN ('recebido','analisado','erro')),
+      CONSTRAINT proposta_pdf_importacoes_hash_unique UNIQUE (tenant_id, hash_sha256)
+    )
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_proposta_pdf_importacoes_tenant ON ciperprag_hub.proposta_pdf_importacoes(tenant_id, criado_em DESC)");
+  await query("CREATE INDEX IF NOT EXISTS idx_proposta_pdf_importacoes_template ON ciperprag_hub.proposta_pdf_importacoes(tenant_id, template_id)");
 
   // Catalog and stock are tenant-scoped so the commercial catalog can feed
   // field execution without keeping operational quantities in the browser.

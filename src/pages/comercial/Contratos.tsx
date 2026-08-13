@@ -884,6 +884,7 @@ export default function Contratos() {
       setProposalAssistDraft(result.draft);
       setForm((previous) => ({
         ...previous,
+        sourcePdfImportId: result.draft.sourceImportId || previous.sourcePdfImportId,
         clienteId: result.draft.clienteId || previous.clienteId,
         titulo: result.draft.titulo || previous.titulo,
         objeto: result.draft.objeto || previous.objeto,

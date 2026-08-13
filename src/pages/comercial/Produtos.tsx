@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Package, Pencil, Plus, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, ArrowUpFromLine, Package, Pencil, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createStockMovement, getBootstrap, saveStockProduct, type ProdutoEstoqueApp } from "@/lib/api";
+import { createStockMovement, getBootstrap, getStockReport, saveStockProduct, type ProdutoEstoqueApp, type StockReportMovement } from "@/lib/api";
 
 type ProductForm = {
   id?: string;
@@ -47,6 +47,9 @@ export default function Produtos() {
   const [saving, setSaving] = useState(false);
   const [productDialog, setProductDialog] = useState(false);
   const [movementDialog, setMovementDialog] = useState(false);
+  const [report, setReport] = useState<{ movements: StockReportMovement[]; summary: Array<{ produtoId: string; produtoNome: string; unidade: string; entradas: number; saidas: number; ajustes: number; perdas: number; devolucoes: number; movimentos: number }> } | null>(null);
+  const [reportFilters, setReportFilters] = useState({ dateFrom: "", dateTo: "", osId: "" });
+  const [reportLoading, setReportLoading] = useState(false);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [selected, setSelected] = useState<ProdutoEstoqueApp | null>(null);
   const [movement, setMovement] = useState({ tipo: "entrada" as ProdutoEstoqueApp["movimentos"][number]["tipo"], quantidade: "", osId: "", observacao: "" });
@@ -64,6 +67,18 @@ export default function Produtos() {
   }
 
   useEffect(() => { reload(); }, []);
+
+  async function loadReport() {
+    setReportLoading(true);
+    try {
+      const result = await getStockReport(reportFilters);
+      setReport({ movements: result.movements, summary: result.summary });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível carregar o relatório de estoque.");
+    } finally {
+      setReportLoading(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("pt-BR");
@@ -188,6 +203,22 @@ export default function Produtos() {
               })}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="space-y-1"><h3 className="font-semibold">Histórico e consumo</h3><p className="text-xs text-muted-foreground">Consulte entradas, saídas e consumo vinculado a uma OS por período.</p></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2 md:grid-cols-4">
+            <div className="space-y-1"><Label className="text-xs">Data inicial</Label><Input type="date" value={reportFilters.dateFrom} onChange={(event) => setReportFilters({ ...reportFilters, dateFrom: event.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">Data final</Label><Input type="date" value={reportFilters.dateTo} onChange={(event) => setReportFilters({ ...reportFilters, dateTo: event.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">OS</Label><Input placeholder="Ex.: OS-2684" value={reportFilters.osId} onChange={(event) => setReportFilters({ ...reportFilters, osId: event.target.value })} /></div>
+            <div className="flex items-end"><Button variant="outline" className="w-full" onClick={loadReport} disabled={reportLoading}>{reportLoading ? "Consultando..." : "Consultar consumo"}</Button></div>
+          </div>
+          {report ? <>
+            <div className="grid gap-2 sm:grid-cols-3">{report.summary.slice(0, 6).map((item) => <div key={item.produtoId} className="rounded-lg border p-3"><p className="text-xs font-semibold">{item.produtoNome}</p><p className="mt-1 text-sm">Saídas: <strong>{item.saidas} {item.unidade}</strong></p><p className="text-[11px] text-muted-foreground">{item.movimentos} movimento(s) no filtro</p></div>)}</div>
+            {report.movements.length ? <div className="overflow-x-auto rounded-lg border"><table className="w-full text-left text-xs"><thead className="bg-muted/50"><tr><th className="p-2">Data</th><th className="p-2">Produto</th><th className="p-2">Movimento</th><th className="p-2">Qtd.</th><th className="p-2">OS</th><th className="p-2">Saldo</th></tr></thead><tbody>{report.movements.slice(0, 100).map((item) => <tr key={item.id} className="border-t"><td className="p-2">{item.criadoEm ? new Date(item.criadoEm).toLocaleDateString("pt-BR") : "-"}</td><td className="p-2">{item.produtoNome}</td><td className="p-2">{movementLabels[item.tipo]}</td><td className="p-2">{item.quantidade} {item.unidade}</td><td className="p-2">{item.osNumero || item.osId || "-"}</td><td className="p-2">{item.saldoPosterior} {item.unidade}</td></tr>)}</tbody></table></div> : <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhuma movimentação encontrada.</p>}
+          </> : <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Informe os filtros e consulte o histórico.</p>}
         </CardContent>
       </Card>
 
