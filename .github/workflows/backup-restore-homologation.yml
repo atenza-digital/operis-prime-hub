@@ -92,7 +92,7 @@ jobs:
               --network "$DOCKER_NETWORK" \
               --env-file "$ENV_FILE" \
               -v "$BACKUP_DIR:/backup" \
-              postgres:16-alpine "$@"
+              postgres:17-alpine "$@"
           }
 
           timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
