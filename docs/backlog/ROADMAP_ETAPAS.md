@@ -272,7 +272,7 @@ Entregue inicialmente em homologacao:
 - P1.6 recebeu ciclo formal de certificado: revogacao com motivo, reemissao a partir da OS de origem, vinculo entre certificado substituido e substituto, auditoria e filtro/status no modulo de certificados. A validacao publica continua informando quando o documento foi revogado. Evidencia em `docs/evidencias/etapa9_homologacao/REVOGACAO_REEMISSAO_CERTIFICADOS_2026-08-12.md`; aguarda homologacao externa.
 - P1.5 recebeu ajuda contextual no catalogo e upload opcional de POP pronto por servico. O arquivo e validado por tipo, assinatura, tamanho e politica do tenant, salvo com hash/storage planejado e auditado; quando necessario, o sistema cria o POP minimo para manter o fluxo simples. Evidencia em `docs/evidencias/etapa9_homologacao/UPLOAD_POP_CATALOGO_2026-08-12.md`; aguarda homologacao externa.
 
-Backlog da Etapa 8: 35 itens ativos nesta frente; os demais itens permanecem mapeados abaixo para execucao gradual.
+Backlog da Etapa 8: 34 itens ativos nesta frente; os demais itens permanecem mapeados abaixo para execucao gradual.
 
 - Separar formalmente ambientes de homologacao e producao, incluindo identidade visual evidente para evitar uso errado. Decisao SaaS: tela de login padrao deve usar Atenza FieldOps e visual institucional Atenza, sem logo de cliente; tela de login com tenant na URL pode exibir discretamente "Ambiente [cliente]" e logo do cliente em menor destaque; apos login, sidebar e documentos usam logo/configuracao do tenant. Futuro SaaS deve usar `tenants`/`empresa_config` para `logo_url`, `nome_exibicao`, dominio/subdominio e assets documentais. A `cor_primaria` parametrizavel fica restrita aos documentos quando necessario, sem obrigacao de impactar a interface nesta fase. Decisao tipografica: a fonte padrao da interface sera Sora; para escrever o nome da ferramenta como marca/logo, usar as fontes institucionais da Atenza localizadas em `C:\Projetos\Atenza\site_atenza\public\@font-faces`.
 - Implementar PDF server-side binario final de OS, certificado, medicao, proposta e contrato com renderizacao fiel aos templates aprovados.
@@ -372,7 +372,7 @@ Pendencias remanescentes, por prioridade:
 Contagem desta atualizacao: 3 validacoes remanescentes diretamente relacionadas ao retorno Aline; as 5 frentes tecnicas desta rodada foram implementadas e testadas localmente.
 
 - Total de itens mapeados apos atualizacao de UI/UX, fluxo, complemento de medicao e assistencia comercial: 49.
-- Total de itens remanescentes: 38.
+- Total de itens remanescentes: 37.
 - Etapa 7: 5 itens.
-- Etapa 8: 35 itens.
+- Etapa 8: 34 itens.
 - Itens fora de etapa: 0.
