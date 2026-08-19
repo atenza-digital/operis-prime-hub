@@ -2458,7 +2458,6 @@ async function upsertSchedule(body, tenantId) {
       body.veiculoId || null,
       body.veiculoDescricao || null,
       desiredStatus,
-      body.createdAt || null,
     ],
   );
   assertTenantWrite(rowCount, "Agendamento");
