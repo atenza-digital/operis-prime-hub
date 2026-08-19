@@ -3811,8 +3811,8 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
           service.descricao_comercial,
           service.unidade_comercial,
           service.endereco_atividade,
-          service.enderecos_atividade || "[]",
-          service.locais_ids || "[]",
+          JSON.stringify(Array.isArray(service.enderecos_atividade) ? service.enderecos_atividade : normalizeJsonArray(service.enderecos_atividade)),
+          JSON.stringify(Array.isArray(service.locais_ids) ? service.locais_ids : normalizeJsonArray(service.locais_ids)),
         ],
       );
     }
@@ -3894,8 +3894,8 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
           service.descricao_comercial,
           service.unidade_comercial,
           service.endereco_atividade,
-          service.enderecos_atividade || "[]",
-          service.locais_ids || "[]",
+          JSON.stringify(Array.isArray(service.enderecos_atividade) ? service.enderecos_atividade : normalizeJsonArray(service.enderecos_atividade)),
+          JSON.stringify(Array.isArray(service.locais_ids) ? service.locais_ids : normalizeJsonArray(service.locais_ids)),
         ],
       );
     }
