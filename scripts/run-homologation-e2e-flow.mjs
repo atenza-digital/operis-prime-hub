@@ -127,7 +127,7 @@ async function main() {
 
   const login = await requestJson("/api/auth/login", {
     method: "POST",
-    body: { email: e2eEmail, password },
+    body: { email: e2eEmail, password, tenantSlug },
   });
   const token = login.token;
 
