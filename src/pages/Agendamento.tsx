@@ -464,18 +464,26 @@ export default function Agendamento() {
 
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-              {locaisCliente.length > 0 ? (
-                <Select value={localId} onValueChange={(value) => { const local = locaisCliente.find((item) => item.id === value); setLocalId(value); setLocalExecucao(local ? [local.nome, local.endereco].filter(Boolean).join(" - ") : ""); }} disabled={!clienteId || !servicoSelecionado}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
-                  <SelectContent>{locaisCliente.map((item) => <SelectItem key={item.id || item.nome} value={item.id || item.nome}>{item.nome}{item.endereco ? ` - ${item.endereco}` : ""}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : locaisContrato.length > 0 ? (
-                <Select value={localExecucao} onValueChange={(value) => { setLocalId(""); setLocalExecucao(value); }} disabled={!clienteId || !servicoSelecionado}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
-                  <SelectContent>{locaisContrato.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : (
-                <Input placeholder="Ex: República Administrativa 01, Bloco A" value={localExecucao} onChange={(event) => setLocalExecucao(event.target.value)} disabled={!clienteId || !servicoSelecionado} />
+              <Input
+                list="agendamento-locais-sugeridos"
+                placeholder="Ex: Canteiro C2, Bloco A ou área definida"
+                value={localExecucao}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const matched = locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === value);
+                  setLocalId(matched?.id || "");
+                  setLocalExecucao(value);
+                }}
+                disabled={!clienteId || !servicoSelecionado}
+              />
+              <datalist id="agendamento-locais-sugeridos">
+                {[...new Set([
+                  ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
+                  ...locaisContrato,
+                ].filter(Boolean))].map((local) => <option key={local} value={local} />)}
+              </datalist>
+              {(locaisCliente.length > 0 || locaisContrato.length > 0) && (
+                <p className="text-xs text-muted-foreground">Locais cadastrados são sugestões. Se o atendimento ocorrer em outro ponto, informe o local diretamente.</p>
               )}
             </div>
 
