@@ -1,0 +1,185 @@
+name: Backup e Restore Homologacao
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Operacao a executar"
+        required: true
+        type: choice
+        options:
+          - backup
+          - verify
+          - restore
+        default: backup
+      backup_file:
+        description: "Arquivo .dump no VPS; vazio usa o backup mais recente"
+        required: false
+        default: ""
+      confirm_restore:
+        description: "Obrigatorio para restore: RESTORE_HOMOLOGATION"
+        required: false
+        default: ""
+      public_url:
+        description: "URL publica usada apenas para identificar o ambiente"
+        required: false
+        default: "https://fieldops-homologacao.atenza.digital"
+
+env:
+  APP_CONTAINER: atenza-fieldops
+  DOCKER_NETWORK: postgresql-evkn_default
+  BACKUP_DIR: /var/lib/atenza-fieldops/backups
+
+jobs:
+  backup-restore:
+    runs-on: ubuntu-latest
+    environment: homologation
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.HOMOLOG_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/homolog_vps_key
+          chmod 600 ~/.ssh/homolog_vps_key
+          ssh-keyscan -T 20 -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" "${{ secrets.HOMOLOG_VPS_HOST }}" >> ~/.ssh/known_hosts \
+            || true
+
+      - name: Execute backup, verification or isolated restore
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          REQUESTED_BACKUP: ${{ inputs.backup_file }}
+          RESTORE_CONFIRMATION: ${{ inputs.confirm_restore }}
+          PUBLIC_URL: ${{ inputs.public_url }}
+        run: |
+          set -euo pipefail
+          case "$REQUESTED_BACKUP" in
+            ""|*[!A-Za-z0-9._-]*)
+              echo "backup_file deve conter somente letras, numeros, ponto, sublinhado e hifen." >&2
+              exit 1
+              ;;
+          esac
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "MODE='$MODE' REQUESTED_BACKUP='$REQUESTED_BACKUP' RESTORE_CONFIRMATION='$RESTORE_CONFIRMATION' PUBLIC_URL='$PUBLIC_URL' APP_CONTAINER='$APP_CONTAINER' DOCKER_NETWORK='$DOCKER_NETWORK' BACKUP_DIR='$BACKUP_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          if ! docker inspect "$APP_CONTAINER" >/dev/null 2>&1; then
+            echo "Container da homologacao nao encontrado: $APP_CONTAINER" >&2
+            exit 1
+          fi
+
+          mkdir -p "$BACKUP_DIR"
+          chmod 700 "$BACKUP_DIR"
+          ENV_FILE="$(mktemp)"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$APP_CONTAINER" > "$ENV_FILE"
+
+          if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+            echo "DATABASE_URL nao encontrado no container da homologacao." >&2
+            exit 1
+          fi
+          DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "$ENV_FILE" | head -n 1)"
+          export DATABASE_URL
+
+          run_pg() {
+            docker run --rm \
+              --network "$DOCKER_NETWORK" \
+              --env-file "$ENV_FILE" \
+              -v "$BACKUP_DIR:/backup" \
+              postgres:16-alpine "$@"
+          }
+
+          timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup_path=""
+
+          select_backup() {
+            if [ -n "$REQUESTED_BACKUP" ]; then
+              backup_path="$BACKUP_DIR/$REQUESTED_BACKUP"
+            else
+              backup_path="$(find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.dump' -printf '%T@ %p\n' | sort -nr | awk 'NR==1 {print $2}')"
+            fi
+            if [ -z "$backup_path" ] || [ ! -f "$backup_path" ]; then
+              echo "Backup nao encontrado: ${backup_path:-nenhum}" >&2
+              exit 1
+            fi
+          }
+
+          case "$MODE" in
+            backup)
+              file="fieldops-homologation-${timestamp}.dump"
+              metadata="${file%.dump}.json"
+              run_pg pg_dump --format=custom --no-owner --no-privileges --file="/backup/$file" "$DATABASE_URL"
+              sha256sum "$BACKUP_DIR/$file" | tee "$BACKUP_DIR/$file.sha256"
+              cat > "$BACKUP_DIR/$metadata" <<JSON
+          {
+            "environment": "homologation",
+            "publicUrl": "$PUBLIC_URL",
+            "createdAt": "$timestamp",
+            "file": "$file",
+            "format": "postgres-custom",
+            "databaseUrl": "redacted",
+            "restorePolicy": "isolated-temporary-database"
+          }
+          JSON
+              chmod 600 "$BACKUP_DIR/$file" "$BACKUP_DIR/$file.sha256" "$BACKUP_DIR/$metadata"
+              echo "BACKUP_FILE=$file"
+              echo "BACKUP_SHA256=$(cut -d ' ' -f1 "$BACKUP_DIR/$file.sha256")"
+              run_pg pg_restore --list "/backup/$file" | head -n 12
+              ;;
+
+            verify)
+              select_backup
+              sha256sum -c "$backup_path.sha256"
+              run_pg pg_restore --list "/backup/$(basename "$backup_path")" >/tmp/restore-list.txt
+              entries="$(wc -l </tmp/restore-list.txt | tr -d ' ')"
+              test "$entries" -gt 0
+              echo "BACKUP_FILE=$(basename "$backup_path")"
+              echo "RESTORE_LIST_ENTRIES=$entries"
+              ;;
+
+            restore)
+              if [ "$RESTORE_CONFIRMATION" != "RESTORE_HOMOLOGATION" ]; then
+                echo "Restore bloqueado. Informe confirm_restore=RESTORE_HOMOLOGATION." >&2
+                exit 1
+              fi
+              select_backup
+              sha256sum -c "$backup_path.sha256"
+
+              base_url="${DATABASE_URL%%\?*}"
+              if [[ "$base_url" != postgres://* && "$base_url" != postgresql://* ]]; then
+                echo "DATABASE_URL nao esta em formato PostgreSQL URI." >&2
+                exit 1
+              fi
+              prefix="${base_url%/*}"
+              restore_db="atenza_restore_${timestamp//[^a-zA-Z0-9]/}"
+              restore_url="$prefix/$restore_db"
+
+              run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db\""
+              cleanup_restore() {
+                run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$restore_db\"" >/dev/null || true
+              }
+              trap cleanup_restore EXIT
+
+              run_pg pg_restore --exit-on-error --no-owner --no-privileges --dbname="$restore_url" "/backup/$(basename "$backup_path")"
+              tables="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
+              tenants="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM public.tenants" 2>/dev/null || echo 0)"
+              test "$tables" -gt 0
+              echo "BACKUP_FILE=$(basename "$backup_path")"
+              echo "ISOLATED_DATABASE=$restore_db"
+              echo "RESTORED_PUBLIC_TABLES=$tables"
+              echo "RESTORED_TENANTS=$tenants"
+              echo "RESTORE_RESULT=passed"
+              ;;
+
+            *)
+              echo "Modo invalido: $MODE" >&2
+              exit 1
+              ;;
+          esac
+          REMOTE
