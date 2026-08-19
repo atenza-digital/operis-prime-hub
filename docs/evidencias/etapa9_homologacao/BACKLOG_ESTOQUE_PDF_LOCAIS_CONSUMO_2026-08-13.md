@@ -45,3 +45,21 @@ Ambiente alvo: homologacao via GitHub Actions
 ## Observacao
 
 O deploy deve continuar sendo feito exclusivamente pelo workflow de CI/CD. Nenhuma alteracao foi aplicada diretamente na VPS nesta rodada.
+
+## Etapa seguinte - OS e atendimentos avulsos - 19/08/2026
+
+- A OS impressa deixou de repetir `COLABORADOR` e `Data de Admissao` no cabecalho. Tecnico lider, data de execucao, checklist, fotos e demais evidencias continuam no encerramento e no snapshot.
+- A agenda agora permite escolher `Servico avulso (sem contrato)` para clientes ativos sem contrato ou sem saldo, sempre usando um servico ativo do catalogo.
+- O backend valida cliente e servico por tenant, preserva contratos vigentes com saldo e impede que o atendimento avulso consuma saldo contratual.
+- Agendamento avulso pode gerar OS, encerrar OS e criar recorrencia sem contrato quando o servico tiver recorrencia configurada.
+- A coluna `servico_catalogo_id` foi adicionada a agendamentos e recorrencias pela migracao `028_avulso_agendamento_servico_catalogo.sql`.
+- Commit: `17a85b3`.
+- Pipeline CI/CD: `32293207157` - sucesso; deploy feito sem SSH manual.
+
+### Validacao manual pendente
+
+1. Abrir `https://fieldops-homologacao.atenza.digital/agendar` com um cliente sem contrato.
+2. Selecionar `Servico avulso (sem contrato)`, escolher servico, data e local, e criar o agendamento.
+3. Gerar a OS e imprimir a via; confirmar que o cabecalho nao mostra nome do colaborador nem data de admissao.
+4. Encerrar a OS informando tecnico, data, quantidade e evidencias; confirmar que os dados permanecem no encerramento e no documento final.
+5. Repetir com um cliente que tenha contrato vigente e saldo, confirmando que o fluxo contratual continua exigindo contrato e saldo.
