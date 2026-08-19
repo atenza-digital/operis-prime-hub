@@ -295,7 +295,7 @@ Backlog da Etapa 8: 35 itens ativos nesta frente; os demais itens permanecem map
 - Evoluir auditoria com filtros server-side, retencao, alertas e politicas por tenant.
 - Hardening de seguranca: CORS, rate limit, politica de sessao, cookies, headers e backup de credenciais.
 - Observabilidade: logs estruturados, monitoramento de uptime, alertas e painel simples de saude.
-- Backup/restauracao testada, rotina de release e rollback.
+- Rotina de backup/restauracao isolada criada em `.github/workflows/backup-restore-homologation.yml`, com backup customizado PostgreSQL, SHA-256, verificacao de integridade e restore em banco temporario sem tocar a base principal. A execucao real aguarda a aprovacao obrigatoria do PR #13; somente apos o workflow passar o item podera ser marcado como concluido.
 - Evoluir CD para producao via GitHub Actions, com ambiente separado, secrets proprios, aprovacao de release, imagem versionada, health check, rollback controlado e registro de release.
 - Painel Atenza dono do SaaS para tenants, planos, pagamentos, bloqueios e controle de inadimplencia.
 - Evoluir Comercial > Contratos com filtros e ordenacoes por status, integracao operacional, valor crescente e valor decrescente.
