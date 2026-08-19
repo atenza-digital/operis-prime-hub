@@ -2418,7 +2418,7 @@ async function upsertSchedule(body, tenantId) {
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
     (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,COALESCE($21, NOW()))
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contrato_id=EXCLUDED.contrato_id,
       servico_catalogo_id=EXCLUDED.servico_catalogo_id,
