@@ -29,4 +29,11 @@ export default tseslint.config(
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    files: ["src/components/documentos/DocumentVisualSystem.tsx"],
+    rules: {
+      // This file intentionally exports shared document primitives alongside components.
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

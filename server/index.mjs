@@ -12,11 +12,13 @@ import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-con
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
+import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+const corsOrigins = parseCorsOrigins();
 const MEASUREMENT_FINANCIAL_STATUSES = new Set([
   "em_conferencia",
   "emitida",
@@ -48,7 +50,22 @@ function buildProposalPdfCoverage(deterministic, aiCoverage = {}) {
   };
 }
 
-app.use(cors());
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  for (const [name, value] of Object.entries(securityHeaders({ secure: req.secure || forwardedProto === "https" }))) {
+    res.setHeader(name, value);
+  }
+  next();
+});
+app.use(cors({
+  origin(origin, callback) {
+    if (isCorsOriginAllowed(origin, corsOrigins)) return callback(null, true);
+    return callback(new Error("Origem CORS nao permitida."));
+  },
+  methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type", "X-Tenant-Slug"],
+}));
 app.use(express.json({ limit: "15mb" }));
 
 function getRequestIp(req) {
