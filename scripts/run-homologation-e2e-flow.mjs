@@ -7,8 +7,10 @@ import { pool, withTransaction } from "../server/db.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDir = path.join(rootDir, "docs", "evidencias", "etapa7_homologacao");
-const baseUrl = (process.env.HOMOLOGATION_BASE_URL || "http://89.116.214.65:3010").replace(/\/$/, "");
-const tenantSlug = process.argv.find((arg) => arg.startsWith("--tenant="))?.split("=")[1] || "ciperprag";
+const baseUrl = (process.env.HOMOLOGATION_BASE_URL || "https://fieldops-homologacao.atenza.digital").replace(/\/$/, "");
+const tenantSlug = process.argv.find((arg) => arg.startsWith("--tenant="))?.split("=")[1]
+  || process.env.HOMOLOGATION_E2E_TENANT
+  || "empresa-demonstracao";
 const e2eEmail = normalizeEmail(process.env.HOMOLOGATION_E2E_EMAIL || "homolog.e2e@atenza.digital");
 const onePixelJpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Aqf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EFBQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EFBQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EFBABAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z";
 
@@ -39,6 +41,10 @@ function markdownTable(headers, rows) {
   const divider = `| ${headers.map(() => "---").join(" | ")} |`;
   const body = rows.map((row) => `| ${row.map((cell) => String(cell ?? "").replaceAll("|", "\\|")).join(" | ")} |`);
   return [header, divider, ...body].join("\n");
+}
+
+function assertE2e(condition, message) {
+  if (!condition) throw new Error(`Falha de consistencia E2E: ${message}`);
 }
 
 async function prepareE2eUser(password) {
@@ -240,6 +246,17 @@ async function main() {
   const closedOrder = afterClose.orders?.find((order) => order.id === orderResult.id);
   const certificateHash = closeResult.certificateHash || closedOrder?.certificadoHash;
   const certificate = certificateHash ? await requestJson(`/api/certificates/${encodeURIComponent(certificateHash)}`, { token }) : null;
+  if (certificate?.ok) {
+    const record = certificate.certificate;
+    const expectedClient = operationalContract.cliente || client.razaoSocial || client.nomeFantasia;
+    assertE2e(record.osId === orderResult.id, "o certificado aponta para a mesma OS encerrada");
+    assertE2e(record.clienteId === client.id, "o certificado aponta para o cliente do tenant");
+    assertE2e(record.clienteNome === expectedClient, "cliente do certificado diverge do contrato/OS");
+    assertE2e(record.servico === operationalContract.servico, "serviço do certificado diverge do catálogo/OS");
+    assertE2e(record.snapshotDados?.os?.servicoCatalogoId === service.id, "snapshot do certificado não preserva o serviço do catálogo");
+    const publicCertificate = await requestJson(`/api/certificates/${encodeURIComponent(certificateHash)}`);
+    assertE2e(publicCertificate.ok && publicCertificate.certificate?.hash === certificateHash, "validação pública não retornou o certificado correspondente");
+  }
 
   const measurement = await requestJson("/api/measurements/generate", {
     token,
