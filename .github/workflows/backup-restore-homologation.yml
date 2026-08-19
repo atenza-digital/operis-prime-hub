@@ -57,7 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           case "$REQUESTED_BACKUP" in
-            ""|*[!A-Za-z0-9._-]*)
+            "") ;;
+            *[!A-Za-z0-9._-]*)
               echo "backup_file deve conter somente letras, numeros, ponto, sublinhado e hifen." >&2
               exit 1
               ;;
@@ -80,12 +81,11 @@ jobs:
           trap 'rm -f "$ENV_FILE"' EXIT
           docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$APP_CONTAINER" > "$ENV_FILE"
 
-          if ! grep -q '^DATABASE_URL=' "$ENV_FILE"; then
-            echo "DATABASE_URL nao encontrado no container da homologacao." >&2
-            exit 1
-          fi
           DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "$ENV_FILE" | head -n 1)"
           export DATABASE_URL
+          PGDATABASE="$(sed -n 's/^PGDATABASE=//p' "$ENV_FILE" | head -n 1)"
+          PGDATABASE="${PGDATABASE:-atenza}"
+          export PGDATABASE
 
           run_pg() {
             docker run --rm \
@@ -114,7 +114,11 @@ jobs:
             backup)
               file="fieldops-homologation-${timestamp}.dump"
               metadata="${file%.dump}.json"
-              run_pg pg_dump --format=custom --no-owner --no-privileges --file="/backup/$file" "$DATABASE_URL"
+              if [ -n "$DATABASE_URL" ]; then
+                run_pg pg_dump --format=custom --no-owner --no-privileges --file="/backup/$file" "$DATABASE_URL"
+              else
+                run_pg pg_dump --format=custom --no-owner --no-privileges --file="/backup/$file" "$PGDATABASE"
+              fi
               sha256sum "$BACKUP_DIR/$file" | tee "$BACKUP_DIR/$file.sha256"
               cat > "$BACKUP_DIR/$metadata" <<JSON
           {
@@ -151,24 +155,32 @@ jobs:
               select_backup
               sha256sum -c "$backup_path.sha256"
 
-              base_url="${DATABASE_URL%%\?*}"
-              if [[ "$base_url" != postgres://* && "$base_url" != postgresql://* ]]; then
-                echo "DATABASE_URL nao esta em formato PostgreSQL URI." >&2
-                exit 1
-              fi
-              prefix="${base_url%/*}"
               restore_db="atenza_restore_${timestamp//[^a-zA-Z0-9]/}"
-              restore_url="$prefix/$restore_db"
-
-              run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db\""
+              restore_target="$restore_db"
+              if [ -n "$DATABASE_URL" ]; then
+                base_url="${DATABASE_URL%%\?*}"
+                if [[ "$base_url" != postgres://* && "$base_url" != postgresql://* ]]; then
+                  echo "DATABASE_URL nao esta em formato PostgreSQL URI." >&2
+                  exit 1
+                fi
+                prefix="${base_url%/*}"
+                restore_target="$prefix/$restore_db"
+                run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db\""
+              else
+                run_pg psql -d "$PGDATABASE" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$restore_db\""
+              fi
               cleanup_restore() {
-                run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$restore_db\"" >/dev/null || true
+                if [ -n "$DATABASE_URL" ]; then
+                  run_pg psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$restore_db\"" >/dev/null || true
+                else
+                  run_pg psql -d "$PGDATABASE" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$restore_db\"" >/dev/null || true
+                fi
               }
               trap cleanup_restore EXIT
 
-              run_pg pg_restore --exit-on-error --no-owner --no-privileges --dbname="$restore_url" "/backup/$(basename "$backup_path")"
-              tables="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='ciperprag_hub'")"
-              tenants="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM ciperprag_hub.tenants" 2>/dev/null || echo 0)"
+              run_pg pg_restore --exit-on-error --no-owner --no-privileges --dbname="$restore_target" "/backup/$(basename "$backup_path")"
+              tables="$(run_pg psql "$restore_target" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='ciperprag_hub'")"
+              tenants="$(run_pg psql "$restore_target" -At -c "SELECT count(*) FROM ciperprag_hub.tenants" 2>/dev/null || echo 0)"
               test "$tables" -gt 0
               echo "BACKUP_FILE=$(basename "$backup_path")"
               echo "ISOLATED_DATABASE=$restore_db"
