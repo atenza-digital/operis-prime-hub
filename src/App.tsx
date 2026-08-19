@@ -73,7 +73,7 @@ const App = () => (
 
               <Route element={<ProtectedRoute permission="clientes.manage"><AppLayout><Clientes /></AppLayout></ProtectedRoute>} path="/comercial/clientes" />
               <Route element={<ProtectedRoute permission="servicos.manage"><AppLayout><Servicos /></AppLayout></ProtectedRoute>} path="/comercial/servicos" />
-              <Route element={<ProtectedRoute permission="servicos.manage"><AppLayout><Produtos /></AppLayout></ProtectedRoute>} path="/comercial/produtos" />
+              <Route element={<ProtectedRoute permission="estoque.manage"><AppLayout><Produtos /></AppLayout></ProtectedRoute>} path="/comercial/produtos" />
               <Route element={<ProtectedRoute permission="contratos.manage"><AppLayout><Contratos /></AppLayout></ProtectedRoute>} path="/comercial/contratos" />
               <Route element={<ProtectedRoute permission="configuracoes.manage"><AppLayout><Configuracoes /></AppLayout></ProtectedRoute>} path="/comercial/configuracoes" />
 

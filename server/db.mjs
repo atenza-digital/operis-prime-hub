@@ -46,6 +46,21 @@ export async function ensureDatabaseShape() {
   await query("SET search_path TO ciperprag_hub");
 
   await query(`
+    INSERT INTO ciperprag_hub.permissoes (codigo, modulo, acao, descricao)
+    VALUES ('estoque.manage', 'estoque', 'manage', 'Gerenciar produtos, saldo e movimentos de estoque')
+    ON CONFLICT (codigo) DO UPDATE
+    SET descricao = EXCLUDED.descricao
+  `);
+  await query(`
+    INSERT INTO ciperprag_hub.perfil_permissoes (perfil_id, permissao_id)
+    SELECT p.id, perm.id
+    FROM ciperprag_hub.perfis p
+    JOIN ciperprag_hub.permissoes perm ON perm.codigo = 'estoque.manage'
+    WHERE p.codigo IN ('admin_empresa', 'comercial', 'administrativo')
+    ON CONFLICT DO NOTHING
+  `);
+
+  await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.empresa_config
     ADD COLUMN IF NOT EXISTS certificado_validade_padrao_dias INTEGER NOT NULL DEFAULT 30,
     ADD COLUMN IF NOT EXISTS certificado_texto_legal TEXT,
@@ -339,10 +354,13 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS checklist_respostas JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS nao_executada BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT,
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS snapshot_emitido_em TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS snapshot_encerrado_em TIMESTAMPTZ
   `);
+  await query("CREATE INDEX IF NOT EXISTS idx_ordens_servico_servico_catalogo ON ciperprag_hub.ordens_servico(tenant_id, servico_catalogo_id)");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.certificados ALTER COLUMN contrato_id DROP NOT NULL");
 
   await query(`
     UPDATE ciperprag_hub.ordens_servico

@@ -109,6 +109,7 @@ VALUES
   ('dashboard.view', 'dashboard', 'view', 'Visualizar dashboard'),
   ('clientes.manage', 'clientes', 'manage', 'Criar e editar clientes'),
   ('servicos.manage', 'servicos', 'manage', 'Criar e editar serviços'),
+  ('estoque.manage', 'estoque', 'manage', 'Gerenciar produtos, saldo e movimentos de estoque'),
   ('contratos.manage', 'contratos', 'manage', 'Criar e editar contratos e propostas'),
   ('agenda.manage', 'agenda', 'manage', 'Criar e gerenciar agendamentos'),
   ('os.manage', 'ordens_servico', 'manage', 'Gerenciar ordens de serviço'),
@@ -152,8 +153,8 @@ SELECT p.id, perm.id
 FROM inserted p
 JOIN permissoes perm ON
   p.codigo = 'admin_empresa'
-  OR (p.codigo = 'comercial' AND perm.codigo IN ('dashboard.view', 'clientes.manage', 'servicos.manage', 'contratos.manage', 'financeiro.view'))
-  OR (p.codigo = 'administrativo' AND perm.codigo IN ('dashboard.view', 'clientes.manage', 'contratos.manage', 'agenda.manage', 'os.manage', 'certificados.manage', 'medicoes.manage'))
+  OR (p.codigo = 'comercial' AND perm.codigo IN ('dashboard.view', 'clientes.manage', 'servicos.manage', 'estoque.manage', 'contratos.manage', 'financeiro.view'))
+  OR (p.codigo = 'administrativo' AND perm.codigo IN ('dashboard.view', 'clientes.manage', 'estoque.manage', 'contratos.manage', 'agenda.manage', 'os.manage', 'certificados.manage', 'medicoes.manage'))
   OR (p.codigo = 'operacao' AND perm.codigo IN ('dashboard.view', 'agenda.manage', 'os.manage', 'os.close', 'equipes.manage'))
   OR (p.codigo = 'tecnico' AND perm.codigo IN ('dashboard.view', 'os.manage', 'os.close'))
   OR (p.codigo = 'responsavel_tecnico' AND perm.codigo IN ('dashboard.view', 'servicos.manage', 'os.manage', 'certificados.manage'))

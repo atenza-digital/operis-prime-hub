@@ -53,7 +53,7 @@ const navGroups = [
     items: [
       { to: "/comercial/clientes", label: "Clientes", icon: Users, permission: "clientes.manage" },
       { to: "/comercial/servicos", label: "Serviços", icon: ClipboardList, permission: "servicos.manage" },
-      { to: "/comercial/produtos", label: "Produtos e estoque", icon: Package, permission: "servicos.manage" },
+      { to: "/comercial/produtos", label: "Produtos e estoque", icon: Package, permission: "estoque.manage" },
       { to: "/comercial/contratos", label: "Contratos e Propostas", icon: BriefcaseBusiness, permission: "contratos.manage" },
       { to: "/comercial/configuracoes", label: "Parâmetros do tenant", icon: Settings, permission: "configuracoes.manage" },
     ],

@@ -55,13 +55,15 @@ Itens implementados nesta rodada e rastreados na Etapa 8:
 - Locais cadastrados do cliente selecionaveis no agendamento e propagados para OS e recorrencia.
 - Assistente de PDF com extracao deterministica local de tabelas/texto, cobertura de paginas/itens e preservacao do PDF original com hash SHA-256.
 - PDFs historicos renderizados server-side e persistidos como `application/pdf` imutavel, com o renderizador coberto por teste de assinatura `%PDF-`.
+- Permissao dedicada `estoque.manage` aplicada ao Comercial/Administrativo, com menu, rota e API de Produtos/estoque protegidos por essa regra.
+- Origem do certificado endurecida: cliente e servico do catalogo do mesmo tenant, OS avulsa sem contrato aceita quando o servico existe e identificador do catalogo persistido na OS.
 
 Itens ainda pendentes para aceite:
 
 - Executar o smoke de estoque no container publicado pela pipeline de homologacao, apos merge/review do PR.
 - Validar visualmente os PDFs server-side dos cinco modelos contra as referencias aprovadas.
 - Executar revalidacao externa com Tarcisio/Aline cobrindo estoque, importacao de PDF, locais, consumo e documentos.
-- Corrigir e revalidar o acesso de Produtos e estoque no perfil da Aline: item ausente no menu Comercial e tela em branco na rota direta. Perfis autorizados devem visualizar o menu; perfis sem permissao devem receber mensagem clara de acesso restrito.
+- Revalidar no perfil da Aline o acesso de Produtos e estoque e emitir um certificado avulso para confirmar o smoke ponta a ponta em homologacao.
 
 Esses itens nao substituem nem removem backlog anterior; apenas atualizam o status das frentes relacionadas ao retorno da Ciperprag.
 

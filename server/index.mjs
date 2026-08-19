@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
+import { assertCertificateSource, resolveCertificateSource } from "./certificate-rules.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 import { buildProposalCatalogContext, extractProposalPdfDeterministically, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
@@ -818,8 +819,7 @@ async function getServiceForTenantSnapshot(client, serviceName, tenantId, servic
     WHERE s.tenant_id = $2
       AND (
         ($3::text IS NOT NULL AND s.id = $3)
-        OR s.nome = $1
-        OR s.nome ILIKE $4
+        OR ($3::text IS NULL AND (s.nome = $1 OR s.nome ILIKE $4))
       )
     ORDER BY
       CASE
@@ -834,7 +834,7 @@ async function getServiceForTenantSnapshot(client, serviceName, tenantId, servic
 }
 
 function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias, publicBaseUrl = null, userId = null }) {
-  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
+  const source = resolveCertificateSource({ order, customer, service });
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
   const tag = order.tag_equipamento_servico || order.tags || null;
   const codigoPublico = buildShortPublicCertificateCode(hash);
@@ -853,16 +853,17 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       validadeAte,
     },
     cliente: {
-      id: order.cliente_id,
-      nome: order.cliente,
-      cnpj: order.cnpj,
-      endereco: clienteEndereco,
-      logoUrl: customer?.logo_url || order.cliente_logo_url || null,
+      id: source.clientId,
+      nome: source.clientName,
+      cnpj: source.clientCnpj,
+      endereco: source.clientAddress,
+      logoUrl: source.clientLogoUrl,
     },
     os: {
       id: order.id,
       numero: order.numero,
-      contratoId: order.contrato_id,
+      contratoId: source.contractId,
+      servicoCatalogoId: source.serviceId,
       dataExecucao,
       quantidade: Number(order.quantidade || 0),
       unidade: order.unidade,
@@ -872,8 +873,9 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       fotos: order.fotos || [],
     },
     servico: {
-      nome: order.servico,
-      tipo: order.tipo,
+      id: source.serviceId,
+      nome: source.serviceName,
+      tipo: source.serviceType,
       geraCertificado: service?.gera_certificado ?? true,
       produtosQuimicos: service?.produtos_quimicos || [],
       produtosDetalhados: normalizeJsonArray(service?.produtos_detalhados),
@@ -1469,14 +1471,15 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
-  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, contract?.servico_catalogo_id || null);
+  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
   const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, scopedTenantId]);
   const customer = customerRows[0];
+  const source = resolveCertificateSource({ order, customer, service });
+  assertCertificateSource(source);
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
   const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
-  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const hashes = [];
 
   for (const [index, tag] of normalizeCertificateTags(order).entries()) {
@@ -1490,7 +1493,18 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
     const certId = makeId("CERT");
     const hash = index === 0 && order.certificado_hash ? order.certificado_hash : await generateUniqueCertificateHash(client);
     const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
-    const certificateOrder = { ...order, tag_equipamento_servico: tag, tags: tag || order.tags };
+    const certificateOrder = {
+      ...order,
+      cliente: source.clientName,
+      cnpj: source.clientCnpj,
+      cliente_endereco: source.clientAddress,
+      cliente_logo_url: source.clientLogoUrl,
+      servico_catalogo_id: source.serviceId,
+      servico: source.serviceName,
+      tipo: source.serviceType,
+      tag_equipamento_servico: tag,
+      tags: tag || order.tags,
+    };
     const snapshot = buildCertificateSnapshot({
       order: certificateOrder,
       customer,
@@ -1516,13 +1530,13 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
         certNumber,
         order.id,
         order.numero,
-        order.cliente_id,
-        order.cliente,
-        customer?.cnpj || order.cnpj,
-        clienteEndereco,
-        customer?.logo_url || order.cliente_logo_url || null,
-        order.contrato_id,
-        order.servico,
+        source.clientId,
+        source.clientName,
+        source.clientCnpj,
+        source.clientAddress,
+        source.clientLogoUrl,
+        source.contractId,
+        source.serviceName,
         order.tecnico,
         order.local_execucao,
         executionDate,
@@ -3068,7 +3082,7 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   res.json({ ok: true, id });
 });
 
-app.post("/api/stock/products", requirePermission("servicos.manage"), async (req, res) => {
+app.post("/api/stock/products", requirePermission("estoque.manage"), async (req, res) => {
   const body = req.body || {};
   const tenantId = req.auth.user.tenant.id;
   const id = body.id || makeId("PROD");
@@ -3120,7 +3134,7 @@ app.post("/api/stock/products", requirePermission("servicos.manage"), async (req
   res.json({ ok: true, id });
 });
 
-app.post("/api/stock/movements", requirePermission("servicos.manage", "os.close"), async (req, res) => {
+app.post("/api/stock/movements", requirePermission("estoque.manage", "os.close"), async (req, res) => {
   const body = req.body || {};
   const tenantId = req.auth.user.tenant.id;
   const type = String(body.tipo || "").trim().toLowerCase();
@@ -3177,7 +3191,7 @@ app.post("/api/stock/movements", requirePermission("servicos.manage", "os.close"
   res.json({ ok: true, movement });
 });
 
-app.get("/api/stock/report", requirePermission("servicos.manage", "medicoes.manage"), async (req, res) => {
+app.get("/api/stock/report", requirePermission("estoque.manage", "medicoes.manage"), async (req, res) => {
   const tenantId = req.auth.user.tenant.id;
   const dateFrom = String(req.query.dateFrom || "").trim() || null;
   const dateTo = String(req.query.dateTo || "").trim() || null;
@@ -4358,7 +4372,7 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const customer = clientRows[0];
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
     const tech = techRows[0];
-    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, contract?.servico_catalogo_id || null);
+    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, ag.servico_catalogo_id || contract?.servico_catalogo_id || null);
     const scheduleRule = validateScheduleOrigin({ contractId: ag.contrato_id, contract, service: service ? { ...service, ativo: true, id: service.id } : null });
     if (!scheduleRule.ok) {
       const error = new Error(scheduleRule.error);
@@ -4377,9 +4391,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const orderId = makeId("OSDB");
     await client.query(
       `INSERT INTO ciperprag_hub.ordens_servico
-      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,'aberta',$25)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, []],
+      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, servico_catalogo_id, status, fotos)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,$25,'aberta',$26)`,
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, service?.nome || ag.servico, service?.tipo || ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, service.id, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -4455,7 +4469,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, tenantId]);
     const contract = contractRows[0];
-    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, contract?.servico_catalogo_id || null);
+    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, tenantId]);
@@ -4606,7 +4620,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
             `INSERT INTO ciperprag_hub.estoque_movimentacoes
              (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
              VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
-            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || service?.id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
+            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, order.servico_catalogo_id || contract?.servico_catalogo_id || service?.id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
           );
         }
       }
