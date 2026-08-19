@@ -167,8 +167,8 @@ jobs:
               trap cleanup_restore EXIT
 
               run_pg pg_restore --exit-on-error --no-owner --no-privileges --dbname="$restore_url" "/backup/$(basename "$backup_path")"
-              tables="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
-              tenants="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM public.tenants" 2>/dev/null || echo 0)"
+              tables="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='ciperprag_hub'")"
+              tenants="$(run_pg psql "$restore_url" -At -c "SELECT count(*) FROM ciperprag_hub.tenants" 2>/dev/null || echo 0)"
               test "$tables" -gt 0
               echo "BACKUP_FILE=$(basename "$backup_path")"
               echo "ISOLATED_DATABASE=$restore_db"
