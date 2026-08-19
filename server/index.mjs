@@ -642,7 +642,7 @@ function buildHistoricalOrderHtml(snapshot, order) {
     <h1>Ordem de Serviço ${htmlEscape(order.numero)}</h1>
     <p class="muted">Documento histórico gerado em ${new Date().toLocaleString("pt-BR")}.</p>
     <table><tr><th>Cliente</th><td>${htmlEscape(data.cliente?.nome || order.cliente)}</td><th>CNPJ</th><td>${htmlEscape(data.cliente?.cnpj || order.cnpj)}</td></tr>
-    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Contrato</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id)}</td></tr>
+    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Origem</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id || "Atendimento avulso")}</td></tr>
     <tr><th>Técnico</th><td>${htmlEscape(data.tecnico?.nome || order.tecnico)}</td><th>Local</th><td>${htmlEscape(operacao.localExecucao || order.local_execucao)}</td></tr>
     <tr><th>Emissão</th><td>${htmlEscape(data.os?.dataEmissao || formatDbDate(order.data_emissao))}</td><th>Execução</th><td>${htmlEscape(data.os?.dataExecucao || formatDbDate(order.data_execucao))}</td></tr></table>
     <div class="box"><strong>POP:</strong> ${htmlEscape([pop.codigo, pop.titulo, pop.versao ? `versão ${pop.versao}` : ""].filter(Boolean).join(" - ") || "-")}</div>
@@ -1206,6 +1206,7 @@ async function getSchedules(tenantId) {
     clienteNome: row.cliente,
     clienteCnpj: row.cliente_cnpj,
     contratoId: row.contrato_id,
+    servicoCatalogoId: row.servico_catalogo_id,
     servico: row.servico,
     tipo: row.tipo,
     dataAgendada: row.data_agendada?.toISOString?.().split("T")[0] ?? row.data_agendada,
@@ -2059,6 +2060,7 @@ async function getRecurrenceSuggestions(tenantId) {
     clienteNome: row.cliente_nome,
     clienteCnpj: row.cliente_cnpj,
     contratoId: row.contrato_id,
+    servicoCatalogoId: row.servico_catalogo_id,
     servico: row.servico,
     tipo: row.tipo,
     localExecucao: row.local_execucao,
@@ -2344,13 +2346,40 @@ async function nextSequential(field, tenantId) {
 async function upsertSchedule(body, tenantId) {
   const id = body.id || makeId("AG");
   const desiredStatus = body.status || "agendado";
-  if (body.contratoId && !["cancelado", "encerrado"].includes(desiredStatus)) {
+  const contractId = body.contratoId || null;
+  const serviceId = body.servicoCatalogoId || null;
+  const { rows: customerRows } = await query(
+    "SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+    [body.clienteId, tenantId],
+  );
+  const customer = customerRows[0];
+  if (!customer) {
+    const error = new Error("Cliente nao encontrado para o agendamento.");
+    error.status = 400;
+    throw error;
+  }
+
+  const { rows: serviceRows } = await query(
+    serviceId
+      ? "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1"
+      : "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE tenant_id = $1 AND lower(trim(nome)) = lower(trim($2)) LIMIT 1",
+    serviceId ? [serviceId, tenantId] : [tenantId, body.servico],
+  );
+  const service = serviceRows[0];
+  if (!service || service.ativo === false) {
+    const error = new Error("Selecione um servico ativo do catalogo para o agendamento.");
+    error.status = 400;
+    throw error;
+  }
+
+  if (contractId && !["cancelado", "encerrado"].includes(desiredStatus)) {
     const { rows: contractRows } = await query(
       `SELECT
          c.id,
          c.status,
          c.contratado,
          c.executado,
+         c.servico_catalogo_id,
          t.tipo AS template_tipo,
          t.status AS template_status
        FROM ciperprag_hub.contratos c
@@ -2360,7 +2389,7 @@ async function upsertSchedule(body, tenantId) {
        WHERE c.id = $1
          AND c.tenant_id = $2
        LIMIT 1`,
-      [body.contratoId, tenantId],
+      [contractId, tenantId],
     );
     const contract = contractRows[0];
     const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
@@ -2379,13 +2408,19 @@ async function upsertSchedule(body, tenantId) {
       error.status = 400;
       throw error;
     }
+    if (contract.servico_catalogo_id && contract.servico_catalogo_id !== service.id) {
+      const error = new Error("O serviço selecionado não corresponde ao item do contrato.");
+      error.status = 400;
+      throw error;
+    }
   }
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
-    (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,COALESCE($19, NOW()))
+    (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,COALESCE($21, NOW()))
     ON CONFLICT (id) DO UPDATE SET
       contrato_id=EXCLUDED.contrato_id,
+      servico_catalogo_id=EXCLUDED.servico_catalogo_id,
       cliente_id=EXCLUDED.cliente_id,
       cliente=EXCLUDED.cliente,
       cliente_cnpj=EXCLUDED.cliente_cnpj,
@@ -2405,12 +2440,13 @@ async function upsertSchedule(body, tenantId) {
     [
       id,
       tenantId,
-      body.contratoId,
+      contractId,
+      service.id,
       body.clienteId || null,
-      body.clienteNome,
-      body.clienteCnpj,
-      body.servico,
-      body.tipo,
+      body.clienteNome || customer.razao_social,
+      body.clienteCnpj || customer.cnpj,
+      service.nome,
+      service.tipo,
       body.dataAgendada,
       body.localId || null,
       body.localExecucao,
@@ -4312,19 +4348,21 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1 AND tenant_id = $2", [agendamentoId, tenantId]);
     const ag = agRows[0];
     if (!ag) throw new Error("Agendamento não encontrado");
-    const { rows: contractRows } = await client.query(
-      `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
-       FROM ciperprag_hub.contratos c
-       LEFT JOIN ciperprag_hub.contratos_templates t
-         ON t.id = c.contrato_template_id
-        AND t.tenant_id = c.tenant_id
-       WHERE c.id = $1
-         AND c.tenant_id = $2`,
-      [ag.contrato_id, tenantId],
-    );
-    const contract = contractRows[0];
+    const { rows: contractRows } = ag.contrato_id
+      ? await client.query(
+        `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+         FROM ciperprag_hub.contratos c
+         LEFT JOIN ciperprag_hub.contratos_templates t
+           ON t.id = c.contrato_template_id
+          AND t.tenant_id = c.tenant_id
+         WHERE c.id = $1
+           AND c.tenant_id = $2`,
+        [ag.contrato_id, tenantId],
+      )
+      : { rows: [] };
+    const contract = contractRows[0] || null;
     const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-    if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+    if (ag.contrato_id && (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente")) {
       const error = new Error("Nao e possivel gerar OS: o agendamento precisa estar vinculado a contrato final vigente e com saldo operacional.");
       error.status = 400;
       throw error;
@@ -4348,7 +4386,7 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       `INSERT INTO ciperprag_hub.ordens_servico
       (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,'aberta',$25)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -4575,7 +4613,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
             `INSERT INTO ciperprag_hub.estoque_movimentacoes
              (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
              VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
-            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
+            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, contract?.servico_catalogo_id || service?.id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
           );
         }
       }
@@ -4639,9 +4677,9 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     if (!isNotExecuted && recorrenciaDias > 0) {
       await client.query(
         `INSERT INTO ciperprag_hub.recorrencia_sugestoes
-         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'pendente')`,
-        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_id || null, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
+         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico_catalogo_id, servico, tipo, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'pendente')`,
+        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, service?.id || null, order.servico, order.tipo, order.local_id || null, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
       );
     }
     await logAuditEvent(client, req, {
@@ -4821,29 +4859,31 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
   if (action === "confirm") {
     await withTransaction(async (client) => {
       const newId = makeId("AG");
-      const { rows: contractRows } = await client.query(
-        `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
-         FROM ciperprag_hub.contratos c
-         LEFT JOIN ciperprag_hub.contratos_templates t
-           ON t.id = c.contrato_template_id
-          AND t.tenant_id = c.tenant_id
-         WHERE c.id = $1
-           AND c.tenant_id = $2
-         LIMIT 1`,
-        [suggestion.contrato_id, tenantId],
-      );
-      const contract = contractRows[0];
+      const { rows: contractRows } = suggestion.contrato_id
+        ? await client.query(
+          `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+           FROM ciperprag_hub.contratos c
+           LEFT JOIN ciperprag_hub.contratos_templates t
+             ON t.id = c.contrato_template_id
+            AND t.tenant_id = c.tenant_id
+           WHERE c.id = $1
+             AND c.tenant_id = $2
+           LIMIT 1`,
+          [suggestion.contrato_id, tenantId],
+        )
+        : { rows: [] };
+      const contract = contractRows[0] || null;
       const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-      if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+      if (suggestion.contrato_id && (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente")) {
         const error = new Error("Nao e possivel confirmar recorrencia: contrato final sem saldo operacional disponivel.");
         error.status = 400;
         throw error;
       }
       await client.query(
         `INSERT INTO ciperprag_hub.agendamentos
-         (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'agendado',NOW())`,
-        [newId, tenantId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_id || null, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
+         (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'agendado',NOW())`,
+        [newId, tenantId, suggestion.contrato_id, suggestion.servico_catalogo_id || null, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_id || null, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
       );
       await client.query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'confirmada' WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
       await logAuditEvent(client, req, {

@@ -267,6 +267,7 @@ export async function ensureDatabaseShape() {
     ALTER TABLE IF EXISTS ciperprag_hub.agendamentos
     ADD COLUMN IF NOT EXISTS cliente_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cliente_cnpj VARCHAR(18),
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS tipo VARCHAR(15),
     ADD COLUMN IF NOT EXISTS local_execucao TEXT,
     ADD COLUMN IF NOT EXISTS tags TEXT,
@@ -450,7 +451,8 @@ export async function ensureDatabaseShape() {
       cliente_id VARCHAR(20),
       cliente_nome TEXT NOT NULL,
       cliente_cnpj VARCHAR(18) NOT NULL,
-      contrato_id VARCHAR(20) NOT NULL,
+      contrato_id VARCHAR(20),
+      servico_catalogo_id VARCHAR(20),
       servico TEXT NOT NULL,
       tipo VARCHAR(15) NOT NULL,
       local_execucao TEXT,
@@ -661,6 +663,12 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS endereco_atividade TEXT,
     ADD COLUMN IF NOT EXISTS enderecos_atividade JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS locais_ids JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
+    ALTER COLUMN contrato_id DROP NOT NULL
   `);
   await query("ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)");
 

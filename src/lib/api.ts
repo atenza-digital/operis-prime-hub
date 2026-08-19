@@ -157,7 +157,8 @@ export interface AgendamentoApp {
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
-  contratoId: string;
+  contratoId?: string | null;
+  servicoCatalogoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   dataAgendada: string;
@@ -207,7 +208,7 @@ export interface OSApp {
   clienteCnpj: string;
   clienteEndereco?: string;
   clienteLogoUrl?: string;
-  contratoId: string;
+  contratoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   tecnicoNome: string;
@@ -246,7 +247,7 @@ export interface CertificadoApp {
   clienteCnpj: string;
   clienteEndereco?: string;
   clienteLogoUrl?: string;
-  contratoId: string;
+  contratoId?: string | null;
   servico: string;
   tecnicoNome: string;
   localExecucao: string;
@@ -511,7 +512,8 @@ export interface RecorrenciaSuggestionApp {
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
-  contratoId: string;
+  contratoId?: string | null;
+  servicoCatalogoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   localExecucao: string;
