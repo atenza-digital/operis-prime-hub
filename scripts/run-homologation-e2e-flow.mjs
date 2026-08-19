@@ -47,12 +47,133 @@ function assertE2e(condition, message) {
   if (!condition) throw new Error(`Falha de consistencia E2E: ${message}`);
 }
 
+async function ensureE2eFixtures(client, tenantId) {
+  const fixture = {
+    clientId: "E2E-CLI-001",
+    locationId: "E2E-LOC-001",
+    equipmentId: "E2E-EQP-001",
+    serviceId: "E2E-SRV-001",
+    technicianId: "E2E-TEC-001",
+    vehicleId: "E2E-VEI-001",
+  };
+
+  await client.query(
+    `INSERT INTO ciperprag_hub.clientes
+       (id, tenant_id, razao_social, nome_fantasia, cnpj, endereco, bairro, municipio, uf, cep, ativo)
+     VALUES ($1,$2,'Empresa Demonstração E2E LTDA','Empresa Demonstração','11.222.333/0001-44',
+       'Av. de Testes, 100','Centro','Parauapebas','PA','68515-000',TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       razao_social = EXCLUDED.razao_social,
+       nome_fantasia = EXCLUDED.nome_fantasia,
+       cnpj = EXCLUDED.cnpj,
+       endereco = EXCLUDED.endereco,
+       bairro = EXCLUDED.bairro,
+       municipio = EXCLUDED.municipio,
+       uf = EXCLUDED.uf,
+       cep = EXCLUDED.cep,
+       ativo = TRUE
+     WHERE ciperprag_hub.clientes.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.clientId, tenantId],
+  );
+  await client.query(
+    `INSERT INTO ciperprag_hub.cliente_locais_execucao
+       (id, tenant_id, cliente_id, nome, endereco, municipio, uf, ativo)
+     VALUES ($1,$2,$3,'Unidade E2E','Av. de Testes, 100','Parauapebas','PA',TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       cliente_id = EXCLUDED.cliente_id,
+       nome = EXCLUDED.nome,
+       endereco = EXCLUDED.endereco,
+       municipio = EXCLUDED.municipio,
+       uf = EXCLUDED.uf,
+       ativo = TRUE
+     WHERE ciperprag_hub.cliente_locais_execucao.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.locationId, tenantId, fixture.clientId],
+  );
+  await client.query(
+    `INSERT INTO ciperprag_hub.cliente_equipamentos
+       (id, tenant_id, cliente_id, local_id, tag, descricao, tipo, ativo)
+     VALUES ($1,$2,$3,$4,'TAG-E2E-001','Equipamento de validação E2E','Ponto técnico',TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       cliente_id = EXCLUDED.cliente_id,
+       local_id = EXCLUDED.local_id,
+       tag = EXCLUDED.tag,
+       descricao = EXCLUDED.descricao,
+       tipo = EXCLUDED.tipo,
+       ativo = TRUE
+     WHERE ciperprag_hub.cliente_equipamentos.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.equipmentId, tenantId, fixture.clientId, fixture.locationId],
+  );
+  await client.query(
+    `INSERT INTO ciperprag_hub.servicos_catalogo
+       (id, tenant_id, nome, tipo, descricao, unidade, recorrencia_dias, gera_certificado,
+        validade_certificado_dias, produtos_quimicos, epis, riscos, normas_aplicaveis,
+        procedimentos, checklist_itens, exige_foto, exige_assinatura, permite_nao_execucao,
+        pop_codigo, pop_titulo, pop_versao, ativo)
+     VALUES ($1,$2,'Serviço técnico E2E','sanitario','Serviço técnico de validação do fluxo completo',
+       'serviço',30,TRUE,30,ARRAY[]::TEXT[],ARRAY[]::TEXT[],ARRAY[]::TEXT[],ARRAY[]::TEXT[],
+       ARRAY['Executar validação técnica'],ARRAY['Registro concluído'],TRUE,FALSE,TRUE,
+       'POP-E2E-001','Procedimento E2E','001',TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       nome = EXCLUDED.nome,
+       tipo = EXCLUDED.tipo,
+       descricao = EXCLUDED.descricao,
+       unidade = EXCLUDED.unidade,
+       recorrencia_dias = EXCLUDED.recorrencia_dias,
+       gera_certificado = EXCLUDED.gera_certificado,
+       validade_certificado_dias = EXCLUDED.validade_certificado_dias,
+       procedimentos = EXCLUDED.procedimentos,
+       checklist_itens = EXCLUDED.checklist_itens,
+       exige_foto = EXCLUDED.exige_foto,
+       exige_assinatura = EXCLUDED.exige_assinatura,
+       permite_nao_execucao = EXCLUDED.permite_nao_execucao,
+       pop_codigo = EXCLUDED.pop_codigo,
+       pop_titulo = EXCLUDED.pop_titulo,
+       pop_versao = EXCLUDED.pop_versao,
+       ativo = TRUE
+     WHERE ciperprag_hub.servicos_catalogo.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.serviceId, tenantId],
+  );
+  await client.query(
+    `INSERT INTO ciperprag_hub.tecnicos
+       (id, tenant_id, nome, cpf, cargo, telefone, ativo)
+     VALUES ($1,$2,'Técnico E2E','111.222.333-44','Técnico de validação','(94) 99999-0001',TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       nome = EXCLUDED.nome,
+       cargo = EXCLUDED.cargo,
+       telefone = EXCLUDED.telefone,
+       ativo = TRUE
+     WHERE ciperprag_hub.tecnicos.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.technicianId, tenantId],
+  );
+  await client.query(
+    `INSERT INTO ciperprag_hub.veiculos
+       (id, tenant_id, placa, modelo, ano, ativo)
+     VALUES ($1,$2,'E2E-0001','Veículo de validação E2E',2026,TRUE)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       placa = EXCLUDED.placa,
+       modelo = EXCLUDED.modelo,
+       ano = EXCLUDED.ano,
+       ativo = TRUE
+     WHERE ciperprag_hub.veiculos.tenant_id = EXCLUDED.tenant_id`,
+    [fixture.vehicleId, tenantId],
+  );
+  return fixture;
+}
+
 async function prepareE2eUser(password) {
   const passwordHash = await hashPassword(password);
   return withTransaction(async (client) => {
     const { rows: tenantRows } = await client.query("SELECT id FROM ciperprag_hub.tenants WHERE slug = $1 LIMIT 1", [tenantSlug]);
     const tenant = tenantRows[0];
     if (!tenant) throw new Error(`Tenant nao encontrado: ${tenantSlug}`);
+
+    await ensureE2eFixtures(client, tenant.id);
 
     const { rows: userRows } = await client.query(
       `INSERT INTO ciperprag_hub.usuarios
