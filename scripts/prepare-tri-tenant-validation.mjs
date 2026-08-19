@@ -20,8 +20,8 @@ const roleSeeds = [
 
 const rolePermissions = {
   admin_empresa: "all",
-  comercial: ["dashboard.view", "clientes.manage", "servicos.manage", "contratos.manage", "financeiro.view"],
-  administrativo: ["dashboard.view", "clientes.manage", "contratos.manage", "agenda.manage", "os.manage", "certificados.manage", "medicoes.manage"],
+  comercial: ["dashboard.view", "clientes.manage", "servicos.manage", "estoque.manage", "contratos.manage", "financeiro.view"],
+  administrativo: ["dashboard.view", "clientes.manage", "estoque.manage", "contratos.manage", "agenda.manage", "os.manage", "certificados.manage", "medicoes.manage"],
   operacao: ["dashboard.view", "agenda.manage", "os.manage", "os.close", "equipes.manage"],
   tecnico: ["dashboard.view", "os.manage", "os.close"],
   responsavel_tecnico: ["dashboard.view", "servicos.manage", "os.manage", "certificados.manage"],

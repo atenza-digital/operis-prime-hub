@@ -284,10 +284,9 @@ export function buildOsPrintHtml(
         <col style="width: 20%">
       </colgroup>
       <tr><td class="label">SETOR:</td><td>OPERACIONAL</td><td class="label"></td><td></td></tr>
-      <tr><td class="label">FUNÇÃO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Técnico de Manutenção" : "Técnico Sanitário"))}</td><td class="label">Data de Admissão</td><td>${escapeHtml(fmtDate(os.tecnicoDataAdmissao))}</td></tr>
-      <tr><td class="label">COLABORADOR:</td><td>${escapeHtml(os.tecnicoNome)}</td><td class="label">CPF</td><td>${escapeHtml(os.tecnicoCpf || "")}</td></tr>
+      <tr><td class="label">FUNÇÃO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Técnico de Manutenção" : "Técnico Sanitário"))}</td><td class="label">CPF</td><td>${escapeHtml(os.tecnicoCpf || "")}</td></tr>
       <tr><td class="label">CLIENTE:</td><td>${escapeHtml(clienteNome)}</td><td class="label">CNPJ</td><td><strong>${escapeHtml(clienteCnpj)}</strong></td></tr>
-      <tr><td class="label">Local de execução:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Contrato</td><td>${escapeHtml(os.contratoId)}</td></tr>
+      <tr><td class="label">Local de execução:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Origem</td><td>${escapeHtml(os.contratoId || "Atendimento avulso")}</td></tr>
     </table>
 
     <div class="section-title">Descrição das Atividades:</div>

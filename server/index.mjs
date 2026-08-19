@@ -5,13 +5,20 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
+import { assertCertificateSource, resolveCertificateSource } from "./certificate-rules.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
-import { buildProposalCatalogContext, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
+import { buildProposalCatalogContext, extractProposalPdfDeterministically, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
+import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
+import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
+import { renderHtmlToPdf } from "./render-pdf.mjs";
+import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
+import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+const corsOrigins = parseCorsOrigins();
 const MEASUREMENT_FINANCIAL_STATUSES = new Set([
   "em_conferencia",
   "emitida",
@@ -33,7 +40,32 @@ const COMMERCIAL_DOCUMENT_TEMPLATES = {
   minuta: { code: "minuta-contrato-cliente", version: "p0-ciperprag-v1" },
 };
 
-app.use(cors());
+function buildProposalPdfCoverage(deterministic, aiCoverage = {}) {
+  return {
+    paginasAnalisadas: deterministic?.paginasAnalisadas ?? aiCoverage.paginasAnalisadas ?? null,
+    tabelasEncontradas: Math.max(Number(deterministic?.tabelasEncontradas || 0), Number(aiCoverage.tabelasEncontradas || 0)),
+    itensExtraidos: Math.max(Number(deterministic?.itensExtraidos || 0), Number(aiCoverage.itensExtraidos || 0)),
+    regrasFrequencia: Array.isArray(aiCoverage.regrasFrequencia) ? aiCoverage.regrasFrequencia : [],
+    camposNaoInterpretados: Array.isArray(aiCoverage.camposNaoInterpretados) ? aiCoverage.camposNaoInterpretados : [],
+  };
+}
+
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  for (const [name, value] of Object.entries(securityHeaders({ secure: req.secure || forwardedProto === "https" }))) {
+    res.setHeader(name, value);
+  }
+  next();
+});
+app.use(cors({
+  origin(origin, callback) {
+    if (isCorsOriginAllowed(origin, corsOrigins)) return callback(null, true);
+    return callback(new Error("Origem CORS nao permitida."));
+  },
+  methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type", "X-Tenant-Slug"],
+}));
 app.use(express.json({ limit: "15mb" }));
 
 function getRequestIp(req) {
@@ -49,10 +81,12 @@ function getPublicBaseUrl(req) {
   return host ? `${proto}://${host}` : "http://localhost:3001";
 }
 
-function normalizeTenantSlug(value) {
-  const slug = String(value || "").trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) return null;
-  return slug;
+async function getCommercialConfig(tenantId, tenantSlug) {
+  const { rows } = await query(
+    "SELECT commercial_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1",
+    [tenantId],
+  );
+  return normalizeCommercialConfig(rows[0]?.commercial_config, tenantSlug);
 }
 
 function getTenantSlugFromRequest(req) {
@@ -275,6 +309,7 @@ function encodeBinaryDocument(buffer, mimeType) {
     hash: sha256Hex(buffer),
   };
 }
+
 
 function createPdfBuffer() {
   throw new Error("PDF server-side por desenho manual desativado. Usar template visual aprovado.");
@@ -549,7 +584,8 @@ async function saveImmutableDocumentAttachment(client, {
   storage = null,
   metadata = {},
 }) {
-  const encoded = encodeHtmlDocument(html);
+  const pdfBuffer = await renderHtmlToPdf(html);
+  const encoded = encodeBinaryDocument(pdfBuffer, "application/pdf");
   const snapHash = snapshot ? snapshotHash(snapshot) : null;
   const templateCode = template?.code || null;
   const templateVersion = template?.version || null;
@@ -563,14 +599,14 @@ async function saveImmutableDocumentAttachment(client, {
   });
   const persisted = await persistAttachmentContent({
     storagePlan: storageTarget,
-    buffer: Buffer.from(html, "utf8"),
+    buffer: pdfBuffer,
     contentBase64: encoded.dataUrl,
-    mimeType: "text/html",
+    mimeType: "application/pdf",
     hashSha256: encoded.hash,
     fileName,
     metadata: {
       ...metadata,
-      formato: "html_historico",
+      formato: "pdf_server_side",
       hashSha256: encoded.hash,
       snapshotHashSha256: snapHash,
       templateCodigo: templateCode,
@@ -581,7 +617,7 @@ async function saveImmutableDocumentAttachment(client, {
   await client.query(
     `INSERT INTO ciperprag_hub.evidencias_anexos
      (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
-     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'text/html',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)
+     VALUES ($1,$2,$3,$4,'pdf_historico',$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,$17)
     ON CONFLICT (id) DO NOTHING`,
     [
       attachmentId,
@@ -625,7 +661,7 @@ function buildHistoricalOrderHtml(snapshot, order) {
     <h1>Ordem de Serviço ${htmlEscape(order.numero)}</h1>
     <p class="muted">Documento histórico gerado em ${new Date().toLocaleString("pt-BR")}.</p>
     <table><tr><th>Cliente</th><td>${htmlEscape(data.cliente?.nome || order.cliente)}</td><th>CNPJ</th><td>${htmlEscape(data.cliente?.cnpj || order.cnpj)}</td></tr>
-    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Contrato</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id)}</td></tr>
+    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Origem</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id || "Atendimento avulso")}</td></tr>
     <tr><th>Técnico</th><td>${htmlEscape(data.tecnico?.nome || order.tecnico)}</td><th>Local</th><td>${htmlEscape(operacao.localExecucao || order.local_execucao)}</td></tr>
     <tr><th>Emissão</th><td>${htmlEscape(data.os?.dataEmissao || formatDbDate(order.data_emissao))}</td><th>Execução</th><td>${htmlEscape(data.os?.dataExecucao || formatDbDate(order.data_execucao))}</td></tr></table>
     <div class="box"><strong>POP:</strong> ${htmlEscape([pop.codigo, pop.titulo, pop.versao ? `versão ${pop.versao}` : ""].filter(Boolean).join(" - ") || "-")}</div>
@@ -800,8 +836,7 @@ async function getServiceForTenantSnapshot(client, serviceName, tenantId, servic
     WHERE s.tenant_id = $2
       AND (
         ($3::text IS NOT NULL AND s.id = $3)
-        OR s.nome = $1
-        OR s.nome ILIKE $4
+        OR ($3::text IS NULL AND (s.nome = $1 OR s.nome ILIKE $4))
       )
     ORDER BY
       CASE
@@ -816,7 +851,7 @@ async function getServiceForTenantSnapshot(client, serviceName, tenantId, servic
 }
 
 function buildCertificateSnapshot({ order, customer, service, company, hash, number, dataExecucao, validadeDias, publicBaseUrl = null, userId = null }) {
-  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
+  const source = resolveCertificateSource({ order, customer, service });
   const validadeAte = Number(validadeDias || 0) > 0 ? addDays(dataExecucao, Number(validadeDias)) : null;
   const tag = order.tag_equipamento_servico || order.tags || null;
   const codigoPublico = buildShortPublicCertificateCode(hash);
@@ -835,16 +870,17 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       validadeAte,
     },
     cliente: {
-      id: order.cliente_id,
-      nome: order.cliente,
-      cnpj: order.cnpj,
-      endereco: clienteEndereco,
-      logoUrl: customer?.logo_url || order.cliente_logo_url || null,
+      id: source.clientId,
+      nome: source.clientName,
+      cnpj: source.clientCnpj,
+      endereco: source.clientAddress,
+      logoUrl: source.clientLogoUrl,
     },
     os: {
       id: order.id,
       numero: order.numero,
-      contratoId: order.contrato_id,
+      contratoId: source.contractId,
+      servicoCatalogoId: source.serviceId,
       dataExecucao,
       quantidade: Number(order.quantidade || 0),
       unidade: order.unidade,
@@ -854,8 +890,9 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       fotos: order.fotos || [],
     },
     servico: {
-      nome: order.servico,
-      tipo: order.tipo,
+      id: source.serviceId,
+      nome: source.serviceName,
+      tipo: source.serviceType,
       geraCertificado: service?.gera_certificado ?? true,
       produtosQuimicos: service?.produtos_quimicos || [],
       produtosDetalhados: normalizeJsonArray(service?.produtos_detalhados),
@@ -1009,7 +1046,19 @@ async function getServices(tenantId) {
       p.procedimentos AS active_pop_procedimentos,
       p.checklist_itens AS active_pop_checklist_itens,
       p.aprovado_por AS active_pop_aprovado_por,
-      p.aprovado_em AS active_pop_aprovado_em
+      p.aprovado_em AS active_pop_aprovado_em,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'produtoId', sp.produto_id,
+          'quantidadePrevista', sp.quantidade_prevista,
+          'unidade', COALESCE(sp.unidade, pe.unidade),
+          'produtoNome', pe.nome,
+          'produtoCodigo', pe.codigo
+        ) ORDER BY pe.nome)
+        FROM ciperprag_hub.servicos_catalogo_produtos sp
+        JOIN ciperprag_hub.produtos_estoque pe ON pe.id = sp.produto_id AND pe.tenant_id = sp.tenant_id
+        WHERE sp.servico_id = s.id AND sp.tenant_id = $1
+      ), '[]'::jsonb) AS estoque_produtos
     FROM ciperprag_hub.servicos_catalogo s
     LEFT JOIN ciperprag_hub.servico_pops p ON p.id = s.pop_ativo_id AND p.tenant_id = $1
     WHERE s.tenant_id = $1
@@ -1045,7 +1094,96 @@ async function getServices(tenantId) {
     popMateriais: row.active_pop_materiais ?? [],
     popAprovadoPor: row.active_pop_aprovado_por,
     popAprovadoEm: row.active_pop_aprovado_em?.toISOString?.().split("T")[0] ?? row.active_pop_aprovado_em,
+    produtosEstoque: Array.isArray(row.estoque_produtos) ? row.estoque_produtos : normalizeJsonArray(row.estoque_produtos),
     ativo: row.ativo,
+  }));
+}
+
+async function persistProposalPdfImport(client, { tenantId, userId, fileName, parsed, deterministic }) {
+  const hash = sha256Hex(parsed.buffer);
+  const existing = await client.query(
+    `SELECT id FROM ciperprag_hub.proposta_pdf_importacoes WHERE tenant_id = $1 AND hash_sha256 = $2 LIMIT 1`,
+    [tenantId, hash],
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+  const id = makeId("PIMP");
+  await client.query(
+    `INSERT INTO ciperprag_hub.proposta_pdf_importacoes
+      (id, tenant_id, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, hash_sha256, texto_extraido, paginas_analisadas, tabelas_encontradas, itens_extraidos, cobertura, criado_por)
+     VALUES ($1,$2,$3,'application/pdf',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      id,
+      tenantId,
+      fileName,
+      parsed.bytes,
+      parsed.dataUrl,
+      hash,
+      deterministic?.textoExtraido || null,
+      deterministic?.paginasAnalisadas || null,
+      Number(deterministic?.tabelasEncontradas || 0),
+      Number(deterministic?.itensExtraidos || 0),
+      JSON.stringify({
+        fonte: "pdf-parse-local",
+        tabelas: deterministic?.tabelas || [],
+        linhasDeterministicas: deterministic?.linhasDeterministicas || [],
+        metadadosPdf: deterministic?.metadadosPdf || {},
+      }),
+      userId || null,
+    ],
+  );
+  return id;
+}
+
+async function finalizeProposalPdfImport(client, { id, templateId = null, coverage, status = "analisado" }) {
+  if (!id) return;
+  await client.query(
+    `UPDATE ciperprag_hub.proposta_pdf_importacoes
+     SET template_id = COALESCE($2, template_id), paginas_analisadas = COALESCE($3, paginas_analisadas),
+         tabelas_encontradas = $4, itens_extraidos = $5, cobertura = $6, status = $7, analisado_em = NOW()
+     WHERE id = $1`,
+    [id, templateId, coverage?.paginasAnalisadas || null, Number(coverage?.tabelasEncontradas || 0), Number(coverage?.itensExtraidos || 0), JSON.stringify(coverage || {}), status],
+  );
+}
+
+async function getStockProducts(tenantId) {
+  const { rows } = await query(`
+    SELECT
+      p.*,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'id', m.id,
+          'tipo', m.tipo,
+          'quantidade', m.quantidade,
+          'saldoAnterior', m.saldo_anterior,
+          'saldoPosterior', m.saldo_posterior,
+          'osId', m.os_id,
+          'servicoId', m.servico_id,
+          'observacao', m.observacao,
+          'criadoEm', m.criado_em
+        ) ORDER BY m.criado_em DESC)
+        FROM (
+          SELECT *
+          FROM ciperprag_hub.estoque_movimentacoes
+          WHERE produto_id = p.id AND tenant_id = p.tenant_id
+          ORDER BY criado_em DESC
+          LIMIT 20
+        ) m
+      ), '[]'::jsonb) AS movimentos
+    FROM ciperprag_hub.produtos_estoque p
+    WHERE p.tenant_id = $1
+    ORDER BY p.ativo DESC, p.nome
+  `, [tenantId]);
+  return rows.map((row) => ({
+    id: row.id,
+    codigo: row.codigo,
+    nome: row.nome,
+    descricao: row.descricao || "",
+    unidade: row.unidade || "un.",
+    quantidadeAtual: Number(row.quantidade_atual || 0),
+    estoqueMinimo: Number(row.estoque_minimo || 0),
+    ativo: row.ativo,
+    movimentos: Array.isArray(row.movimentos) ? row.movimentos : normalizeJsonArray(row.movimentos),
+    atualizadoEm: row.atualizado_em?.toISOString?.() ?? row.atualizado_em,
   }));
 }
 
@@ -1088,9 +1226,11 @@ async function getSchedules(tenantId) {
     clienteNome: row.cliente,
     clienteCnpj: row.cliente_cnpj,
     contratoId: row.contrato_id,
+    servicoCatalogoId: row.servico_catalogo_id,
     servico: row.servico,
     tipo: row.tipo,
     dataAgendada: row.data_agendada?.toISOString?.().split("T")[0] ?? row.data_agendada,
+    localId: row.local_id,
     localExecucao: row.local_execucao,
     tags: row.tags,
     observacao: row.observacao,
@@ -1228,6 +1368,8 @@ async function getCertificates(tenantId) {
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
+    substituidoPorId: row.substituido_por_id,
+    substituiCertificadoId: row.substitui_certificado_id,
   }));
 }
 
@@ -1302,10 +1444,12 @@ async function getCertificateByHash(hash) {
     emitidoEm: row.emitido_em?.toISOString?.() ?? row.emitido_em,
     validadeDias: Number(row.validade_dias || 0),
     validadeAte,
-    status: row.status === "revogado" ? "expired" : buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
+    status: row.status === "revogado" ? "revoked" : buildCertificateStatus(row.data_execucao?.toISOString?.().split("T")[0] ?? row.data_execucao, Number(row.validade_dias || 0)),
     certificateStatus: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
     motivoRevogacao: row.motivo_revogacao,
+    substituidoPorId: row.substituido_por_id,
+    substituiCertificadoId: row.substitui_certificado_id,
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
     snapshotDados: row.snapshot_dados ?? {},
@@ -1344,14 +1488,15 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
-  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, contract?.servico_catalogo_id || null);
+  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
   const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, scopedTenantId]);
   const customer = customerRows[0];
+  const source = resolveCertificateSource({ order, customer, service });
+  assertCertificateSource(source);
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
   const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
-  const clienteEndereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : order.cliente_endereco;
   const hashes = [];
 
   for (const [index, tag] of normalizeCertificateTags(order).entries()) {
@@ -1365,7 +1510,18 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
     const certId = makeId("CERT");
     const hash = index === 0 && order.certificado_hash ? order.certificado_hash : await generateUniqueCertificateHash(client);
     const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
-    const certificateOrder = { ...order, tag_equipamento_servico: tag, tags: tag || order.tags };
+    const certificateOrder = {
+      ...order,
+      cliente: source.clientName,
+      cnpj: source.clientCnpj,
+      cliente_endereco: source.clientAddress,
+      cliente_logo_url: source.clientLogoUrl,
+      servico_catalogo_id: source.serviceId,
+      servico: source.serviceName,
+      tipo: source.serviceType,
+      tag_equipamento_servico: tag,
+      tags: tag || order.tags,
+    };
     const snapshot = buildCertificateSnapshot({
       order: certificateOrder,
       customer,
@@ -1391,13 +1547,13 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
         certNumber,
         order.id,
         order.numero,
-        order.cliente_id,
-        order.cliente,
-        customer?.cnpj || order.cnpj,
-        clienteEndereco,
-        customer?.logo_url || order.cliente_logo_url || null,
-        order.contrato_id,
-        order.servico,
+        source.clientId,
+        source.clientName,
+        source.clientCnpj,
+        source.clientAddress,
+        source.clientLogoUrl,
+        source.contractId,
+        source.serviceName,
         order.tecnico,
         order.local_execucao,
         executionDate,
@@ -1417,7 +1573,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
         userId,
         entityType: "certificado",
         entityId: certId,
-        fileName: `certificado-${certNumber.replaceAll("/", "-")}.html`,
+        fileName: `certificado-${certNumber.replaceAll("/", "-")}.pdf`,
         html: buildHistoricalCertificateHtml(snapshot, certificate),
         metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id, tagEquipamentoServico: tag },
       });
@@ -1465,6 +1621,7 @@ async function getCompanyConfig(tenantId) {
     telefoneEmergencia: row.telefone_emergencia,
     medicaoFormaPagamentoPadrao: row.medicao_forma_pagamento_padrao,
     medicaoLocalEntregaPadrao: row.medicao_local_entrega_padrao,
+    commercialConfig: normalizeCommercialConfig(row.commercial_config, row.tenant_slug),
     certificadoConfig: row.certificado_config || {},
   };
 }
@@ -1535,6 +1692,8 @@ async function getContractTemplates(tenantId) {
       s.frequencia,
       s.descricao_comercial,
       s.unidade_comercial,
+      s.enderecos_atividade,
+      s.locais_ids,
       o.id AS contrato_operacional_id,
       o.status AS contrato_operacional_status,
       o.executado AS contrato_operacional_executado
@@ -1568,6 +1727,7 @@ async function getContractTemplates(tenantId) {
         validadeDias: Number(row.validade_dias ?? 30),
         modalidade: row.modalidade || "",
         locaisExecucao: Array.isArray(row.locais_execucao) ? row.locais_execucao : [],
+        sourcePdfImportId: row.source_pdf_import_id || undefined,
         escopoTecnico: row.escopo_tecnico || "",
         condicoesComerciais: row.condicoes_comerciais || "",
         operacionalizado: false,
@@ -1588,6 +1748,8 @@ async function getContractTemplates(tenantId) {
         descricaoComercial: row.descricao_comercial || "",
         unidadeComercial: row.unidade_comercial || "",
         enderecoAtividade: row.endereco_atividade || "",
+        enderecosAtividade: [row.endereco_atividade, ...(Array.isArray(row.enderecos_atividade) ? row.enderecos_atividade : normalizeJsonArray(row.enderecos_atividade))].filter(Boolean),
+        localIds: Array.isArray(row.locais_ids) ? row.locais_ids : normalizeJsonArray(row.locais_ids),
         contratoOperacionalId: row.contrato_operacional_id,
         contratoOperacionalStatus: row.contrato_operacional_status,
         contratoOperacionalExecutado: Number(row.contrato_operacional_executado ?? 0),
@@ -1635,6 +1797,7 @@ async function buildCommercialDocumentSnapshot(client, { tenantId, templateId })
     quantidade: Number(item.quantidade || 0),
     unidade: item.catalogo_unidade || "un.",
     enderecoAtividade: item.endereco_atividade || null,
+    enderecosAtividade: [item.endereco_atividade, ...(Array.isArray(item.enderecos_atividade) ? item.enderecos_atividade : normalizeJsonArray(item.enderecos_atividade))].filter(Boolean),
     valorUnitario: Number(item.valor_unitario || 0),
     valorTotal: Number(item.quantidade || 0) * Number(item.valor_unitario || 0),
     frequencia: item.frequencia || null,
@@ -1798,7 +1961,9 @@ async function syncOperationalContractsFromTemplate(client, templateId, tenantId
 
   const locais = locationRows.map((row) => row.nome).filter(Boolean);
   const tags = equipmentRows.map((row) => row.tag).filter(Boolean);
-  const clienteNome = template.razao_social || template.nome_fantasia || "Cliente sem nome";
+  // Keep the operational contract, OS and certificate aligned with the tenant's
+  // display name used by the canonical certificate source.
+  const clienteNome = template.nome_fantasia || template.razao_social || "Cliente sem nome";
   const vigenciaInicio = template.data_criacao?.toISOString?.().split("T")[0] ?? template.data_criacao ?? new Date().toISOString().split("T")[0];
   const vigenciaFim = addMonthsToDate(vigenciaInicio, template.vigencia_meses || 0);
   let created = 0;
@@ -1929,9 +2094,11 @@ async function getRecurrenceSuggestions(tenantId) {
     clienteNome: row.cliente_nome,
     clienteCnpj: row.cliente_cnpj,
     contratoId: row.contrato_id,
+    servicoCatalogoId: row.servico_catalogo_id,
     servico: row.servico,
     tipo: row.tipo,
     localExecucao: row.local_execucao,
+    localId: row.local_id,
     tags: row.tags,
     observacao: row.observacao,
     tecnicosIds: row.tecnicos_ids ?? [],
@@ -2155,13 +2322,14 @@ async function getAuditLogsForTenant(tenantId, filters = {}) {
   }));
 }
 
-async function getBootstrap(tenantId) {
-  const [companyConfig, numberingConfig, clients, services, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
+async function getBootstrap(tenantId, permissions = []) {
+  const [companyConfig, numberingConfig, clients, services, stockProducts, contracts, schedules, orders, certificates, technicians, vehicles, allocations, contractTemplates, recurrenceSuggestions, measurements, attachments] =
     await Promise.all([
       getCompanyConfig(tenantId),
       getNumberingConfig(tenantId),
       getClients(tenantId),
       getServices(tenantId),
+      getStockProducts(tenantId),
       getContracts(tenantId),
       getSchedules(tenantId),
       getOrders(tenantId),
@@ -2180,16 +2348,17 @@ async function getBootstrap(tenantId) {
     numberingConfig,
     clients,
     services,
-    contracts,
+    stockProducts,
+    contracts: sanitizeContracts(contracts, permissions),
     schedules,
     orders,
     certificates,
     technicians,
     vehicles,
     allocations,
-    contractTemplates,
+    contractTemplates: sanitizeContractTemplates(contractTemplates, permissions),
     recurrenceSuggestions,
-    measurements,
+    measurements: sanitizeMeasurements(measurements, permissions),
     attachments,
   };
 }
@@ -2211,13 +2380,41 @@ async function nextSequential(field, tenantId) {
 async function upsertSchedule(body, tenantId) {
   const id = body.id || makeId("AG");
   const desiredStatus = body.status || "agendado";
-  if (body.contratoId && !["cancelado", "encerrado"].includes(desiredStatus)) {
+  const contractId = body.contratoId || null;
+  const serviceId = body.servicoCatalogoId || null;
+  const { rows: customerRows } = await query(
+    "SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+    [body.clienteId, tenantId],
+  );
+  const customer = customerRows[0];
+  if (!customer) {
+    const error = new Error("Cliente nao encontrado para o agendamento.");
+    error.status = 400;
+    throw error;
+  }
+
+  const { rows: serviceRows } = await query(
+    serviceId
+      ? "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1"
+      : "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE tenant_id = $1 AND lower(trim(nome)) = lower(trim($2)) LIMIT 1",
+    serviceId ? [serviceId, tenantId] : [tenantId, body.servico],
+  );
+  const service = serviceRows[0];
+  if (!service || service.ativo === false) {
+    const error = new Error("Selecione um servico ativo do catalogo para o agendamento.");
+    error.status = 400;
+    throw error;
+  }
+
+  let contract = null;
+  if (contractId && !["cancelado", "encerrado"].includes(desiredStatus)) {
     const { rows: contractRows } = await query(
       `SELECT
          c.id,
          c.status,
          c.contratado,
          c.executado,
+         c.servico_catalogo_id,
          t.tipo AS template_tipo,
          t.status AS template_status
        FROM ciperprag_hub.contratos c
@@ -2227,38 +2424,30 @@ async function upsertSchedule(body, tenantId) {
        WHERE c.id = $1
          AND c.tenant_id = $2
        LIMIT 1`,
-      [body.contratoId, tenantId],
+      [contractId, tenantId],
     );
-    const contract = contractRows[0];
-    const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-    if (!contract) {
-      const error = new Error("Contrato operacional nao encontrado para o agendamento.");
+    contract = contractRows[0] || null;
+  }
+  const scheduleRule = validateScheduleOrigin({ contractId, contract, service, desiredStatus });
+  if (!scheduleRule.ok) {
+    const error = new Error(scheduleRule.error);
       error.status = 400;
       throw error;
-    }
-    if (contract.status !== "ativo" || balance <= 0) {
-      const error = new Error("Contrato sem saldo operacional disponivel para novo agendamento.");
-      error.status = 400;
-      throw error;
-    }
-    if (contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
-      const error = new Error("A agenda aceita apenas contratos finais vigentes. Gere e aprove a minuta antes do contrato final.");
-      error.status = 400;
-      throw error;
-    }
   }
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
-    (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,COALESCE($18, NOW()))
+    (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contrato_id=EXCLUDED.contrato_id,
+      servico_catalogo_id=EXCLUDED.servico_catalogo_id,
       cliente_id=EXCLUDED.cliente_id,
       cliente=EXCLUDED.cliente,
       cliente_cnpj=EXCLUDED.cliente_cnpj,
       servico=EXCLUDED.servico,
       tipo=EXCLUDED.tipo,
       data_agendada=EXCLUDED.data_agendada,
+      local_id=EXCLUDED.local_id,
       local_execucao=EXCLUDED.local_execucao,
       tags=EXCLUDED.tags,
       observacao=EXCLUDED.observacao,
@@ -2268,26 +2457,27 @@ async function upsertSchedule(body, tenantId) {
       veiculo_descricao=EXCLUDED.veiculo_descricao,
       status=EXCLUDED.status
     WHERE ciperprag_hub.agendamentos.tenant_id = EXCLUDED.tenant_id`,
-    [
+    buildScheduleInsertValues({
       id,
       tenantId,
-      body.contratoId,
-      body.clienteId || null,
-      body.clienteNome,
-      body.clienteCnpj,
-      body.servico,
-      body.tipo,
-      body.dataAgendada,
-      body.localExecucao,
-      body.tags || null,
-      body.observacao || null,
-      body.tecnicosIds || [],
-      body.tecnicosNomes || [],
-      body.veiculoId || null,
-      body.veiculoDescricao || null,
-      desiredStatus,
-      body.createdAt || null,
-    ],
+      contractId,
+      serviceId: service.id,
+      customerId: body.clienteId || null,
+      customerName: body.clienteNome || customer.razao_social,
+      customerCnpj: body.clienteCnpj || customer.cnpj,
+      serviceName: service.nome,
+      serviceType: service.tipo,
+      scheduledDate: body.dataAgendada,
+      locationId: body.localId || null,
+      locationName: body.localExecucao,
+      tags: body.tags || null,
+      notes: body.observacao || null,
+      technicianIds: body.tecnicosIds || [],
+      technicianNames: body.tecnicosNomes || [],
+      vehicleId: body.veiculoId || null,
+      vehicleDescription: body.veiculoDescricao || null,
+      status: desiredStatus,
+    }),
   );
   assertTenantWrite(rowCount, "Agendamento");
   return id;
@@ -2391,7 +2581,7 @@ app.post("/api/auth/change-password", async (req, res) => {
 
 app.get("/api/bootstrap", async (_req, res) => {
   if (_req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
-  res.json(await getBootstrap(_req.auth.user.tenant.id));
+  res.json(await getBootstrap(_req.auth.user.tenant.id, _req.auth.user.permissoes));
 });
 
 app.get("/api/audit-logs", requirePermission("auditoria.view"), async (req, res) => {
@@ -2467,6 +2657,33 @@ app.get("/api/attachments/:id/download", async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Storage-Provider", hasR2Content && !hasDatabaseContent ? "r2" : "database");
   if (attachment.hash_sha256) res.setHeader("X-Document-Hash-Sha256", attachment.hash_sha256);
+  res.send(decoded.buffer);
+});
+
+app.get("/api/proposal-pdf-imports/:id/download", requirePermission("contratos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const { rows } = await query(
+    `SELECT id, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, hash_sha256
+     FROM ciperprag_hub.proposta_pdf_importacoes
+     WHERE id = $1 AND tenant_id = $2
+     LIMIT 1`,
+    [req.params.id, tenantId],
+  );
+  const original = rows[0];
+  if (!original) return res.status(404).json({ error: "PDF original nao encontrado." });
+  const decoded = decodeStoredAttachmentContent(original.conteudo_base64);
+  await logAuditEvent(null, req, {
+    entityType: "proposta_pdf_importacao",
+    entityId: original.id,
+    action: "proposal_source_pdf_download",
+    summary: `PDF original da proposta consultado: ${original.nome_arquivo}`,
+    after: { nomeArquivo: original.nome_arquivo, hashSha256: original.hash_sha256 },
+  });
+  res.setHeader("Content-Type", original.mime_type || decoded.mimeType || "application/pdf");
+  res.setHeader("Content-Length", decoded.buffer.length);
+  res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(String(original.nome_arquivo || `${original.id}.pdf`).replaceAll('"', ""))}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (original.hash_sha256) res.setHeader("X-Document-Hash-Sha256", original.hash_sha256);
   res.send(decoded.buffer);
 });
 
@@ -2765,6 +2982,25 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
     );
     assertTenantWrite(serviceRowCount, "Servico");
 
+    const estoqueProdutos = Array.isArray(body.produtosEstoque) ? body.produtosEstoque : [];
+    await client.query("DELETE FROM ciperprag_hub.servicos_catalogo_produtos WHERE servico_id = $1 AND tenant_id = $2", [id, tenantId]);
+    for (const item of estoqueProdutos) {
+      const produtoId = String(item.produtoId || "").trim();
+      const quantidadePrevista = Number(item.quantidadePrevista || 0);
+      if (!produtoId || !Number.isFinite(quantidadePrevista) || quantidadePrevista <= 0) continue;
+      const { rowCount: productCount } = await client.query("SELECT 1 FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2", [produtoId, tenantId]);
+      if (!productCount) {
+        const error = new Error("Um dos produtos vinculados ao servico nao pertence a este tenant.");
+        error.status = 400;
+        throw error;
+      }
+      await client.query(
+        `INSERT INTO ciperprag_hub.servicos_catalogo_produtos (tenant_id, servico_id, produto_id, quantidade_prevista, unidade)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [tenantId, id, produtoId, quantidadePrevista, item.unidade || null],
+      );
+    }
+
     const hasPopData = Boolean(
       body.popCodigo ||
       body.popTitulo ||
@@ -2864,6 +3100,259 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   res.json({ ok: true, id });
 });
 
+app.post("/api/stock/products", requirePermission("estoque.manage"), async (req, res) => {
+  const body = req.body || {};
+  const tenantId = req.auth.user.tenant.id;
+  const id = body.id || makeId("PROD");
+  const codigo = String(body.codigo || "").trim();
+  const nome = String(body.nome || "").trim();
+  if (!codigo || !nome) return res.status(400).json({ error: "Codigo e nome do produto sao obrigatorios." });
+  const quantidadeAtual = Number(body.quantidadeAtual ?? 0);
+  const estoqueMinimo = Number(body.estoqueMinimo ?? 0);
+  if (!Number.isFinite(quantidadeAtual) || quantidadeAtual < 0 || !Number.isFinite(estoqueMinimo) || estoqueMinimo < 0) {
+    return res.status(400).json({ error: "Informe quantidades de estoque validas." });
+  }
+
+  await withTransaction(async (client) => {
+    const { rows: beforeRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [id, tenantId],
+    );
+    const before = beforeRows[0] || null;
+    if (before && body.quantidadeAtual !== undefined && Number(before.quantidade_atual) !== quantidadeAtual) {
+      const error = new Error("Altere o saldo usando uma movimentacao de estoque.");
+      error.status = 400;
+      throw error;
+    }
+    const result = await client.query(
+      `INSERT INTO ciperprag_hub.produtos_estoque
+        (id, tenant_id, codigo, nome, descricao, unidade, quantidade_atual, estoque_minimo, ativo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         codigo = EXCLUDED.codigo,
+         nome = EXCLUDED.nome,
+         descricao = EXCLUDED.descricao,
+         unidade = EXCLUDED.unidade,
+         estoque_minimo = EXCLUDED.estoque_minimo,
+         ativo = EXCLUDED.ativo,
+         atualizado_em = NOW()
+       WHERE ciperprag_hub.produtos_estoque.tenant_id = EXCLUDED.tenant_id`,
+      [id, tenantId, codigo, nome, body.descricao || null, body.unidade || "un.", before ? before.quantidade_atual : quantidadeAtual, estoqueMinimo, body.ativo ?? true],
+    );
+    assertTenantWrite(result.rowCount, "Produto");
+    await logAuditEvent(client, req, {
+      entityType: "produto_estoque",
+      entityId: id,
+      action: before ? "stock_product_updated" : "stock_product_created",
+      summary: `${before ? "Produto de estoque atualizado" : "Produto de estoque criado"}: ${nome}`,
+      before,
+      after: { id, codigo, nome, unidade: body.unidade || "un.", estoqueMinimo, ativo: body.ativo ?? true },
+    });
+  });
+  res.json({ ok: true, id });
+});
+
+app.post("/api/stock/movements", requirePermission("estoque.manage", "os.close"), async (req, res) => {
+  const body = req.body || {};
+  const tenantId = req.auth.user.tenant.id;
+  const type = String(body.tipo || "").trim().toLowerCase();
+  const quantity = Number(body.quantidade);
+  if (!["entrada", "saida", "ajuste", "devolucao", "perda"].includes(type) || !Number.isFinite(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: "Tipo e quantidade da movimentacao sao obrigatorios." });
+  }
+
+  const movement = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      "SELECT * FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+      [body.produtoId, tenantId],
+    );
+    const product = rows[0];
+    if (!product) {
+      const error = new Error("Produto de estoque nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+    const before = Number(product.quantidade_atual || 0);
+    const after = type === "ajuste"
+      ? quantity
+      : before + (["entrada", "devolucao"].includes(type) ? quantity : -quantity);
+    if (after < 0) {
+      const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${before} ${product.unidade}.`);
+      error.status = 400;
+      throw error;
+    }
+    if (body.osId) {
+      const { rowCount } = await client.query("SELECT 1 FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [body.osId, tenantId]);
+      if (!rowCount) {
+        const error = new Error("OS vinculada ao movimento nao encontrada neste tenant.");
+        error.status = 400;
+        throw error;
+      }
+    }
+    await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, after, tenantId]);
+    const id = makeId("MOV");
+    await client.query(
+      `INSERT INTO ciperprag_hub.estoque_movimentacoes
+       (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [id, tenantId, product.id, type, quantity, before, after, body.osId || null, body.servicoId || null, body.observacao || null, req.auth.user.id],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "estoque_movimentacao",
+      entityId: id,
+      action: "stock_movement_created",
+      summary: `Movimentacao ${type} de ${product.nome}`,
+      after: { produtoId: product.id, tipo: type, quantidade: quantity, saldoAnterior: before, saldoPosterior: after, osId: body.osId || null },
+    });
+    return { id, produtoId: product.id, tipo: type, quantidade: quantity, saldoAnterior: before, saldoPosterior: after };
+  });
+  res.json({ ok: true, movement });
+});
+
+app.get("/api/stock/report", requirePermission("estoque.manage", "medicoes.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const dateFrom = String(req.query.dateFrom || "").trim() || null;
+  const dateTo = String(req.query.dateTo || "").trim() || null;
+  const productId = String(req.query.productId || "").trim() || null;
+  const osId = String(req.query.osId || "").trim() || null;
+  const { rows } = await query(
+    `SELECT m.id, m.produto_id, p.codigo, p.nome AS produto_nome, p.unidade,
+            m.tipo, m.quantidade, m.saldo_anterior, m.saldo_posterior,
+            m.os_id, o.numero AS os_numero, m.servico_id, s.nome AS servico_nome,
+            m.observacao, m.criado_em
+     FROM ciperprag_hub.estoque_movimentacoes m
+     JOIN ciperprag_hub.produtos_estoque p ON p.id = m.produto_id AND p.tenant_id = m.tenant_id
+     LEFT JOIN ciperprag_hub.ordens_servico o ON o.id = m.os_id AND o.tenant_id = m.tenant_id
+     LEFT JOIN ciperprag_hub.servicos_catalogo s ON s.id = m.servico_id AND s.tenant_id = m.tenant_id
+     WHERE m.tenant_id = $1
+       AND ($2::date IS NULL OR m.criado_em::date >= $2::date)
+       AND ($3::date IS NULL OR m.criado_em::date <= $3::date)
+       AND ($4::text IS NULL OR m.produto_id = $4)
+       AND ($5::text IS NULL OR m.os_id = $5)
+     ORDER BY m.criado_em DESC, m.id DESC
+     LIMIT 1000`,
+    [tenantId, dateFrom, dateTo, productId, osId],
+  );
+  const movements = rows.map((row) => ({
+    id: row.id,
+    produtoId: row.produto_id,
+    codigo: row.codigo,
+    produtoNome: row.produto_nome,
+    unidade: row.unidade,
+    tipo: row.tipo,
+    quantidade: Number(row.quantidade),
+    saldoAnterior: Number(row.saldo_anterior),
+    saldoPosterior: Number(row.saldo_posterior),
+    osId: row.os_id,
+    osNumero: row.os_numero,
+    servicoId: row.servico_id,
+    servicoNome: row.servico_nome,
+    observacao: row.observacao,
+    criadoEm: row.criado_em?.toISOString?.() ?? row.criado_em,
+  }));
+  const summary = movements.reduce((acc, item) => {
+    const key = item.produtoId;
+    if (!acc[key]) acc[key] = { produtoId: key, produtoNome: item.produtoNome, unidade: item.unidade, entradas: 0, saidas: 0, ajustes: 0, perdas: 0, devolucoes: 0, movimentos: 0 };
+    acc[key].movimentos += 1;
+    if (item.tipo === "entrada") acc[key].entradas += item.quantidade;
+    if (item.tipo === "saida") acc[key].saidas += item.quantidade;
+    if (item.tipo === "ajuste") acc[key].ajustes += item.quantidade;
+    if (item.tipo === "perda") acc[key].perdas += item.quantidade;
+    if (item.tipo === "devolucao") acc[key].devolucoes += item.quantidade;
+    return acc;
+  }, {});
+  res.json({ ok: true, filters: { dateFrom, dateTo, productId, osId }, movements, summary: Object.values(summary) });
+});
+
+app.post("/api/services/:id/pop-file", requirePermission("servicos.manage"), async (req, res) => {
+  const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const fileName = safeFileNamePart(req.body.fileName || "pop-aprovado");
+  const mimeType = String(req.body.mimeType || "application/octet-stream").toLowerCase();
+  const { rows: companyRows } = await query("SELECT certificado_config FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const uploadPolicy = resolveAttachmentPolicy("servico_pop.pop_aprovado", companyRows[0]?.certificado_config || {});
+  let parsed;
+  try {
+    parsed = validateAttachmentPayload({
+      contentBase64: req.body.contentBase64,
+      declaredMimeType: mimeType,
+      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+      maxBytes: uploadPolicy.maxBytes,
+      label: "arquivo do POP",
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+
+  const hash = sha256Hex(parsed.buffer);
+  const attachment = await withTransaction(async (client) => {
+    const { rows: serviceRows } = await client.query(
+      "SELECT id, nome, descricao, pop_ativo_id FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [req.params.id, tenantId],
+    );
+    const service = serviceRows[0];
+    if (!service) {
+      const error = new Error("Servico nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    let popId = service.pop_ativo_id;
+    let popVersion = "001";
+    if (!popId) {
+      popId = makeId("POP");
+      await client.query(
+        `INSERT INTO ciperprag_hub.servico_pops
+         (id, tenant_id, servico_id, codigo, titulo, versao, status, objetivo, aprovado_em)
+         VALUES ($1,$2,$3,$4,$5,$6,'ativo',$7,CURRENT_DATE)`,
+        [popId, tenantId, service.id, `POP-${service.id}`, service.nome, "001", service.descricao || "Procedimento Operacional Padrao"],
+      );
+      await client.query("UPDATE ciperprag_hub.servicos_catalogo SET pop_ativo_id = $2 WHERE id = $1 AND tenant_id = $3", [service.id, popId, tenantId]);
+    } else {
+      const { rows: popRows } = await client.query(
+        "SELECT versao FROM ciperprag_hub.servico_pops WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+        [popId, tenantId],
+      );
+      popVersion = popRows[0]?.versao || popVersion;
+    }
+
+    const id = makeId("POPFILE");
+    const storageTarget = createAttachmentStoragePlan({ tenantSlug, entityType: "servico_pop", entityId: popId, category: "pop_aprovado", fileName, hashSha256: hash });
+    const persisted = await persistAttachmentContent({
+      storagePlan: storageTarget,
+      buffer: parsed.buffer,
+      contentBase64: parsed.dataUrl,
+      mimeType,
+      hashSha256: hash,
+      fileName,
+      metadata: {
+        origem: "pop_pronto_anexado_ao_catalogo",
+        servicoId: service.id,
+        servicoNome: service.nome,
+        popId,
+        popVersion,
+        hashSha256: hash,
+        ...buildAttachmentSecurityMetadata(uploadPolicy),
+      },
+    });
+    await client.query(
+      `INSERT INTO ciperprag_hub.evidencias_anexos
+       (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_por)
+       VALUES ($1,$2,'servico_pop',$3,'pop_aprovado',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,$14)`,
+      [id, tenantId, popId, fileName, mimeType, parsed.bytes, persisted.contentBase64, JSON.stringify(persisted.metadata), hash, persisted.provider, persisted.bucket, persisted.key, persisted.etag, req.auth.user.id],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "servico_pop",
+      entityId: popId,
+      action: "pop_file_uploaded",
+      summary: `Arquivo de POP anexado ao servico ${service.nome || service.id}`,
+      after: { attachmentId: id, serviceId: service.id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash },
+    });
+    return { id, fileName, mimeType, bytes: parsed.bytes, hashSha256: hash, popId };
+  });
+  res.json({ ok: true, attachment });
+});
+
 app.post("/api/technicians", requirePermission("equipes.manage"), async (req, res) => {
   const body = req.body;
   const id = body.id || `TEC-${String(Date.now()).slice(-6)}`;
@@ -2952,8 +3441,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
       medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
-      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $25 ORDER BY id LIMIT 1)`,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $26 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -2979,6 +3468,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.corSecundaria || null,
       body.corDestaque || null,
       JSON.stringify(body.certificadoConfig || {}),
+      JSON.stringify(normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug)),
       tenantId,
     ],
   );
@@ -2997,6 +3487,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       certificadoValidadePadraoDias: body.certificadoValidadePadraoDias ?? 30,
       medicaoFormaPagamentoPadrao: body.medicaoFormaPagamentoPadrao || null,
       corPrimaria: body.corPrimaria || null,
+      commercialConfig: normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug),
       certificadoConfig: body.certificadoConfig || {},
     },
   });
@@ -3043,6 +3534,19 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
   const body = req.body;
   const id = body.id || makeCompactId("TPL");
   const tenantId = req.auth.user.tenant.id;
+  const tenantSlug = req.auth.user.tenant.slug;
+  const commercialConfig = await getCommercialConfig(tenantId, tenantSlug);
+  const { rows: existingTemplateRows } = body.id
+    ? await query("SELECT tipo FROM ciperprag_hub.contratos_templates WHERE id = $1 AND tenant_id = $2 LIMIT 1", [body.id, tenantId])
+    : { rows: [] };
+  const existingType = existingTemplateRows[0]?.tipo;
+  const changesToRestrictedType = ["contrato", "minuta"].includes(body.tipo) && existingType !== body.tipo;
+  if (changesToRestrictedType && body.tipo === "contrato" && !commercialConfig.allowContractGeneration) {
+    return res.status(403).json({ error: "A geração de contratos está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
+  if (changesToRestrictedType && body.tipo === "minuta" && !commercialConfig.allowMinutaGeneration) {
+    return res.status(403).json({ error: "A geração de minutas está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   let operationalSync = null;
   const submittedServices = Array.isArray(body.servicos) ? body.servicos : [];
   const submittedServiceIds = submittedServices.map((item) => String(item?.servicoId || "").trim()).filter(Boolean);
@@ -3068,9 +3572,9 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17,$18,$19)
        ON CONFLICT (id) DO UPDATE SET
          numero=EXCLUDED.numero,
          cliente_id=EXCLUDED.cliente_id,
@@ -3087,7 +3591,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
          modalidade=EXCLUDED.modalidade,
          locais_execucao=EXCLUDED.locais_execucao,
          escopo_tecnico=EXCLUDED.escopo_tecnico,
-         condicoes_comerciais=EXCLUDED.condicoes_comerciais
+         condicoes_comerciais=EXCLUDED.condicoes_comerciais,
+         source_pdf_import_id=EXCLUDED.source_pdf_import_id
        WHERE ciperprag_hub.contratos_templates.tenant_id = EXCLUDED.tenant_id`,
       [
         id,
@@ -3108,9 +3613,18 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
         JSON.stringify(locaisExecucao),
         body.escopoTecnico || null,
         body.condicoesComerciais || null,
+        body.sourcePdfImportId || null,
       ],
     );
     assertTenantWrite(templateRowCount, "Modelo comercial");
+    if (body.sourcePdfImportId) {
+      await client.query(
+        `UPDATE ciperprag_hub.proposta_pdf_importacoes
+         SET template_id = $1
+         WHERE id = $2 AND tenant_id = $3`,
+        [id, body.sourcePdfImportId, tenantId],
+      );
+    }
     await client.query(
       `DELETE FROM ciperprag_hub.contratos_templates_servicos s
        WHERE s.template_id = $1
@@ -3124,8 +3638,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
     );
     for (const servico of body.servicos || []) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           id,
           servico.servicoId,
@@ -3135,6 +3649,8 @@ app.post("/api/contract-templates", requirePermission("contratos.manage"), async
           servico.descricaoComercial || null,
           servico.unidadeComercial || null,
           servico.enderecoAtividade || null,
+          JSON.stringify(Array.isArray(servico.enderecosAtividade) ? servico.enderecosAtividade.filter(Boolean) : (servico.enderecoAtividade ? [servico.enderecoAtividade] : [])),
+          JSON.stringify(Array.isArray(servico.localIds) ? servico.localIds.filter(Boolean) : []),
         ],
       );
     }
@@ -3184,6 +3700,28 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
   }
 
   const tenantId = req.auth.user.tenant.id;
+  let deterministic;
+  try {
+    deterministic = await extractProposalPdfDeterministically(parsed.buffer);
+  } catch (error) {
+    deterministic = {
+      paginasAnalisadas: null,
+      textoExtraido: "",
+      tabelasEncontradas: 0,
+      itensExtraidos: 0,
+      tabelas: [],
+      linhasDeterministicas: [],
+      metadadosPdf: {},
+      erro: error instanceof Error ? error.message : "Falha na extração determinística",
+    };
+  }
+  const sourceImportId = await withTransaction((client) => persistProposalPdfImport(client, {
+    tenantId,
+    userId: req.auth.user.id,
+    fileName,
+    parsed,
+    deterministic,
+  }));
   const [{ rows: clientRows }, { rows: serviceRows }] = await Promise.all([
     query(`SELECT id, razao_social, nome_fantasia, cnpj, endereco, municipio, uf
            FROM ciperprag_hub.clientes
@@ -3205,15 +3743,23 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
       buffer: parsed.buffer,
       context: buildProposalCatalogContext({ clients, services }),
     });
-    const draft = normalizeProposalAssistDraft(rawDraft, { clients, services });
+    const coverage = buildProposalPdfCoverage(deterministic, rawDraft.coberturaDocumento);
+    const draft = normalizeProposalAssistDraft({
+      ...rawDraft,
+      coberturaDocumento: coverage,
+      sourceImportId,
+      originalPdfHashSha256: sha256Hex(parsed.buffer),
+    }, { clients, services });
+    await withTransaction((client) => finalizeProposalPdfImport(client, { id: sourceImportId, coverage }));
     await logAuditEvent(pool, req, {
       entityType: "proposta",
       action: "proposal_ai_assist_requested",
       summary: `Rascunho de proposta extraído de PDF: ${fileName}`,
-      after: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", clienteId: draft.clienteId || null, servicos: draft.servicos.length, camposPendentes: draft.camposPendentes },
+      after: { fileName, bytes: parsed.bytes, sourceImportId, originalPdfHashSha256: draft.originalPdfHashSha256, coberturaDocumento: coverage, model: process.env.OPENAI_MODEL || "gpt-4o-mini", clienteId: draft.clienteId || null, servicos: draft.servicos.length, camposPendentes: draft.camposPendentes },
     });
-    return res.json({ ok: true, draft, meta: { fileName, bytes: parsed.bytes, model: process.env.OPENAI_MODEL || "gpt-4o-mini", arquivoTemporario: true } });
+    return res.json({ ok: true, draft, meta: { fileName, bytes: parsed.bytes, sourceImportId, originalPdfHashSha256: draft.originalPdfHashSha256, deterministic: { paginasAnalisadas: deterministic.paginasAnalisadas, tabelasEncontradas: deterministic.tabelasEncontradas, itensExtraidos: deterministic.itensExtraidos }, model: process.env.OPENAI_MODEL || "gpt-4o-mini", arquivoTemporario: false } });
   } catch (error) {
+    await withTransaction((client) => finalizeProposalPdfImport(client, { id: sourceImportId, status: "erro", coverage: { ...deterministic, erro: error instanceof Error ? error.message : "Falha na analise" } })).catch(() => undefined);
     return res.status(502).json({ error: error instanceof Error ? error.message : "Não foi possível analisar o PDF." });
   }
 });
@@ -3221,6 +3767,10 @@ app.post("/api/contract-templates/proposal-assist", requirePermission("contratos
 app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const tenantId = req.auth.user.tenant.id;
+  const commercialConfig = await getCommercialConfig(tenantId, req.auth.user.tenant.slug);
+  if (!commercialConfig.allowMinutaGeneration) {
+    return res.status(403).json({ error: "A geração de minutas está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   const next = await nextSequential("contrato_ultimo", tenantId);
   const year = new Date().getFullYear();
   const number = `MIN-${next}/${year}`;
@@ -3235,9 +3785,9 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,'minuta',$5,$6,$7,'rascunho',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+       VALUES ($1,$2,$3,$4,'minuta',$5,$6,$7,'rascunho',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17)`,
       [
         newId,
         tenantId,
@@ -3255,6 +3805,7 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
         JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
         item.escopo_tecnico,
         item.condicoes_comerciais,
+        item.source_pdf_import_id,
       ],
     );
     const { rows: services } = await client.query(
@@ -3267,8 +3818,8 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
     );
     for (const service of services) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           newId,
           service.servico_id,
@@ -3277,6 +3828,9 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
           service.frequencia,
           service.descricao_comercial,
           service.unidade_comercial,
+          service.endereco_atividade,
+          JSON.stringify(Array.isArray(service.enderecos_atividade) ? service.enderecos_atividade : normalizeJsonArray(service.enderecos_atividade)),
+          JSON.stringify(Array.isArray(service.locais_ids) ? service.locais_ids : normalizeJsonArray(service.locais_ids)),
         ],
       );
     }
@@ -3295,6 +3849,10 @@ app.post("/api/contract-templates/:id/generate-minuta", requirePermission("contr
 app.post("/api/contract-templates/:id/generate-contract", requirePermission("contratos.manage"), async (req, res) => {
   const id = req.params.id;
   const tenantId = req.auth.user.tenant.id;
+  const commercialConfig = await getCommercialConfig(tenantId, req.auth.user.tenant.slug);
+  if (!commercialConfig.allowContractGeneration) {
+    return res.status(403).json({ error: "A geração de contratos está desativada para esta empresa. Os registros históricos continuam disponíveis." });
+  }
   const next = await nextSequential("contrato_ultimo", tenantId);
   const year = new Date().getFullYear();
   const number = `CT-${next}/${year}`;
@@ -3310,9 +3868,9 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
       `INSERT INTO ciperprag_hub.contratos_templates (
          id, tenant_id, numero, cliente_id, tipo, vigencia_meses, forma_pagamento, prazo_pagamento_dias,
          status, data_criacao, observacoes, titulo, objeto, validade_dias, modalidade, locais_execucao,
-         escopo_tecnico, condicoes_comerciais
+         escopo_tecnico, condicoes_comerciais, source_pdf_import_id
        )
-       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16)`,
+       VALUES ($1,$2,$3,$4,'contrato',$5,$6,$7,'vigente',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17)`,
       [
         newId,
         tenantId,
@@ -3330,6 +3888,7 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
         JSON.stringify(Array.isArray(item.locais_execucao) ? item.locais_execucao : []),
         item.escopo_tecnico,
         item.condicoes_comerciais,
+        item.source_pdf_import_id,
       ],
     );
     const { rows: services } = await client.query(
@@ -3342,8 +3901,8 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
     );
     for (const service of services) {
       await client.query(
-        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO ciperprag_hub.contratos_templates_servicos (template_id, servico_id, quantidade, valor_unitario, frequencia, descricao_comercial, unidade_comercial, endereco_atividade, enderecos_atividade, locais_ids)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           newId,
           service.servico_id,
@@ -3352,6 +3911,9 @@ app.post("/api/contract-templates/:id/generate-contract", requirePermission("con
           service.frequencia,
           service.descricao_comercial,
           service.unidade_comercial,
+          service.endereco_atividade,
+          JSON.stringify(Array.isArray(service.enderecos_atividade) ? service.enderecos_atividade : normalizeJsonArray(service.enderecos_atividade)),
+          JSON.stringify(Array.isArray(service.locais_ids) ? service.locais_ids : normalizeJsonArray(service.locais_ids)),
         ],
       );
     }
@@ -3380,7 +3942,7 @@ app.post("/api/contract-templates/:id/issue-document", requirePermission("contra
     }
     const entityType = snapshot.documento.tipo;
     const template = COMMERCIAL_DOCUMENT_TEMPLATES[entityType];
-    const fileName = `${entityType}-${safeFileNamePart(snapshot.documento.numero || snapshot.documento.id)}.html`;
+    const fileName = `${entityType}-${safeFileNamePart(snapshot.documento.numero || snapshot.documento.id)}.pdf`;
     const html = buildCommercialDocumentHtml(snapshot);
     const attachment = await saveImmutableDocumentAttachment(client, {
       tenantId,
@@ -3639,7 +4201,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       userId: req.auth.user.id,
       entityType: "medicao",
       entityId: id,
-      fileName: `medicao-${number.replaceAll("/", "-")}.html`,
+      fileName: `medicao-${number.replaceAll("/", "-")}.pdf`,
       html: buildHistoricalMeasurementHtml(snapshot, { id, numero: number, cliente_nome: clienteNome, periodo_inicio: dataInicio, periodo_fim: dataFim, total }),
       metadata: { origem: "geracao_medicao", numero: number, periodo: { inicio: dataInicio, fim: dataFim } },
     });
@@ -3805,19 +4367,21 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1 AND tenant_id = $2", [agendamentoId, tenantId]);
     const ag = agRows[0];
     if (!ag) throw new Error("Agendamento não encontrado");
-    const { rows: contractRows } = await client.query(
-      `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
-       FROM ciperprag_hub.contratos c
-       LEFT JOIN ciperprag_hub.contratos_templates t
-         ON t.id = c.contrato_template_id
-        AND t.tenant_id = c.tenant_id
-       WHERE c.id = $1
-         AND c.tenant_id = $2`,
-      [ag.contrato_id, tenantId],
-    );
-    const contract = contractRows[0];
+    const { rows: contractRows } = ag.contrato_id
+      ? await client.query(
+        `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+         FROM ciperprag_hub.contratos c
+         LEFT JOIN ciperprag_hub.contratos_templates t
+           ON t.id = c.contrato_template_id
+          AND t.tenant_id = c.tenant_id
+         WHERE c.id = $1
+           AND c.tenant_id = $2`,
+        [ag.contrato_id, tenantId],
+      )
+      : { rows: [] };
+    const contract = contractRows[0] || null;
     const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-    if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+    if (ag.contrato_id && (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente")) {
       const error = new Error("Nao e possivel gerar OS: o agendamento precisa estar vinculado a contrato final vigente e com saldo operacional.");
       error.status = 400;
       throw error;
@@ -3826,7 +4390,13 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const customer = clientRows[0];
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
     const tech = techRows[0];
-    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, contract?.servico_catalogo_id || null);
+    const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, ag.servico_catalogo_id || contract?.servico_catalogo_id || null);
+    const scheduleRule = validateScheduleOrigin({ contractId: ag.contrato_id, contract, service: service ? { ...service, ativo: true, id: service.id } : null });
+    if (!scheduleRule.ok) {
+      const error = new Error(scheduleRule.error);
+      error.status = 400;
+      throw error;
+    }
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: numRows } = await client.query(
@@ -3839,9 +4409,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const orderId = makeId("OSDB");
     await client.query(
       `INSERT INTO ciperprag_hub.ordens_servico
-      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_execucao, tags, observacao, data_emissao, quantidade, unidade, status, fotos)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,CURRENT_DATE,1,$23,'aberta',$24)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, ag.servico, ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || null, []],
+      (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, servico_catalogo_id, status, fotos)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,$25,'aberta',$26)`,
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, service?.nome || ag.servico, service?.tipo || ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, service.id, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -3907,7 +4477,7 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
 
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
-  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao } = req.body;
+  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
   const tenantId = req.auth.user.tenant.id;
 
   const response = await withTransaction(async (client) => {
@@ -3917,7 +4487,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
 
     const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, tenantId]);
     const contract = contractRows[0];
-    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, contract?.servico_catalogo_id || null);
+    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, tenantId]);
@@ -4035,13 +4605,51 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_encerrado_em = NOW() WHERE id = $1 AND tenant_id = $3",
       [orderId, JSON.stringify(snapshot), tenantId],
     );
+
+    const stockUsage = Array.isArray(produtosUtilizados) ? produtosUtilizados : [];
+    if (!isNotExecuted && stockUsage.length) {
+      const { rows: existingMovements } = await client.query(
+        "SELECT produto_id FROM ciperprag_hub.estoque_movimentacoes WHERE tenant_id = $1 AND os_id = $2 AND tipo = 'saida' LIMIT 1",
+        [tenantId, orderId],
+      );
+      if (existingMovements.length === 0) {
+        for (const usage of stockUsage) {
+          const usageQuantity = Number(usage.quantidade || 0);
+          if (!usage.produtoId || !Number.isFinite(usageQuantity) || usageQuantity <= 0) continue;
+          const { rows: productRows } = await client.query(
+            "SELECT id, nome, quantidade_atual, unidade FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+            [usage.produtoId, tenantId],
+          );
+          const product = productRows[0];
+          if (!product) {
+            const error = new Error("Produto utilizado nao pertence a este tenant.");
+            error.status = 400;
+            throw error;
+          }
+          const beforeStock = Number(product.quantidade_atual || 0);
+          const afterStock = beforeStock - usageQuantity;
+          if (afterStock < 0) {
+            const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${beforeStock} ${product.unidade}.`);
+            error.status = 400;
+            throw error;
+          }
+          await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, afterStock, tenantId]);
+          await client.query(
+            `INSERT INTO ciperprag_hub.estoque_movimentacoes
+             (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
+             VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
+            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, order.servico_catalogo_id || contract?.servico_catalogo_id || service?.id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
+          );
+        }
+      }
+    }
     await saveImmutableDocumentAttachment(client, {
       tenantId,
       tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       entityType: "os",
       entityId: orderId,
-      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.html`,
+      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.pdf`,
       html: buildHistoricalOrderHtml(snapshot, updatedOrderRows[0]),
       metadata: { origem: "encerramento_os", osNumero: updatedOrderRows[0].numero, dataExecucao },
     });
@@ -4094,9 +4702,9 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     if (!isNotExecuted && recorrenciaDias > 0) {
       await client.query(
         `INSERT INTO ciperprag_hub.recorrencia_sugestoes
-         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico, tipo, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pendente')`,
-        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, order.servico, order.tipo, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
+         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico_catalogo_id, servico, tipo, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'pendente')`,
+        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, service?.id || null, order.servico, order.tipo, order.local_id || null, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
       );
     }
     await logAuditEvent(client, req, {
@@ -4143,6 +4751,128 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   res.json({ ok: true, hash: certificateResponse.hash, hashes: certificateResponse.hashes });
 });
 
+app.patch("/api/certificates/:id/revoke", requirePermission("certificados.manage"), async (req, res) => {
+  const certificateId = String(req.params.id || "").trim();
+  const reason = String(req.body.motivo || "").trim();
+  if (!reason || reason.length < 5) return res.status(400).json({ error: "Informe um motivo com pelo menos 5 caracteres para revogar o certificado." });
+  const tenantId = req.auth.user.tenant.id;
+  const { rows } = await query(
+    "SELECT id, hash, numero, status, os_id, os_numero, cliente_nome, servico FROM ciperprag_hub.certificados WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+    [certificateId, tenantId],
+  );
+  const certificate = rows[0];
+  if (!certificate) return res.status(404).json({ error: "Certificado nao encontrado." });
+  if (certificate.status === "revogado") return res.status(409).json({ error: "Este certificado ja esta revogado." });
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET status = 'revogado', revogado_em = NOW(), motivo_revogacao = $1
+       WHERE id = $2 AND tenant_id = $3 AND status = 'emitido'`,
+      [reason, certificateId, tenantId],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "certificado",
+      entityId: certificateId,
+      action: "certificate_revoked",
+      summary: `Certificado ${certificate.numero || certificate.hash} revogado`,
+      before: { status: certificate.status },
+      after: { status: "revogado", motivo: reason, hash: certificate.hash, osId: certificate.os_id },
+    });
+  });
+  res.json({ ok: true, id: certificateId, status: "revogado" });
+});
+
+app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage"), async (req, res) => {
+  const certificateId = String(req.params.id || "").trim();
+  const reason = String(req.body.motivo || "").trim();
+  if (!reason || reason.length < 5) return res.status(400).json({ error: "Informe um motivo com pelo menos 5 caracteres para reemitir o certificado." });
+  const tenantId = req.auth.user.tenant.id;
+
+  const result = await withTransaction(async (client) => {
+    const { rows: certificateRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.certificados WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [certificateId, tenantId],
+    );
+    const certificate = certificateRows[0];
+    if (!certificate) {
+      const error = new Error("Certificado nao encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    if (certificate.status === "revogado") {
+      const error = new Error("Este certificado ja esta revogado e nao pode ser reemitido novamente.");
+      error.status = 409;
+      throw error;
+    }
+
+    const { rows: orderRows } = await client.query(
+      "SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      [certificate.os_id, tenantId],
+    );
+    const order = orderRows[0];
+    if (!order) {
+      const error = new Error("A OS de origem do certificado nao foi encontrada.");
+      error.status = 409;
+      throw error;
+    }
+
+    const originalPrimaryCertificateHash = order.certificado_hash;
+    const replacementOrder = {
+      ...order,
+      certificado_hash: null,
+      tag_equipamento_servico: certificate.tag_equipamento_servico || null,
+      tags: certificate.tag_equipamento_servico || null,
+    };
+    const issued = await issueCertificateForOrder(client, replacementOrder, {
+      tenantId,
+      tenantSlug: req.auth.user.tenant.slug,
+      userId: req.auth.user.id,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    if (originalPrimaryCertificateHash !== certificate.hash) {
+      await client.query(
+        "UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3",
+        [order.id, originalPrimaryCertificateHash, tenantId],
+      );
+    }
+    const { rows: replacementRows } = await client.query(
+      "SELECT id, numero, hash FROM ciperprag_hub.certificados WHERE tenant_id = $1 AND hash = ANY($2::text[]) ORDER BY emitido_em DESC",
+      [tenantId, issued.hashes],
+    );
+    const replacement = replacementRows[0];
+    if (!replacement) {
+      const error = new Error("Nao foi possivel localizar o certificado reemitido.");
+      error.status = 500;
+      throw error;
+    }
+
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET status = 'revogado', revogado_em = NOW(), motivo_revogacao = $1, substituido_por_id = $2
+       WHERE id = $3 AND tenant_id = $4`,
+      [`${reason} Substituido por ${replacement.numero || replacement.hash}.`, replacement.id, certificateId, tenantId],
+    );
+    await client.query(
+      `UPDATE ciperprag_hub.certificados
+       SET substitui_certificado_id = $1
+       WHERE tenant_id = $2 AND hash = ANY($3::text[])`,
+      [certificateId, tenantId, issued.hashes],
+    );
+    await logAuditEvent(client, req, {
+      entityType: "certificado",
+      entityId: certificateId,
+      action: "certificate_reissued",
+      summary: `Certificado ${certificate.numero || certificate.hash} substituido por ${replacement.numero || replacement.hash}`,
+      before: { status: certificate.status, hash: certificate.hash },
+      after: { status: "revogado", replacementId: replacement.id, replacementHashes: issued.hashes, motivo: reason },
+    });
+    return { oldId: certificateId, replacementId: replacement.id, hash: issued.primaryHash, hashes: issued.hashes };
+  });
+  res.json({ ok: true, ...result });
+});
+
 app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"), async (req, res) => {
   const id = req.params.id;
   const action = req.body.action;
@@ -4154,29 +4884,31 @@ app.patch("/api/recurrence-suggestions/:id", requirePermission("agenda.manage"),
   if (action === "confirm") {
     await withTransaction(async (client) => {
       const newId = makeId("AG");
-      const { rows: contractRows } = await client.query(
-        `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
-         FROM ciperprag_hub.contratos c
-         LEFT JOIN ciperprag_hub.contratos_templates t
-           ON t.id = c.contrato_template_id
-          AND t.tenant_id = c.tenant_id
-         WHERE c.id = $1
-           AND c.tenant_id = $2
-         LIMIT 1`,
-        [suggestion.contrato_id, tenantId],
-      );
-      const contract = contractRows[0];
+      const { rows: contractRows } = suggestion.contrato_id
+        ? await client.query(
+          `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
+           FROM ciperprag_hub.contratos c
+           LEFT JOIN ciperprag_hub.contratos_templates t
+             ON t.id = c.contrato_template_id
+            AND t.tenant_id = c.tenant_id
+           WHERE c.id = $1
+             AND c.tenant_id = $2
+           LIMIT 1`,
+          [suggestion.contrato_id, tenantId],
+        )
+        : { rows: [] };
+      const contract = contractRows[0] || null;
       const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-      if (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
+      if (suggestion.contrato_id && (!contract || contract.status !== "ativo" || balance <= 0 || contract.template_tipo !== "contrato" || contract.template_status !== "vigente")) {
         const error = new Error("Nao e possivel confirmar recorrencia: contrato final sem saldo operacional disponivel.");
         error.status = 400;
         throw error;
       }
       await client.query(
         `INSERT INTO ciperprag_hub.agendamentos
-         (id, tenant_id, contrato_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'agendado',NOW())`,
-        [newId, tenantId, suggestion.contrato_id, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
+         (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'agendado',NOW())`,
+        [newId, tenantId, suggestion.contrato_id, suggestion.servico_catalogo_id || null, suggestion.cliente_id, suggestion.cliente_nome, suggestion.cliente_cnpj, suggestion.servico, suggestion.tipo, suggestion.suggested_date, suggestion.local_id || null, suggestion.local_execucao, suggestion.tags, suggestion.observacao, suggestion.tecnicos_ids || [], suggestion.tecnicos_nomes || [], suggestion.veiculo_id, suggestion.veiculo_descricao],
       );
       await client.query("UPDATE ciperprag_hub.recorrencia_sugestoes SET status = 'confirmada' WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
       await logAuditEvent(client, req, {

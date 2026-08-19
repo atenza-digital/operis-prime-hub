@@ -3,8 +3,8 @@ import { calculateProposalContractEstimate, calculateProposalMonthlyTotal } from
 
 describe("cálculo comercial da proposta", () => {
   const services = [
-    { quantidade: 2, valorUnitario: 180 },
-    { quantidade: 1, valorUnitario: 620 },
+    { quantidade: 2, valorUnitario: 180, frequencia: "Mensal" },
+    { quantidade: 1, valorUnitario: 620, frequencia: "Mensal" },
   ];
 
   it("calcula o valor mensal a partir dos itens do catálogo", () => {
@@ -18,5 +18,16 @@ describe("cálculo comercial da proposta", () => {
   it("não gera estimativa negativa quando a vigência está vazia ou inválida", () => {
     expect(calculateProposalContractEstimate(services, 0)).toBe(0);
     expect(calculateProposalContractEstimate(services, -3)).toBe(0);
+  });
+
+  it("calcula frequencia manual sem multiplicar automaticamente por 12", () => {
+    expect(calculateProposalContractEstimate([{ quantidade: 1, valorUnitario: 120, frequencia: "120 dias" }], 12)).toBe(360);
+  });
+
+  it("usa as ocorrencias de cada item quando as frequencias sao diferentes", () => {
+    expect(calculateProposalContractEstimate([
+      { quantidade: 1, valorUnitario: 100, frequencia: "Mensal" },
+      { quantidade: 1, valorUnitario: 200, frequencia: "Trimestral" },
+    ], 12)).toBe(2000);
   });
 });

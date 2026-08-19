@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-COM-001 | Cliente deve existir antes de proposta, contrato, agendamento ou OS. | Regra geral | Comercial | Cliente | Comercial/admin | Dados minimos do cliente | Cliente disponivel no fluxo | Cliente inativo | CNPJ/nome/endereco conforme regra | Parcial | `/api/clients` | Parcial | Campos obrigatorios por segmento |
 | RN-COM-002 | Servicos/produtos devem alimentar proposta, contrato, OS e certificado. | Regra geral | Comercial | Servico, POP | Comercial/qualidade | Servico ativo | Catalogo reutilizavel | Servico avulso | Nome, unidade, certificado, POP | Parcial | `/api/services` | Sim | Como tratar servico especifico |
-| RN-COM-003 | POP, EPI e normas devem ser claros para usuarios nao tecnicos. | Auditoria | Comercial | Servico, POP | Comercial/qualidade | Campo tecnico visivel | Ajuda contextual | Cliente sem POP | Microcopy e anexos | Planejada | feedback cliente | Sim | Formatos de upload |
+| RN-COM-003 | POP, EPI e normas devem ser claros para usuarios nao tecnicos. | Auditoria | Comercial | Servico, POP | Comercial/qualidade | Campo tecnico visivel | Ajuda contextual e upload opcional de POP pronto | Cliente sem POP | Microcopy, assinatura do arquivo, tamanho, MIME e tenant | Implementado | `POST /api/services/:id/pop-file`, politica `servico_pop.pop_aprovado`, auditoria | Sim | Antivirus/quarentena futura |
 
 ## Contratos
 
@@ -14,7 +14,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-CTR-001 | Proposta aprovada pode gerar contrato. | Regra geral | Comercial | Proposta, contrato | Comercial | Proposta com cliente e itens | Contrato criado | Contrato do cliente | Status aprovado | Parcial | `/api/contract-templates/:id/generate-contract` | Parcial | Aceite formal |
 | RN-CTR-002 | Contrato vigente deve liberar saldo operacional. | Regra geral | Comercial/Operacional | Contrato, saldo | Comercial/operacional | Contrato vigente | Agenda pode usar item | Sem saldo/vencido | Quantidade e executado | Parcial | sync operacional | Sim | Regra de cancelamento |
-| RN-CTR-003 | Valores comerciais nao devem ser visiveis a perfis sem permissao. | Decisao confirmada | Comercial | Contrato | Operacional | Perfil sem valor | Ocultar valores | Admin/comercial/financeiro | API e UI | Pendente | auditoria | Sim por permissao | Modelo de permissao final |
+| RN-CTR-003 | Valores comerciais nao devem ser visiveis a perfis sem permissao. | Decisao confirmada | Comercial | Contrato | Operacional | Perfil sem valor | Ocultar valores | Admin/comercial/financeiro | API e UI | Implementado | `server/commercial-visibility.mjs`, `/api/bootstrap` | Sim por permissao | Validar matriz final |
 
 ## Agendamento
 
@@ -40,14 +40,14 @@
 | RN-CER-001 | Certificado so pode ser emitido para servico elegivel. | Regra geral | Qualidade | Servico, OS, certificado | Qualidade/admin | OS encerrada e servico elegivel | Certificado emitido | Revogacao | `geraCertificado` | Parcial | `/api/orders/:id/certificado` | Sim | Certificado manual? |
 | RN-CER-002 | Certificado deve ter hash e QR Code publico. | Regra geral | Qualidade | Certificado | Qualidade/publico | Certificado emitido | Validacao publica | Revogado/vencido | Hash unico | Parcial | `/api/certificates/:hash` | Nao/tema sim | URL publica final |
 | RN-CER-003 | Fotos do certificado devem vir das evidencias da OS, ate limite configurado. | Requisito configuravel | Qualidade | OS, anexo | Qualidade | Fotos anexadas | Fotos no certificado | Sem fotos | Tipo e quantidade | Parcial | CertificadoImpressao | Sim | Limite por tenant |
-| RN-CER-004 | Revogacao/reemissao deve preservar historico. | Regra geral | Qualidade | Certificado | Admin/qualidade | Certificado emitido | Status revogado/reemitido | Erro operacional | Motivo obrigatorio | Planejada | migrations status | Sim | Modelo juridico |
+| RN-CER-004 | Revogacao/reemissao deve preservar historico. | Regra geral | Qualidade | Certificado | Admin/qualidade | Certificado emitido | Status revogado/reemitido e vinculo entre origem/substituto | Erro operacional | Motivo obrigatorio, tenant e auditoria | Implementado | `PATCH /api/certificates/:id/revoke`, `POST /api/certificates/:id/reissue`, migration 027 | Sim | Modelo juridico |
 
 ## Medicao
 
 | ID | Descricao | Origem | Modulo | Entidades | Perfis | Pre-condicoes | Resultado | Excecoes | Validacoes | Status | Evidencia | Configuravel por tenant | Duvidas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RN-MED-001 | Medicao consolida OS encerradas por cliente e periodo. | Regra geral | Financeiro | OS, medicao | Financeiro | OS encerrada | Medicao gerada | OS cancelada | Periodo/cliente/status | Parcial | `/api/measurements/generate` | Sim | Agrupar por contrato? |
-| RN-MED-002 | Mesma OS nao deve entrar em duas medicoes ativas. | Regra geral | Financeiro | OS, medicao_itens | Financeiro | OS ja medida | Bloqueio/alerta | Medicao cancelada | Unicidade logica | Pendente | auditoria | Nao | Regra de cancelamento |
+| RN-MED-002 | Mesma OS nao deve entrar em duas medicoes ativas. | Regra geral | Financeiro | OS, medicao_itens | Financeiro | OS ja medida | Bloqueio/alerta | Medicao cancelada | Unicidade logica | Implementado | `ux_medicao_itens_tenant_os_ativa`, `/api/measurements/generate` | Nao | Regra de cancelamento definida |
 | RN-MED-003 | Medicao acompanha NF/pagamento sem substituir ERP. | Confirmada | Financeiro | Medicao | Financeiro | Medicao emitida | Status financeiro operacional | Cancelada | Status permitido | Parcial | `/api/measurements/:id/financial` | Sim | Nomes finais dos status |
 
 ## SaaS

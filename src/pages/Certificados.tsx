@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { generateCertificateForOrder, getBootstrap, type BootstrapData, type CertificadoApp } from "@/lib/api";
+import { generateCertificateForOrder, getBootstrap, reissueCertificate, revokeCertificate, type BootstrapData, type CertificadoApp } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ function addDays(dateStr: string, days: number) {
 }
 
 function validadeStatus(cert: CertificadoApp) {
+  if (cert.status === "revogado") return "revoked";
   if (!cert.validadeDias) return "valid";
   const expiry = new Date(`${addDays(cert.dataExecucao, cert.validadeDias)}T23:59:59`);
   const today = new Date();
@@ -42,6 +43,7 @@ export default function Certificados() {
   const [clienteFilter, setClienteFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [gerando, setGerando] = useState<string | null>(null);
+  const [acaoCertificado, setAcaoCertificado] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,6 +105,37 @@ export default function Certificados() {
     toast.success(response.hashes && response.hashes.length > 1 ? `${response.hashes.length} certificados gerados, um para cada TAG.` : "Certificado gerado!");
     setGerando(null);
     reload();
+  }
+
+  async function handleRevogar(cert: CertificadoApp) {
+    const motivo = window.prompt("Informe o motivo da revogacao:", "Correcao de dados do documento");
+    if (!motivo?.trim()) return;
+    setAcaoCertificado(cert.id);
+    try {
+      await revokeCertificate(cert.id, motivo.trim());
+      toast.success("Certificado revogado e mantido no historico.");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Nao foi possivel revogar o certificado.");
+    } finally {
+      setAcaoCertificado(null);
+    }
+  }
+
+  async function handleReemitir(cert: CertificadoApp) {
+    if (!window.confirm("Reemitir este certificado criara um novo documento e revogara formalmente o atual. Continuar?")) return;
+    const motivo = window.prompt("Informe o motivo da reemissao:", "Correcao de dados do documento");
+    if (!motivo?.trim()) return;
+    setAcaoCertificado(cert.id);
+    try {
+      const response = await reissueCertificate(cert.id, motivo.trim());
+      toast.success(`Certificado reemitido: ${response.hash}`);
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Nao foi possivel reemitir o certificado.");
+    } finally {
+      setAcaoCertificado(null);
+    }
   }
 
   async function handleCompartilhar(cert: CertificadoApp) {
@@ -192,9 +225,9 @@ export default function Certificados() {
         <TabsList><TabsTrigger value="certificados">Certificados</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger></TabsList>
         <TabsContent value="certificados" className="space-y-4">
           <div className="flex gap-1">
-            {["todos", "valid", "expiring", "expired"].map((item) => (
+            {["todos", "valid", "expiring", "expired", "revoked"].map((item) => (
               <button key={item} onClick={() => setStatusFilter(item)} className={cn("rounded-lg px-3 py-1.5 text-xs font-medium transition-all", statusFilter === item ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted")}>
-                {item === "todos" ? "Todos" : item === "valid" ? "Válidos" : item === "expiring" ? "A vencer" : "Vencidos"}
+                {item === "todos" ? "Todos" : item === "valid" ? "Válidos" : item === "expiring" ? "A vencer" : item === "expired" ? "Vencidos" : "Revogados"}
               </button>
             ))}
           </div>
@@ -205,11 +238,11 @@ export default function Certificados() {
               {certsFiltrados.map((cert) => {
                 const status = validadeStatus(cert);
                 return (
-                  <Card key={cert.id} className={cn("hover:shadow-md transition-all", status === "expired" && "border-destructive/30 bg-destructive/5", status === "expiring" && "border-amber-300")}>
+                  <Card key={cert.id} className={cn("hover:shadow-md transition-all", (status === "expired" || status === "revoked") && "border-destructive/30 bg-destructive/5", status === "expiring" && "border-amber-300")}>
                     <CardContent className="space-y-3 p-4">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5"><Hash className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="font-mono text-xs font-bold text-primary">{cert.hash}</span></div>
-                        <Badge variant={status === "expired" ? "destructive" : status === "expiring" ? "secondary" : "default"}>{status === "expired" ? "Vencido" : status === "expiring" ? "A vencer" : "Válido"}</Badge>
+                        <Badge variant={status === "expired" || status === "revoked" ? "destructive" : status === "expiring" ? "secondary" : "default"}>{status === "expired" ? "Vencido" : status === "revoked" ? "Revogado" : status === "expiring" ? "A vencer" : "Válido"}</Badge>
                       </div>
                       <div><p className="truncate text-sm font-semibold leading-tight">{cert.clienteNome}</p><p className="mt-0.5 text-xs text-muted-foreground">{cert.servico}</p></div>
                       <div className="space-y-1 text-xs text-muted-foreground">
@@ -218,9 +251,11 @@ export default function Certificados() {
                         <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> <span className="truncate">{cert.localExecucao || "Local não informado"}</span></div>
                         {cert.tagEquipamentoServico ? <div className="flex items-center gap-1.5"><Tag className="h-3 w-3 shrink-0" /> TAG: <span className="font-medium text-foreground">{cert.tagEquipamentoServico}</span></div> : null}
                       </div>
-                      <div className="flex gap-2 border-t pt-1">
+                      <div className="flex flex-wrap gap-2 border-t pt-1">
                         <Button size="sm" className="h-7 flex-1 gap-1.5 text-xs" onClick={() => imprimirCertificado(cert)}><Printer className="h-3 w-3" /> Imprimir PDF</Button>
                         <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleCompartilhar(cert)} title="Compartilhar"><Share2 className="h-3.5 w-3.5" /></Button>
+                        {cert.status !== "revogado" ? <Button size="sm" variant="ghost" className="h-7 px-2 text-amber-700" onClick={() => handleRevogar(cert)} disabled={acaoCertificado === cert.id}>Revogar</Button> : null}
+                        {cert.status !== "revogado" ? <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => handleReemitir(cert)} disabled={acaoCertificado === cert.id}>Reemitir</Button> : null}
                       </div>
                     </CardContent>
                   </Card>

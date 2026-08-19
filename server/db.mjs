@@ -46,6 +46,21 @@ export async function ensureDatabaseShape() {
   await query("SET search_path TO ciperprag_hub");
 
   await query(`
+    INSERT INTO ciperprag_hub.permissoes (codigo, modulo, acao, descricao)
+    VALUES ('estoque.manage', 'estoque', 'manage', 'Gerenciar produtos, saldo e movimentos de estoque')
+    ON CONFLICT (codigo) DO UPDATE
+    SET descricao = EXCLUDED.descricao
+  `);
+  await query(`
+    INSERT INTO ciperprag_hub.perfil_permissoes (perfil_id, permissao_id)
+    SELECT p.id, perm.id
+    FROM ciperprag_hub.perfis p
+    JOIN ciperprag_hub.permissoes perm ON perm.codigo = 'estoque.manage'
+    WHERE p.codigo IN ('admin_empresa', 'comercial', 'administrativo')
+    ON CONFLICT DO NOTHING
+  `);
+
+  await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.empresa_config
     ADD COLUMN IF NOT EXISTS certificado_validade_padrao_dias INTEGER NOT NULL DEFAULT 30,
     ADD COLUMN IF NOT EXISTS certificado_texto_legal TEXT,
@@ -56,7 +71,8 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS cor_primaria VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cor_secundaria VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cor_destaque VARCHAR(20),
-    ADD COLUMN IF NOT EXISTS certificado_config JSONB NOT NULL DEFAULT '{}'::jsonb
+    ADD COLUMN IF NOT EXISTS certificado_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS commercial_config JSONB NOT NULL DEFAULT '{}'::jsonb
   `);
 
   await query(`
@@ -266,6 +282,7 @@ export async function ensureDatabaseShape() {
     ALTER TABLE IF EXISTS ciperprag_hub.agendamentos
     ADD COLUMN IF NOT EXISTS cliente_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cliente_cnpj VARCHAR(18),
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS tipo VARCHAR(15),
     ADD COLUMN IF NOT EXISTS local_execucao TEXT,
     ADD COLUMN IF NOT EXISTS tags TEXT,
@@ -275,8 +292,16 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS veiculo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS veiculo_descricao TEXT,
     ADD COLUMN IF NOT EXISTS os_id VARCHAR(30),
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)
   `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.ordens_servico
+    ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_agendamentos_local ON ciperprag_hub.agendamentos(tenant_id, local_id)");
+  await query("CREATE INDEX IF NOT EXISTS idx_ordens_servico_local ON ciperprag_hub.ordens_servico(tenant_id, local_id)");
 
   await query(`
     DO $$
@@ -329,10 +354,13 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS checklist_respostas JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS nao_executada BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT,
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS snapshot_emitido_em TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS snapshot_encerrado_em TIMESTAMPTZ
   `);
+  await query("CREATE INDEX IF NOT EXISTS idx_ordens_servico_servico_catalogo ON ciperprag_hub.ordens_servico(tenant_id, servico_catalogo_id)");
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.certificados ALTER COLUMN contrato_id DROP NOT NULL");
 
   await query(`
     UPDATE ciperprag_hub.ordens_servico
@@ -405,7 +433,9 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'emitido',
     ADD COLUMN IF NOT EXISTS revogado_em TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT
+    ADD COLUMN IF NOT EXISTS motivo_revogacao TEXT,
+    ADD COLUMN IF NOT EXISTS substituido_por_id VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS substitui_certificado_id VARCHAR(30)
   `);
 
   await query(`
@@ -439,7 +469,8 @@ export async function ensureDatabaseShape() {
       cliente_id VARCHAR(20),
       cliente_nome TEXT NOT NULL,
       cliente_cnpj VARCHAR(18) NOT NULL,
-      contrato_id VARCHAR(20) NOT NULL,
+      contrato_id VARCHAR(20),
+      servico_catalogo_id VARCHAR(20),
       servico TEXT NOT NULL,
       tipo VARCHAR(15) NOT NULL,
       local_execucao TEXT,
@@ -647,8 +678,104 @@ export async function ensureDatabaseShape() {
     ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates_servicos
     ADD COLUMN IF NOT EXISTS descricao_comercial TEXT,
     ADD COLUMN IF NOT EXISTS unidade_comercial TEXT,
-    ADD COLUMN IF NOT EXISTS endereco_atividade TEXT
+    ADD COLUMN IF NOT EXISTS endereco_atividade TEXT,
+    ADD COLUMN IF NOT EXISTS enderecos_atividade JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS locais_ids JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes
+    ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
+    ALTER COLUMN contrato_id DROP NOT NULL
+  `);
+  await query("ALTER TABLE IF EXISTS ciperprag_hub.recorrencia_sugestoes ADD COLUMN IF NOT EXISTS local_id VARCHAR(30)");
+
+  await query(`
+    ALTER TABLE IF EXISTS ciperprag_hub.contratos_templates
+    ADD COLUMN IF NOT EXISTS source_pdf_import_id VARCHAR(40)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.proposta_pdf_importacoes (
+      id VARCHAR(40) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      template_id VARCHAR(30),
+      nome_arquivo TEXT NOT NULL,
+      mime_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+      tamanho_bytes INTEGER NOT NULL,
+      conteudo_base64 TEXT NOT NULL,
+      hash_sha256 VARCHAR(64) NOT NULL,
+      texto_extraido TEXT,
+      paginas_analisadas INTEGER,
+      tabelas_encontradas INTEGER NOT NULL DEFAULT 0,
+      itens_extraidos INTEGER NOT NULL DEFAULT 0,
+      cobertura JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status VARCHAR(20) NOT NULL DEFAULT 'recebido',
+      criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      analisado_em TIMESTAMPTZ,
+      CONSTRAINT proposta_pdf_importacoes_status_check CHECK (status IN ('recebido','analisado','erro')),
+      CONSTRAINT proposta_pdf_importacoes_hash_unique UNIQUE (tenant_id, hash_sha256)
+    )
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_proposta_pdf_importacoes_tenant ON ciperprag_hub.proposta_pdf_importacoes(tenant_id, criado_em DESC)");
+  await query("CREATE INDEX IF NOT EXISTS idx_proposta_pdf_importacoes_template ON ciperprag_hub.proposta_pdf_importacoes(tenant_id, template_id)");
+
+  // Catalog and stock are tenant-scoped so the commercial catalog can feed
+  // field execution without keeping operational quantities in the browser.
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.produtos_estoque (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      codigo VARCHAR(60) NOT NULL,
+      nome TEXT NOT NULL,
+      descricao TEXT,
+      unidade VARCHAR(30) NOT NULL DEFAULT 'un.',
+      quantidade_atual NUMERIC(12,3) NOT NULL DEFAULT 0,
+      estoque_minimo NUMERIC(12,3) NOT NULL DEFAULT 0,
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT produtos_estoque_quantidade_check CHECK (quantidade_atual >= 0),
+      CONSTRAINT produtos_estoque_minimo_check CHECK (estoque_minimo >= 0),
+      CONSTRAINT produtos_estoque_codigo_unique UNIQUE (tenant_id, codigo)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.servicos_catalogo_produtos (
+      id BIGSERIAL PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      servico_id VARCHAR(20) NOT NULL REFERENCES ciperprag_hub.servicos_catalogo(id) ON DELETE CASCADE,
+      produto_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.produtos_estoque(id) ON DELETE CASCADE,
+      quantidade_prevista NUMERIC(12,3) NOT NULL DEFAULT 1,
+      unidade VARCHAR(30),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT servicos_catalogo_produtos_qty_check CHECK (quantidade_prevista > 0),
+      CONSTRAINT servicos_catalogo_produtos_unique UNIQUE (tenant_id, servico_id, produto_id)
+    )
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS ciperprag_hub.estoque_movimentacoes (
+      id VARCHAR(30) PRIMARY KEY,
+      tenant_id UUID NOT NULL REFERENCES ciperprag_hub.tenants(id) ON DELETE CASCADE,
+      produto_id VARCHAR(30) NOT NULL REFERENCES ciperprag_hub.produtos_estoque(id),
+      tipo VARCHAR(20) NOT NULL,
+      quantidade NUMERIC(12,3) NOT NULL,
+      saldo_anterior NUMERIC(12,3) NOT NULL,
+      saldo_posterior NUMERIC(12,3) NOT NULL,
+      os_id VARCHAR(30),
+      servico_id VARCHAR(20),
+      observacao TEXT,
+      criado_por UUID REFERENCES ciperprag_hub.usuarios(id),
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT estoque_movimentacoes_tipo_check CHECK (tipo IN ('entrada','saida','ajuste','devolucao','perda')),
+      CONSTRAINT estoque_movimentacoes_quantidade_check CHECK (quantidade > 0),
+      CONSTRAINT estoque_movimentacoes_saldo_check CHECK (saldo_anterior >= 0 AND saldo_posterior >= 0)
+    )
+  `);
+  await query("CREATE INDEX IF NOT EXISTS idx_produtos_estoque_tenant ON ciperprag_hub.produtos_estoque(tenant_id, ativo, nome)");
+  await query("CREATE INDEX IF NOT EXISTS idx_estoque_movimentos_produto ON ciperprag_hub.estoque_movimentacoes(tenant_id, produto_id, criado_em DESC)");
+  await query("CREATE INDEX IF NOT EXISTS idx_servicos_catalogo_produtos_servico ON ciperprag_hub.servicos_catalogo_produtos(tenant_id, servico_id)");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos DROP CONSTRAINT IF EXISTS evidencias_anexos_entidade_check");
   await query("ALTER TABLE IF EXISTS ciperprag_hub.evidencias_anexos ADD CONSTRAINT evidencias_anexos_entidade_check CHECK (entidade_tipo IN ('os','certificado','medicao','servico_pop','cliente','contrato','proposta','minuta'))");
 

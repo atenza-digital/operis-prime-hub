@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, FileCheck2, FileUp, Hash, Image, ReceiptText, Save, Settings, ShieldCheck, Upload } from "lucide-react";
+import { Building2, FileCheck2, FileSignature, FileUp, Hash, Image, ReceiptText, Save, Settings, ShieldCheck, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 const defaultEmpresa: EmpresaConfig = {
@@ -33,6 +33,11 @@ const defaultEmpresa: EmpresaConfig = {
   telefoneEmergencia: "",
   medicaoFormaPagamentoPadrao: "Medição mensal - NF/Boleto",
   medicaoLocalEntregaPadrao: "",
+  commercialConfig: {
+    allowContractGeneration: true,
+    allowMinutaGeneration: true,
+    showMonthlyContractValue: true,
+  },
   certificadoConfig: {
     templateCodigo: "certificado-garantia",
     templateVersao: "saas-tenant-v1",
@@ -311,7 +316,19 @@ export default function Configuracoes() {
     setLoading(true);
     try {
       const data = await getBootstrap();
-      const mergedEmpresa = { ...defaultEmpresa, ...data.companyConfig, logoUrl: data.companyConfig?.logoUrl || "" };
+      const tenantIsCiperprag = data.companyConfig?.tenantSlug === "ciperprag";
+      const mergedEmpresa = {
+        ...defaultEmpresa,
+        ...data.companyConfig,
+        logoUrl: data.companyConfig?.logoUrl || "",
+        commercialConfig: {
+          ...defaultEmpresa.commercialConfig,
+          ...(tenantIsCiperprag
+            ? { allowContractGeneration: false, allowMinutaGeneration: false, showMonthlyContractValue: false }
+            : {}),
+          ...(data.companyConfig?.commercialConfig || {}),
+        },
+      };
       setEmpresa(mergedEmpresa);
       setCertificadoConfigText(JSON.stringify(mergedEmpresa.certificadoConfig || {}, null, 2));
       setNumeracao({ ...defaultNumeracao, ...data.numberingConfig });
@@ -557,6 +574,44 @@ export default function Configuracoes() {
                   <Label>Responsável Técnico</Label>
                   <Input value={empresa.responsavelTecnico} onChange={(event) => setEmpresa({ ...empresa, responsavelTecnico: event.target.value })} />
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg"><FileSignature className="h-5 w-5" />Disponibilidade comercial</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Controle o que esta empresa pode gerar no fluxo comercial. Desativar uma opção não remove documentos históricos nem altera os demais tenants.
+              </p>
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ["allowMinutaGeneration", "Permitir gerar minutas", "Mantém disponível a minuta a partir de uma proposta aprovada."],
+                  ["allowContractGeneration", "Permitir gerar contratos", "Mantém disponível o contrato final que libera a operação."],
+                  ["showMonthlyContractValue", "Exibir valor mensal em contratos", "Controla a exibição de valores em novos documentos contratuais."],
+                ].map(([key, title, description]) => {
+                  const configKey = key as "allowContractGeneration" | "allowMinutaGeneration" | "showMonthlyContractValue";
+                  const checked = empresa.commercialConfig?.[configKey] ?? true;
+                  return (
+                    <label key={key} className="flex cursor-pointer gap-3 rounded-2xl border p-4 transition-colors hover:bg-muted/40">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => setEmpresa((previous) => ({
+                          ...previous,
+                          commercialConfig: { ...previous.commercialConfig, [configKey]: event.target.checked },
+                        }))}
+                        className="mt-1 h-4 w-4 accent-primary"
+                      />
+                      <span className="space-y-1">
+                        <span className="block text-sm font-semibold">{title}</span>
+                        <span className="block text-xs text-muted-foreground">{description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

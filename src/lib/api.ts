@@ -91,7 +91,37 @@ export interface ServicoCatalogo {
   popMateriais?: string[];
   popAprovadoPor?: string;
   popAprovadoEm?: string;
+  produtosEstoque?: Array<{
+    produtoId: string;
+    produtoNome?: string;
+    produtoCodigo?: string;
+    quantidadePrevista: number;
+    unidade?: string;
+  }>;
   ativo: boolean;
+}
+
+export interface ProdutoEstoqueApp {
+  id: string;
+  codigo: string;
+  nome: string;
+  descricao: string;
+  unidade: string;
+  quantidadeAtual: number;
+  estoqueMinimo: number;
+  ativo: boolean;
+  atualizadoEm?: string;
+  movimentos: Array<{
+    id: string;
+    tipo: "entrada" | "saida" | "ajuste" | "devolucao" | "perda";
+    quantidade: number;
+    saldoAnterior: number;
+    saldoPosterior: number;
+    osId?: string | null;
+    servicoId?: string | null;
+    observacao?: string | null;
+    criadoEm?: string;
+  }>;
 }
 
 export interface Contrato {
@@ -127,11 +157,13 @@ export interface AgendamentoApp {
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
-  contratoId: string;
+  contratoId?: string | null;
+  servicoCatalogoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   dataAgendada: string;
   localExecucao: string;
+  localId?: string;
   tags?: string;
   observacao?: string;
   tecnicosIds?: string[];
@@ -176,7 +208,7 @@ export interface OSApp {
   clienteCnpj: string;
   clienteEndereco?: string;
   clienteLogoUrl?: string;
-  contratoId: string;
+  contratoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   tecnicoNome: string;
@@ -215,7 +247,7 @@ export interface CertificadoApp {
   clienteCnpj: string;
   clienteEndereco?: string;
   clienteLogoUrl?: string;
-  contratoId: string;
+  contratoId?: string | null;
   servico: string;
   tecnicoNome: string;
   localExecucao: string;
@@ -228,6 +260,8 @@ export interface CertificadoApp {
   status?: "emitido" | "revogado";
   revogadoEm?: string | null;
   motivoRevogacao?: string | null;
+  substituidoPorId?: string | null;
+  substituiCertificadoId?: string | null;
   fotos?: string[];
 }
 
@@ -250,13 +284,15 @@ export interface CertificateVerification {
   emitidoEm: string;
   validadeDias: number;
   validadeAte?: string | null;
-  status: "valid" | "expired";
+  status: "valid" | "expired" | "revoked";
   produtosQuimicos?: string[];
   produtosDetalhados?: Array<Record<string, string>>;
   snapshotDados?: Record<string, unknown>;
   certificateStatus?: "emitido" | "revogado";
   revogadoEm?: string | null;
   motivoRevogacao?: string | null;
+  substituidoPorId?: string | null;
+  substituiCertificadoId?: string | null;
   tagEquipamentoServico?: string;
   quantidade?: number;
   unidade?: string;
@@ -308,6 +344,8 @@ export interface ContratoServico {
   descricaoComercial?: string;
   unidadeComercial?: string;
   enderecoAtividade?: string;
+  enderecosAtividade?: string[];
+  localIds?: string[];
   contratoOperacionalId?: string;
   contratoOperacionalStatus?: "ativo" | "pendente" | "vencido";
   contratoOperacionalExecutado?: number;
@@ -339,6 +377,7 @@ export interface ContratoTemplate {
   issuingBranchId?: string;
   operacionalizado?: boolean;
   contratosOperacionaisIds?: string[];
+  sourcePdfImportId?: string;
 }
 
 export interface ProposalAssistDraft {
@@ -360,6 +399,15 @@ export interface ProposalAssistDraft {
     enderecoAtividade: string;
   }>;
   observacoes: string[];
+  coberturaDocumento?: {
+    paginasAnalisadas: number | null;
+    tabelasEncontradas: number;
+    itensExtraidos: number;
+    regrasFrequencia: string[];
+    camposNaoInterpretados: string[];
+  };
+  sourceImportId?: string;
+  originalPdfHashSha256?: string;
   confianca: "alta" | "media" | "baixa";
   camposPendentes: string[];
   avisos: string[];
@@ -391,6 +439,11 @@ export interface EmpresaConfig {
   telefoneEmergencia?: string;
   medicaoFormaPagamentoPadrao?: string;
   medicaoLocalEntregaPadrao?: string;
+  commercialConfig?: {
+    allowContractGeneration?: boolean;
+    allowMinutaGeneration?: boolean;
+    showMonthlyContractValue?: boolean;
+  };
   certificadoConfig?: {
     templateCodigo?: string;
     templateVersao?: string;
@@ -459,7 +512,8 @@ export interface RecorrenciaSuggestionApp {
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
-  contratoId: string;
+  contratoId?: string | null;
+  servicoCatalogoId?: string | null;
   servico: string;
   tipo: "sanitario" | "manutencao";
   localExecucao: string;
@@ -534,6 +588,7 @@ export interface BootstrapData {
   numberingConfig: NumeracaoConfig | null;
   clients: Cliente[];
   services: ServicoCatalogo[];
+  stockProducts: ProdutoEstoqueApp[];
   contracts: Contrato[];
   schedules: AgendamentoApp[];
   orders: OSApp[];
@@ -780,6 +835,47 @@ export const resetUserPassword = (id: string) =>
   api<{ ok: boolean; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
+export const saveStockProduct = (payload: Partial<ProdutoEstoqueApp>) => api<{ ok: boolean; id: string }>("/stock/products", { method: "POST", body: JSON.stringify(payload) });
+export const createStockMovement = (payload: {
+  produtoId: string;
+  tipo: ProdutoEstoqueApp["movimentos"][number]["tipo"];
+  quantidade: number;
+  osId?: string;
+  servicoId?: string;
+  observacao?: string;
+}) => api<{ ok: boolean; movement: { id: string; saldoPosterior: number } }>("/stock/movements", { method: "POST", body: JSON.stringify(payload) });
+export interface StockReportMovement {
+  id: string;
+  produtoId: string;
+  codigo: string;
+  produtoNome: string;
+  unidade: string;
+  tipo: ProdutoEstoqueApp["movimentos"][number]["tipo"];
+  quantidade: number;
+  saldoAnterior: number;
+  saldoPosterior: number;
+  osId?: string | null;
+  osNumero?: string | null;
+  servicoId?: string | null;
+  servicoNome?: string | null;
+  observacao?: string | null;
+  criadoEm?: string;
+}
+export const getStockReport = (params: { dateFrom?: string; dateTo?: string; productId?: string; osId?: string } = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => value && search.set(key, value));
+  const queryString = search.toString();
+  return api<{
+    ok: boolean;
+    filters: Record<string, string | null>;
+    movements: StockReportMovement[];
+    summary: Array<{ produtoId: string; produtoNome: string; unidade: string; entradas: number; saidas: number; ajustes: number; perdas: number; devolucoes: number; movimentos: number }>;
+  }>(`/stock/report${queryString ? `?${queryString}` : ""}`);
+};
+export const uploadServicePopFile = (id: string, payload: { fileName: string; mimeType: string; contentBase64: string }) => api<{
+  ok: boolean;
+  attachment: { id: string; fileName: string; mimeType: string; bytes: number; hashSha256: string; popId: string };
+}>(`/services/${encodeURIComponent(id)}/pop-file`, { method: "POST", body: JSON.stringify(payload) });
 export const saveTechnician = (payload: Partial<Tecnico>) => api("/technicians", { method: "POST", body: JSON.stringify(payload) });
 export const saveVehicle = (payload: Partial<Veiculo>) => api("/vehicles", { method: "POST", body: JSON.stringify(payload) });
 export const saveAllocation = (payload: Partial<AlocacaoSemanal>) => api("/allocations", { method: "POST", body: JSON.stringify(payload) });
@@ -822,9 +918,11 @@ export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendame
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string }) =>
+export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string; produtosUtilizados?: Array<{ produtoId: string; quantidade: number }> }) =>
   api<{ ok: boolean; certificateHash?: string; certificateHashes?: string[] }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
 export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string; hashes?: string[] }>(`/orders/${id}/certificado`, { method: "POST" });
+export const revokeCertificate = (id: string, motivo: string) => api<{ ok: boolean; id: string; status: "revogado" }>(`/certificates/${encodeURIComponent(id)}/revoke`, { method: "PATCH", body: JSON.stringify({ motivo }) });
+export const reissueCertificate = (id: string, motivo: string) => api<{ ok: boolean; oldId: string; replacementId: string; hash: string; hashes?: string[] }>(`/certificates/${encodeURIComponent(id)}/reissue`, { method: "POST", body: JSON.stringify({ motivo }) });
 export const getCertificateVerification = (hash: string) =>
   api<{ ok: boolean; certificate: CertificateVerification; verifiedAt: string }>(`/certificates/${encodeURIComponent(hash)}`);
 export const updateRecurrenceSuggestion = (id: string, action: "confirm" | "dismiss") =>

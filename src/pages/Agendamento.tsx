@@ -115,8 +115,11 @@ export default function Agendamento() {
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [clienteId, setClienteId] = useState("");
+  const [origemAtendimento, setOrigemAtendimento] = useState<"contrato" | "avulso">("contrato");
   const [contratoId, setContratoId] = useState("");
+  const [servicoCatalogoId, setServicoCatalogoId] = useState("");
   const [dataAgendada, setDataAgendada] = useState("");
+  const [localId, setLocalId] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
   const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
@@ -152,6 +155,7 @@ export default function Agendamento() {
 
   const clientesAtivos = useMemo(() => (data?.clients ?? []).filter((item) => item.ativo), [data?.clients]);
   const contratos = useMemo(() => data?.contracts ?? [], [data?.contracts]);
+  const servicos = useMemo(() => (data?.services ?? []).filter((item) => item.ativo), [data?.services]);
   const tecnicos = useMemo(() => data?.technicians ?? [], [data?.technicians]);
   const veiculos = useMemo(() => data?.vehicles ?? [], [data?.vehicles]);
   const agendamentos = useMemo(() => data?.schedules ?? [], [data?.schedules]);
@@ -171,6 +175,11 @@ export default function Agendamento() {
     [clienteNomeSel, contratos],
   );
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
+  const servicoAvulso = useMemo(() => servicos.find((item) => item.id === servicoCatalogoId), [servicoCatalogoId, servicos]);
+  const servicoSelecionado = origemAtendimento === "avulso"
+    ? servicoAvulso
+    : servicos.find((item) => item.id === contratoAtivo?.servicoCatalogoId) || servicos.find((item) => item.nome === contratoAtivo?.servico);
+  const formularioPronto = Boolean(clienteId && dataAgendada && localExecucao && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
@@ -239,8 +248,10 @@ export default function Agendamento() {
 
   function resetFormulario() {
     setContratoId("");
+    setServicoCatalogoId("");
     setDataAgendada("");
     setLocalExecucao("");
+    setLocalId("");
     setTagsSelecionadas([]);
     setObservacao("");
     setTecnicosSelecionados([]);
@@ -252,7 +263,7 @@ export default function Agendamento() {
   }
 
   async function handleAgendar() {
-    if (!clienteId || !contratoId || !dataAgendada || !localExecucao || !contratoAtivo) {
+    if (!formularioPronto || !clienteAtivo || !servicoSelecionado) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
@@ -261,12 +272,14 @@ export default function Agendamento() {
       await saveSchedule({
         id: newId(),
         clienteId,
-        clienteNome: contratoAtivo.cliente,
-        clienteCnpj: contratoAtivo.cnpj,
-        contratoId,
-        servico: contratoAtivo.servico,
-        tipo: contratoAtivo.tipo,
+        clienteNome: clienteAtivo.razaoSocial,
+        clienteCnpj: clienteAtivo.cnpj,
+        contratoId: origemAtendimento === "contrato" ? contratoId : undefined,
+        servicoCatalogoId: servicoSelecionado.id,
+        servico: servicoSelecionado.nome,
+        tipo: servicoSelecionado.tipo,
         dataAgendada,
+        localId: localId || undefined,
         localExecucao,
         tags: tagsSelecionadas.join(", "),
         observacao,
@@ -349,7 +362,7 @@ export default function Agendamento() {
               <ClipboardCheck className="h-4 w-4 text-primary" />
               Origem correta
             </p>
-            <p className="mt-2 text-muted-foreground">Só entram aqui contratos finais vigentes e com saldo operacional disponível.</p>
+            <p className="mt-2 text-muted-foreground">Use um contrato vigente quando houver saldo ou registre um atendimento avulso a partir do catálogo de serviços.</p>
           </div>
           <div className="rounded-2xl border bg-card p-4">
             <p className="flex items-center gap-2 font-semibold">
@@ -408,50 +421,69 @@ export default function Agendamento() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><Building2 className="h-3.5 w-3.5" /> Cliente <span className="text-destructive">*</span></Label>
-                <Select value={clienteId} onValueChange={(value) => { setClienteId(value); resetFormulario(); }}>
+                <Select value={clienteId} onValueChange={(value) => { const cliente = clientesAtivos.find((item) => item.id === value); const possuiContrato = contratos.some((item) => { const saldo = Number(item.contratado || 0) - Number(item.executado || 0); return (item.clienteId === value || item.cliente === cliente?.razaoSocial) && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId); }); setClienteId(value); resetFormulario(); setOrigemAtendimento(possuiContrato ? "contrato" : "avulso"); }}>
                   <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
                   <SelectContent>{clientesAtivos.map((item) => <SelectItem key={item.id} value={item.id}><span className="font-medium">{item.nomeFantasia}</span><span className="text-muted-foreground text-xs ml-1.5">— {item.razaoSocial}</span></SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
-                <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setLocalExecucao(""); setTagsSelecionadas([]); }}>
-                  <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Origem do atendimento <span className="text-destructive">*</span></Label>
+                <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                  <SelectTrigger disabled={!clienteId}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {contratosCliente.map((item) => {
-                      const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-                      return (
-                        <SelectItem key={item.id} value={item.id}>
-                          <span>{item.servico}</span>
-                          <span className="text-muted-foreground text-xs ml-1.5">
-                            ({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}
-                          </span>
-                        </SelectItem>
-                      );
-                    })}
+                    <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo</SelectItem>
+                    <SelectItem value="avulso">Serviço avulso (sem contrato)</SelectItem>
                   </SelectContent>
                 </Select>
-                {clienteId && contratosCliente.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nenhum contrato final vigente com saldo operacional para este cliente. Gere e aprove a minuta antes do contrato final.
-                  </p>
-                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> {origemAtendimento === "contrato" ? "Contrato / Serviço" : "Serviço do catálogo"} <span className="text-destructive">*</span></Label>
+                {origemAtendimento === "contrato" ? (
+                  <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
+                    <SelectContent>
+                      {contratosCliente.map((item) => {
+                        const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+                        return <SelectItem key={item.id} value={item.id}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}</span></SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={servicoCatalogoId} onValueChange={(value) => { setServicoCatalogoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione o serviço" : "Selecione o cliente primeiro"} /></SelectTrigger>
+                    <SelectContent>{servicos.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• {item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></SelectItem>)}</SelectContent>
+                  </Select>
+                )}
+                {origemAtendimento === "contrato" && clienteId && contratosCliente.length === 0 ? <p className="text-xs text-muted-foreground">Sem contrato vigente com saldo? Selecione “Serviço avulso” para continuar sem consumir saldo contratual.</p> : null}
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
-                <Input type="date" value={dataAgendada} onChange={(event) => setDataAgendada(event.target.value)} disabled={!contratoId} />
+                <Input type="date" value={dataAgendada} onChange={(event) => setDataAgendada(event.target.value)} disabled={!clienteId || !servicoSelecionado} />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-              {locaisContrato.length > 0 ? (
-                <Select value={localExecucao} onValueChange={setLocalExecucao} disabled={!contratoId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o local do contrato" /></SelectTrigger>
-                  <SelectContent>{locaisContrato.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
-                </Select>
-              ) : (
-                <Input placeholder="Ex: República Administrativa 01, Bloco A" value={localExecucao} onChange={(event) => setLocalExecucao(event.target.value)} disabled={!contratoId} />
+              <Input
+                list="agendamento-locais-sugeridos"
+                placeholder="Ex: Canteiro C2, Bloco A ou área definida"
+                value={localExecucao}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const matched = locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === value);
+                  setLocalId(matched?.id || "");
+                  setLocalExecucao(value);
+                }}
+                disabled={!clienteId || !servicoSelecionado}
+              />
+              <datalist id="agendamento-locais-sugeridos">
+                {[...new Set([
+                  ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
+                  ...locaisContrato,
+                ].filter(Boolean))].map((local) => <option key={local} value={local} />)}
+              </datalist>
+              {(locaisCliente.length > 0 || locaisContrato.length > 0) && (
+                <p className="text-xs text-muted-foreground">Locais cadastrados são sugestões. Se o atendimento ocorrer em outro ponto, informe o local diretamente.</p>
               )}
             </div>
 
@@ -499,7 +531,7 @@ export default function Agendamento() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-1.5 text-xs"><MessageSquare className="h-3.5 w-3.5" /> Observação</Label>
-                  <Textarea placeholder="Instruções para a equipe de campo..." value={observacao} onChange={(event) => setObservacao(event.target.value)} rows={3} disabled={!contratoId} />
+                  <Textarea placeholder="Instruções para a equipe de campo..." value={observacao} onChange={(event) => setObservacao(event.target.value)} rows={3} disabled={!clienteId || !servicoSelecionado} />
                 </div>
               </div>
             </div>
@@ -528,7 +560,7 @@ export default function Agendamento() {
             )}
 
             <div className="flex justify-end pt-1">
-              <Button onClick={handleAgendar} size="lg" className="gap-2 px-8" disabled={!clienteId || !contratoId || !dataAgendada || !localExecucao}>
+              <Button onClick={handleAgendar} size="lg" className="gap-2 px-8" disabled={!formularioPronto}>
                 <CalendarPlus className="h-4 w-4" /> Criar Agendamento
               </Button>
             </div>
@@ -746,7 +778,7 @@ export default function Agendamento() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Data", fmtDate(agDetalhe.dataAgendada)],
-                  ["Contrato", agDetalhe.contratoId],
+                  ["Origem", agDetalhe.contratoId || "Atendimento avulso"],
                   ["Local", agDetalhe.localExecucao || "Não informado"],
                   ["Tipo", agDetalhe.tipo === "sanitario" ? "Sanitário" : "Manutenção"],
                   ["Equipe designada", agDetalhe.tecnicosNomes?.join(" • ") || "Não definida"],

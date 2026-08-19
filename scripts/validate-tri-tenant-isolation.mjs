@@ -66,6 +66,28 @@ const snapshotTables = [
   "evidencias_anexos",
 ];
 
+const tenantRelationChecks = [
+  ["contatos_cliente", "cliente_id", "clientes"],
+  ["cliente_locais_execucao", "cliente_id", "clientes"],
+  ["cliente_equipamentos", "cliente_id", "clientes"],
+  ["contratos", "cliente_id", "clientes"],
+  ["contratos", "servico_catalogo_id", "servicos_catalogo"],
+  ["agendamentos", "cliente_id", "clientes"],
+  ["agendamentos", "contrato_id", "contratos"],
+  ["agendamentos", "servico_catalogo_id", "servicos_catalogo"],
+  ["ordens_servico", "cliente_id", "clientes"],
+  ["ordens_servico", "agendamento_id", "agendamentos"],
+  ["ordens_servico", "contrato_id", "contratos"],
+  ["ordens_servico", "servico_catalogo_id", "servicos_catalogo"],
+  ["certificados", "os_id", "ordens_servico"],
+  ["certificados", "cliente_id", "clientes"],
+  ["medicao_itens", "medicao_id", "medicoes"],
+  ["medicao_itens", "os_id", "ordens_servico"],
+  ["estoque_movimentacoes", "produto_id", "produtos_estoque"],
+  ["estoque_movimentacoes", "os_id", "ordens_servico"],
+  ["estoque_movimentacoes", "servico_id", "servicos_catalogo"],
+];
+
 function quoteIdent(value) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -243,6 +265,34 @@ async function auditScopedNullTenants(findings) {
     const total = Number(rows[0]?.total || 0);
     if (total > 0) {
       addFinding(findings, "falha", tableName, "Registros sem tenant_id em tabela escopada.", { total });
+    }
+  }
+}
+
+async function auditCrossTenantRelations(findings) {
+  for (const [childTable, childColumn, parentTable] of tenantRelationChecks) {
+    if (!(await tableExists(childTable)) || !(await tableExists(parentTable))) continue;
+    if (!(await hasColumn(childTable, "tenant_id")) || !(await hasColumn(parentTable, "tenant_id"))) continue;
+    if (!(await hasColumn(childTable, childColumn))) continue;
+
+    const { rows } = await query(
+      `SELECT child.id,
+              child.tenant_id AS child_tenant_id,
+              child.${quoteIdent(childColumn)} AS parent_id,
+              parent.tenant_id AS parent_tenant_id
+         FROM ${quoteIdent(schemaName)}.${quoteIdent(childTable)} child
+         JOIN ${quoteIdent(schemaName)}.${quoteIdent(parentTable)} parent
+           ON parent.id = child.${quoteIdent(childColumn)}
+        WHERE child.${quoteIdent(childColumn)} IS NOT NULL
+          AND child.tenant_id IS DISTINCT FROM parent.tenant_id
+        LIMIT 20`,
+    );
+
+    if (rows.length) {
+      addFinding(findings, "falha", `${childTable}.${childColumn}`, "Referência cruza o tenant do registro relacionado.", {
+        parentTable,
+        amostras: rows,
+      });
     }
   }
 }
@@ -447,6 +497,7 @@ function buildReport({ tenants, companies, findings, counters }) {
     "",
     "- Tenants selecionados para matriz Ciperprag + ate dois tenants nao-Ciperprag quando existirem.",
     "- Registros de tabelas SaaS escopadas sem `tenant_id`.",
+    "- Referências entre registros relacionadas somente quando o tenant de origem e o tenant relacionado são iguais.",
     "- Configuracao visual documental sem vazamento de Ciperprag para outro tenant.",
     "- Chaves R2/plano R2 com prefixo por ambiente/tenant/entidade/categoria/hash.",
     "- Chaves de storage repetidas entre tenants.",
@@ -478,6 +529,7 @@ async function main() {
   }
 
   await auditScopedNullTenants(findings);
+  await auditCrossTenantRelations(findings);
   await auditCompanyAssets(selectedTenants, selectedCompanies, findings);
   await auditStorageKeys(selectedTenants, findings);
   await auditSnapshots(selectedTenants, findings);

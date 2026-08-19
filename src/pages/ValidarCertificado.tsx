@@ -183,6 +183,8 @@ export default function ValidarCertificado() {
                 <div>
                   <h2 className="text-lg font-bold">{statusBlock.title}</h2>
                   <p className="mt-1 text-sm leading-6">{statusBlock.description}</p>
+                  {certificate.substituidoPorId ? <p className="mt-1 text-xs font-medium">Este documento foi substituido por outro certificado oficial.</p> : null}
+                  {certificate.substituiCertificadoId ? <p className="mt-1 text-xs font-medium">Este documento substitui um certificado anterior.</p> : null}
                   <p className="mt-2 text-xs font-medium">
                     Última verificação: {formatDateBr(verifiedAt)} {formatTimeBr(verifiedAt)}
                   </p>
