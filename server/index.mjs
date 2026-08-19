@@ -10,6 +10,7 @@ import { buildProposalCatalogContext, extractProposalPdfDeterministically, gener
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
+import { validateScheduleOrigin } from "./schedule-rules.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2372,6 +2373,7 @@ async function upsertSchedule(body, tenantId) {
     throw error;
   }
 
+  let contract = null;
   if (contractId && !["cancelado", "encerrado"].includes(desiredStatus)) {
     const { rows: contractRows } = await query(
       `SELECT
@@ -2391,28 +2393,13 @@ async function upsertSchedule(body, tenantId) {
        LIMIT 1`,
       [contractId, tenantId],
     );
-    const contract = contractRows[0];
-    const balance = Number(contract?.contratado || 0) - Number(contract?.executado || 0);
-    if (!contract) {
-      const error = new Error("Contrato operacional nao encontrado para o agendamento.");
+    contract = contractRows[0] || null;
+  }
+  const scheduleRule = validateScheduleOrigin({ contractId, contract, service, desiredStatus });
+  if (!scheduleRule.ok) {
+    const error = new Error(scheduleRule.error);
       error.status = 400;
       throw error;
-    }
-    if (contract.status !== "ativo" || balance <= 0) {
-      const error = new Error("Contrato sem saldo operacional disponivel para novo agendamento.");
-      error.status = 400;
-      throw error;
-    }
-    if (contract.template_tipo !== "contrato" || contract.template_status !== "vigente") {
-      const error = new Error("A agenda aceita apenas contratos finais vigentes. Gere e aprove a minuta antes do contrato final.");
-      error.status = 400;
-      throw error;
-    }
-    if (contract.servico_catalogo_id && contract.servico_catalogo_id !== service.id) {
-      const error = new Error("O serviço selecionado não corresponde ao item do contrato.");
-      error.status = 400;
-      throw error;
-    }
   }
   const { rowCount } = await query(
     `INSERT INTO ciperprag_hub.agendamentos
@@ -4372,6 +4359,12 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
     const tech = techRows[0];
     const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, contract?.servico_catalogo_id || null);
+    const scheduleRule = validateScheduleOrigin({ contractId: ag.contrato_id, contract, service: service ? { ...service, ativo: true, id: service.id } : null });
+    if (!scheduleRule.ok) {
+      const error = new Error(scheduleRule.error);
+      error.status = 400;
+      throw error;
+    }
     const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
     const company = companyRows[0];
     const { rows: numRows } = await client.query(
