@@ -59,6 +59,7 @@ Itens ainda pendentes para aceite:
 - Executar o smoke de estoque no container publicado pela pipeline de homologacao, apos merge/review do PR.
 - Validar visualmente os PDFs server-side dos cinco modelos contra as referencias aprovadas.
 - Executar revalidacao externa com Tarcisio/Aline cobrindo estoque, importacao de PDF, locais, consumo e documentos.
+- Corrigir e revalidar o acesso de Produtos e estoque no perfil da Aline: item ausente no menu Comercial e tela em branco na rota direta. Perfis autorizados devem visualizar o menu; perfis sem permissao devem receber mensagem clara de acesso restrito.
 
 Esses itens nao substituem nem removem backlog anterior; apenas atualizam o status das frentes relacionadas ao retorno da Ciperprag.
 

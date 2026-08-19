@@ -32,6 +32,15 @@ Ambiente alvo: homologacao via GitHub Actions
 - Executar o smoke dentro do container da homologacao por meio da pipeline apos o PR ser revisado e entrar na branch de deploy.
 - Conferir visualmente os PDFs server-side de OS, proposta, contrato, certificado e medicao contra as referencias aprovadas.
 - Revalidar com Tarcisio/Aline os fluxos de estoque, importacao de PDF, selecao de locais e relatorio de consumo.
+- Corrigir a validacao de acesso de Produtos e estoque: o item nao apareceu no menu Comercial e a rota direta apresentou tela em branco no teste da Aline. A tela deve aparecer para perfis autorizados e exibir mensagem clara para perfis sem permissao.
+
+## Evidencia adicional de homologacao - 19/08/2026
+
+- Rota testada: `/comercial/produtos`.
+- Resultado observado: item Produtos e estoque ausente do menu Comercial; acesso direto sem conteudo visivel.
+- Regra esperada: o modulo usa a permissao `servicos.manage`, a mesma liberacao do catalogo de Servicos. A ausencia do item em uma versao que exibe Servicos indica build de homologacao desatualizada ou divergencia de permissao.
+- Correcao aplicada no codigo: rotas sem permissao agora exibem uma tela de Acesso restrito com orientacao, em vez de deixar a interface em branco.
+- Validacao pendente: publicar pelo CI/CD e repetir o teste com o perfil da Aline.
 
 ## Observacao
 
