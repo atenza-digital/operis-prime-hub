@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateScheduleOrigin } from "../../server/schedule-rules.mjs";
+import { buildScheduleInsertValues, validateScheduleOrigin } from "../../server/schedule-rules.mjs";
 import { buildOsPrintHtml } from "@/lib/osPrint";
 
 const service = { id: "SRV-001", nome: "Coleta de água em bebedouro", tipo: "sanitario", unidade: "pontos", ativo: true };
@@ -32,6 +32,26 @@ describe("origem do agendamento", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("saldo");
+  });
+
+  it("mantém local livre e os 19 parâmetros do INSERT alinhados às colunas", () => {
+    const values = buildScheduleInsertValues({
+      id: "AG-001",
+      tenantId: "TEN-001",
+      serviceId: "SRV-001",
+      customerId: "CLI-001",
+      customerName: "MIP Gelado",
+      customerCnpj: "11.222.333/0001-44",
+      serviceName: "Roço e manutenção",
+      serviceType: "manutencao",
+      scheduledDate: "2026-08-20",
+      locationName: "Canteiro C2",
+    });
+
+    expect(values).toHaveLength(19);
+    expect(values[10]).toBeNull();
+    expect(values[11]).toBe("Canteiro C2");
+    expect(values[18]).toBe("agendado");
   });
 });
 

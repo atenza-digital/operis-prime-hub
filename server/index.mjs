@@ -11,7 +11,7 @@ import { buildProposalCatalogContext, extractProposalPdfDeterministically, gener
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
-import { validateScheduleOrigin } from "./schedule-rules.mjs";
+import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2440,27 +2440,27 @@ async function upsertSchedule(body, tenantId) {
       veiculo_descricao=EXCLUDED.veiculo_descricao,
       status=EXCLUDED.status
     WHERE ciperprag_hub.agendamentos.tenant_id = EXCLUDED.tenant_id`,
-    [
+    buildScheduleInsertValues({
       id,
       tenantId,
       contractId,
-      service.id,
-      body.clienteId || null,
-      body.clienteNome || customer.razao_social,
-      body.clienteCnpj || customer.cnpj,
-      service.nome,
-      service.tipo,
-      body.dataAgendada,
-      body.localId || null,
-      body.localExecucao,
-      body.tags || null,
-      body.observacao || null,
-      body.tecnicosIds || [],
-      body.tecnicosNomes || [],
-      body.veiculoId || null,
-      body.veiculoDescricao || null,
-      desiredStatus,
-    ],
+      serviceId: service.id,
+      customerId: body.clienteId || null,
+      customerName: body.clienteNome || customer.razao_social,
+      customerCnpj: body.clienteCnpj || customer.cnpj,
+      serviceName: service.nome,
+      serviceType: service.tipo,
+      scheduledDate: body.dataAgendada,
+      locationId: body.localId || null,
+      locationName: body.localExecucao,
+      tags: body.tags || null,
+      notes: body.observacao || null,
+      technicianIds: body.tecnicosIds || [],
+      technicianNames: body.tecnicosNomes || [],
+      vehicleId: body.veiculoId || null,
+      vehicleDescription: body.veiculoDescricao || null,
+      status: desiredStatus,
+    }),
   );
   assertTenantWrite(rowCount, "Agendamento");
   return id;

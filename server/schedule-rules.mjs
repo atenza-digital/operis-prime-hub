@@ -27,3 +27,49 @@ export function validateScheduleOrigin({ contractId, contract, service, desiredS
 export function canGenerateOrderFromSchedule({ contractId, contract, service }) {
   return validateScheduleOrigin({ contractId, contract, service }).ok;
 }
+
+// Keep the schedule INSERT parameter order in one place so schema changes
+// cannot silently reintroduce a column/value mismatch.
+export function buildScheduleInsertValues({
+  id,
+  tenantId,
+  contractId = null,
+  serviceId,
+  customerId,
+  customerName,
+  customerCnpj,
+  serviceName,
+  serviceType,
+  scheduledDate,
+  locationId = null,
+  locationName,
+  tags = null,
+  notes = null,
+  technicianIds = [],
+  technicianNames = [],
+  vehicleId = null,
+  vehicleDescription = null,
+  status = "agendado",
+}) {
+  return [
+    id,
+    tenantId,
+    contractId,
+    serviceId,
+    customerId,
+    customerName,
+    customerCnpj,
+    serviceName,
+    serviceType,
+    scheduledDate,
+    locationId,
+    locationName,
+    tags,
+    notes,
+    technicianIds,
+    technicianNames,
+    vehicleId,
+    vehicleDescription,
+    status,
+  ];
+}
