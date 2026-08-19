@@ -134,7 +134,10 @@ jobs:
               chmod 600 "$BACKUP_DIR/$file" "$BACKUP_DIR/$file.sha256" "$BACKUP_DIR/$metadata"
               echo "BACKUP_FILE=$file"
               echo "BACKUP_SHA256=$(cut -d ' ' -f1 "$BACKUP_DIR/$file.sha256")"
-              run_pg pg_restore --list "/backup/$file" | head -n 12
+              list_file="$(mktemp)"
+              run_pg pg_restore --list "/backup/$file" >"$list_file"
+              head -n 12 "$list_file"
+              rm -f "$list_file"
               ;;
 
             verify)
