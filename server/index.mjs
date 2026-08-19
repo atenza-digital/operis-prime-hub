@@ -1944,7 +1944,9 @@ async function syncOperationalContractsFromTemplate(client, templateId, tenantId
 
   const locais = locationRows.map((row) => row.nome).filter(Boolean);
   const tags = equipmentRows.map((row) => row.tag).filter(Boolean);
-  const clienteNome = template.razao_social || template.nome_fantasia || "Cliente sem nome";
+  // Keep the operational contract, OS and certificate aligned with the tenant's
+  // display name used by the canonical certificate source.
+  const clienteNome = template.nome_fantasia || template.razao_social || "Cliente sem nome";
   const vigenciaInicio = template.data_criacao?.toISOString?.().split("T")[0] ?? template.data_criacao ?? new Date().toISOString().split("T")[0];
   const vigenciaFim = addMonthsToDate(vigenciaInicio, template.vigencia_meses || 0);
   let created = 0;
