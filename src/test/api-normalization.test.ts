@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getBootstrap } from "@/lib/api";
+import { getBootstrap, getStockProducts } from "@/lib/api";
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -51,5 +51,28 @@ describe("api text normalization", () => {
     expect(data.attachments[0].conteudoBase64).toBe(base64);
     expect(data.attachments[0].hashSha256).toBe(hash);
     expect(data.attachments[0].downloadUrl).toBe("/api/attachments/att-1/download??download=1");
+  });
+
+  it("consulta o catalogo de estoque por endpoint leve", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({
+      ok: true,
+      products: [{
+        id: "PROD-001",
+        codigo: "PROD-001",
+        nome: "Produto de teste",
+        descricao: "",
+        unidade: "un.",
+        quantidadeAtual: 2,
+        estoqueMinimo: 1,
+        ativo: true,
+        movimentos: [],
+      }],
+    })));
+
+    const response = await getStockProducts();
+
+    expect(response.products).toHaveLength(1);
+    expect(response.products[0].codigo).toBe("PROD-001");
+    expect(fetch).toHaveBeenCalledWith("/api/stock/products", expect.any(Object));
   });
 });

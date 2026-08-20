@@ -835,6 +835,7 @@ export const resetUserPassword = (id: string) =>
   api<{ ok: boolean; temporaryPassword: string }>(`/users/${id}/reset-password`, { method: "POST" });
 export const saveClient = (payload: Partial<Cliente>) => api("/clients", { method: "POST", body: JSON.stringify(payload) });
 export const saveService = (payload: Partial<ServicoCatalogo>) => api("/services", { method: "POST", body: JSON.stringify(payload) });
+export const getStockProducts = () => api<{ ok: boolean; products: ProdutoEstoqueApp[] }>("/stock/products");
 export const saveStockProduct = (payload: Partial<ProdutoEstoqueApp>) => api<{ ok: boolean; id: string }>("/stock/products", { method: "POST", body: JSON.stringify(payload) });
 export const createStockMovement = (payload: {
   produtoId: string;
