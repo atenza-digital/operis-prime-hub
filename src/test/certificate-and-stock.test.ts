@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertCertificateSource, resolveCertificateSource } from "../../server/certificate-rules.mjs";
+import { resolveCertificateWatermarkUrl } from "../components/CertificadoImpressao";
 
 describe("origem transacional do certificado", () => {
   const order = {
@@ -57,5 +58,17 @@ describe("origem transacional do certificado", () => {
     });
 
     expect(() => assertCertificateSource(source)).toThrow(/identificação do serviço/);
+  });
+
+  it("não usa a logo documental completa como marca-d'água", () => {
+    expect(
+      resolveCertificateWatermarkUrl(
+        { documentLogoLightUrl: "data:image/png;base64,logo", logoPrincipalUrl: "data:image/png;base64,logo" },
+        {},
+      ),
+    ).toBe("");
+    expect(resolveCertificateWatermarkUrl({ brandIconUrl: "data:image/png;base64,icone" }, {})).toBe(
+      "data:image/png;base64,icone",
+    );
   });
 });

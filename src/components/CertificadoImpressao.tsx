@@ -120,6 +120,12 @@ function renderIssuerBrand(logoSrc: string, empresaNome: string) {
   return `<div class="marca-textual">${escapeHtml(empresaNome)}</div>`;
 }
 
+export function resolveCertificateWatermarkUrl(config: RecordLike, snapshotEmpresa: RecordLike) {
+  // A marca-d'agua usa somente o icone do tenant. A logo documental nao deve
+  // ocupar este papel, pois altera o modelo aprovado e pode exibir texto no fundo.
+  return firstText(config.brandIconUrl, snapshotEmpresa.brandIconUrl);
+}
+
 function isValidEvidenceImage(foto: unknown) {
   if (typeof foto !== "string") return false;
   const value = foto.trim();
@@ -434,7 +440,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     company?.logoUrl,
   );
   const logoSrc = await toBase64Img(logoPrincipalUrl);
-  const arteFundoUrl = firstText(config.brandIconUrl, config.arteFundoUrl, snapshotEmpresa.brandIconUrl, snapshotEmpresa.arteFundoUrl, logoPrincipalUrl);
+  const arteFundoUrl = resolveCertificateWatermarkUrl(config, snapshotEmpresa);
   const arteFundoSrc = await toBase64Img(arteFundoUrl);
   const seloUrl = firstText(config.seloInstitucionalUrl, snapshotEmpresa.seloInstitucionalUrl);
   const seloSrc = await toBase64Img(seloUrl);
