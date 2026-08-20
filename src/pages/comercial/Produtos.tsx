@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createStockMovement, getBootstrap, getStockReport, saveStockProduct, type ProdutoEstoqueApp, type StockReportMovement } from "@/lib/api";
+import { createStockMovement, getStockProducts, getStockReport, saveStockProduct, type ProdutoEstoqueApp, type StockReportMovement } from "@/lib/api";
 
 type ProductForm = {
   id?: string;
@@ -44,6 +44,7 @@ export default function Produtos() {
   const [products, setProducts] = useState<ProdutoEstoqueApp[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [productDialog, setProductDialog] = useState(false);
   const [movementDialog, setMovementDialog] = useState(false);
@@ -56,11 +57,14 @@ export default function Produtos() {
 
   async function reload() {
     setLoading(true);
+    setLoadError(null);
     try {
-      const data = await getBootstrap();
-      setProducts(data.stockProducts || []);
+      const data = await getStockProducts();
+      setProducts(data.products || []);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível carregar o estoque.");
+      const message = error instanceof Error ? error.message : "Não foi possível carregar o estoque.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -189,7 +193,7 @@ export default function Produtos() {
           <div className="relative w-full sm:w-72"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por código ou nome..." className="pl-9" /></div>
         </CardHeader>
         <CardContent>
-          {loading ? <p className="py-8 text-center text-sm text-muted-foreground">Carregando catálogo...</p> : filtered.length === 0 ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum produto encontrado.</p> : (
+          {loading ? <p className="py-8 text-center text-sm text-muted-foreground" aria-live="polite">Carregando catálogo...</p> : loadError ? <div className="space-y-3 rounded-xl border border-dashed border-rose-300 bg-rose-50/60 p-8 text-center"><p className="text-sm font-medium text-rose-900">Não foi possível carregar o catálogo.</p><p className="text-xs text-rose-800">{loadError}</p><Button variant="outline" size="sm" onClick={reload}>Tentar novamente</Button></div> : filtered.length === 0 ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhum produto encontrado.</p> : (
             <div className="space-y-2">
               {filtered.map((product) => {
                 const isLow = product.ativo && product.quantidadeAtual <= product.estoqueMinimo;

@@ -3100,6 +3100,11 @@ app.post("/api/services", requirePermission("servicos.manage"), async (req, res)
   res.json({ ok: true, id });
 });
 
+app.get("/api/stock/products", requirePermission("estoque.manage"), async (req, res) => {
+  const products = await getStockProducts(req.auth.user.tenant.id);
+  res.json({ ok: true, products });
+});
+
 app.post("/api/stock/products", requirePermission("estoque.manage"), async (req, res) => {
   const body = req.body || {};
   const tenantId = req.auth.user.tenant.id;
