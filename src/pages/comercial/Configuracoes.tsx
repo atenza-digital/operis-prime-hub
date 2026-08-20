@@ -645,12 +645,12 @@ export default function Configuracoes() {
                 />
                 <AssetUploadCard
                   title="Ícone da marca"
-                  description="Ícone compacto para menu retraído, marca d'água e usos visuais menores."
-                  value={certificadoConfig.brandIconUrl || certificadoConfig.arteFundoUrl}
+                  description="Ícone compacto, usado no menu retraído e como marca-d'água lateral do certificado. Não use a logo completa neste campo."
+                  value={certificadoConfig.brandIconUrl}
                   previewClassName="bg-slate-100"
                   onChange={(value) => {
                     const currentConfig = readCertificadoConfig();
-                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, brandIconUrl: value, arteFundoUrl: value }, null, 2));
+                    setCertificadoConfigText(JSON.stringify({ ...currentConfig, brandIconUrl: value }, null, 2));
                   }}
                 />
                 <AssetUploadCard
