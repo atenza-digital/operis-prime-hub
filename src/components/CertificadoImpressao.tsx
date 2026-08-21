@@ -62,18 +62,19 @@ function asLicenses(value: unknown): LicenseItem[] {
 }
 
 function asInstitutionalLogos(config: RecordLike): InstitutionalLogo[] {
+  const seloUrl = firstText(config.seloInstitucionalUrl);
   const configured = Array.isArray(config.logosInstitucionais)
     ? config.logosInstitucionais
         .map((item) => asRecord(item))
         .map((item) => ({ nome: firstText(item.nome, item.label), url: firstText(item.url, item.src) }))
-        .filter((item): item is InstitutionalLogo => Boolean(item.nome && item.url))
+        .filter((item): item is InstitutionalLogo => Boolean(item.nome && item.url) && item.url !== seloUrl)
     : [];
   const aliases: InstitutionalLogo[] = [
     { nome: "Município", url: firstText(config.logoMunicipioUrl) },
     { nome: "Estado", url: firstText(config.logoEstadoUrl) },
     { nome: "ANVISA", url: firstText(config.logoAnvisaUrl) },
     { nome: "Meio ambiente", url: firstText(config.logoMeioAmbienteUrl) },
-  ].filter((item) => item.url);
+  ].filter((item) => item.url && item.url !== seloUrl);
   const seen = new Set<string>();
   return [...configured, ...aliases].filter((item) => {
     const key = `${item.nome}|${item.url}`;
@@ -324,7 +325,9 @@ function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel
         ${registro ? `<div class="assinatura-reg">${escapeHtml(registro)}</div>` : ""}
       </div>`
     : "";
-  const columns = [institutionHtml, seloHtml, miniLogoHtml, assinaturaHtml].filter(Boolean);
+  // Keep the institutional order from the approved Ciperprag reference:
+  // municipal seal, tenant logo, regulatory logos, then the responsible signature.
+  const columns = [seloHtml, miniLogoHtml, institutionHtml, assinaturaHtml].filter(Boolean);
   if (!columns.length) return "";
   return `<div class="footer-grid">${columns.map((html) => `<div class="footer-col">${html}</div>`).join("")}</div>`;
 }
