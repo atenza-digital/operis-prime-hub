@@ -18,6 +18,7 @@
     "homologation:promote-admins": "node --env-file-if-exists=.env scripts/promote-homologation-admins.mjs",
     "homologation:smoke-vps": "node --env-file=.env scripts/smoke-vps-homologation.mjs",
     "homologation:stock": "node --env-file-if-exists=.env scripts/smoke-stock-homologation.mjs",
+    "homologation:certificate-assets": "node --env-file-if-exists=.env scripts/seed-homologation-certificate-assets.mjs",
     "homologation:attachments": "node --env-file-if-exists=.env scripts/validate-homologation-attachments.mjs",
     "homologation:repair-attachment-hashes": "node --env-file-if-exists=.env scripts/repair-homologation-attachment-hashes.mjs",
     "homologation:numbering": "node --env-file-if-exists=.env scripts/validate-homologation-numbering.mjs",
