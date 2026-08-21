@@ -157,11 +157,11 @@ function photosHtml(photos = [], fit = "cover") {
 function footerBranding({ seloUrl = "", logoUrl = "", assinaturaUrl = "", responsavel = "", cargo = "", registro = "", assinaturaModo = "imagem", institutionalLogos = [] }) {
   const columns = [];
   const logos = institutionalLogos.filter((item) => item?.url);
+  if (seloUrl) columns.push(`<img class="brasao" src="${seloUrl}" alt="Selo institucional" />`);
+  if (logoUrl) columns.push(`<img class="mini-logo" src="${logoUrl}" alt="Logo da empresa emissora" />`);
   if (logos.length) {
     columns.push(`<div class="institutional-logos">${logos.map((item) => `<div class="institutional-logo"><img src="${item.url}" alt="${escapeHtml(item.nome || "Logo institucional")}" /><span>${escapeHtml(item.nome || "")}</span></div>`).join("")}</div>`);
   }
-  if (seloUrl) columns.push(`<img class="brasao" src="${seloUrl}" alt="Selo institucional" />`);
-  if (logoUrl) columns.push(`<img class="mini-logo" src="${logoUrl}" alt="Logo da empresa emissora" />`);
 
   const shouldShowSignature = assinaturaModo !== "ocultar" && (assinaturaUrl || responsavel || cargo || registro || assinaturaModo === "linha");
   if (shouldShowSignature) {
@@ -237,6 +237,13 @@ async function renderScenario(browser, template, scenario) {
 
   const page = await browser.newPage({ viewport: { width: 1754, height: 1240 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: "networkidle" });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(Array.from(document.images).map((image) => image.complete ? image.decode().catch(() => {}) : new Promise((resolve) => {
+      image.addEventListener("load", resolve, { once: true });
+      image.addEventListener("error", resolve, { once: true });
+    })));
+  });
   const pdfPath = path.join(outDir, `${scenario.slug}.pdf`);
   const pngPath = path.join(outDir, `${scenario.slug}.png`);
   await page.pdf({
@@ -248,7 +255,12 @@ async function renderScenario(browser, template, scenario) {
     printBackground: true,
     margin: { top: 0, right: 0, bottom: 0, left: 0 },
   });
-  await page.screenshot({ path: pngPath, fullPage: true });
+  const pageBox = await page.locator(".page").boundingBox();
+  if (!pageBox) throw new Error(`Página do certificado não encontrada para ${scenario.slug}.`);
+  await page.screenshot({
+    path: pngPath,
+    clip: { x: pageBox.x, y: pageBox.y, width: pageBox.width, height: pageBox.height },
+  });
   await page.close();
   return {
     slug: scenario.slug,
