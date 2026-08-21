@@ -39,6 +39,21 @@ describe("origem transacional do certificado", () => {
     expect(source.clientAddress).toBe("Rua Principal, 10, Centro, Parauapebas-PA");
   });
 
+  it("usa a razão social mesmo quando o cliente possui nome fantasia", () => {
+    const source = resolveCertificateSource({
+      order,
+      customer: {
+        id: "CLI-001",
+        razao_social: "Razão Social Oficial LTDA",
+        nome_fantasia: "Nome Fantasia",
+        cnpj: "11.222.333/0001-44",
+      },
+      service: { id: "SRV-001", nome: "Serviço técnico", tipo: "sanitario" },
+    });
+
+    expect(source.clientName).toBe("Razão Social Oficial LTDA");
+  });
+
   it("aceita certificado de atendimento avulso quando o serviço está no catálogo", () => {
     const source = resolveCertificateSource({
       order,

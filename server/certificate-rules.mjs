@@ -4,7 +4,10 @@ function clean(value) {
 }
 
 export function resolveCertificateSource({ order = {}, customer = null, service = null } = {}) {
-  const clientName = clean(customer?.nome_fantasia || customer?.razao_social || order.cliente);
+  // Documentos oficiais devem identificar o contratante pela razao social.
+  // O nome fantasia continua disponivel nos cadastros, mas nao substitui a
+  // identificacao juridica no texto declaratorio do certificado.
+  const clientName = clean(customer?.razao_social || customer?.nome_fantasia || order.cliente);
   const clientCnpj = clean(customer?.cnpj || order.cnpj);
   const clientAddress = customer
     ? [customer.endereco, customer.bairro, customer.municipio && customer.uf ? `${customer.municipio}-${customer.uf}` : customer.municipio || customer.uf]

@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 type RecordLike = Record<string, unknown>;
 type LicenseItem = { titulo?: string; valor?: string };
 type EvidencePhoto = { src: string; legenda?: string };
+type InstitutionalLogo = { nome: string; url: string };
 
 function fmtDate(date: string) {
   if (!date) return "-";
@@ -58,6 +59,28 @@ function asLicenses(value: unknown): LicenseItem[] {
     .map((item) => asRecord(item))
     .map((item) => ({ titulo: firstText(item.titulo, item.label, item.nome), valor: firstText(item.valor, item.value, item.numero) }))
     .filter((item) => item.titulo || item.valor);
+}
+
+function asInstitutionalLogos(config: RecordLike): InstitutionalLogo[] {
+  const configured = Array.isArray(config.logosInstitucionais)
+    ? config.logosInstitucionais
+        .map((item) => asRecord(item))
+        .map((item) => ({ nome: firstText(item.nome, item.label), url: firstText(item.url, item.src) }))
+        .filter((item): item is InstitutionalLogo => Boolean(item.nome && item.url))
+    : [];
+  const aliases: InstitutionalLogo[] = [
+    { nome: "Município", url: firstText(config.logoMunicipioUrl) },
+    { nome: "Estado", url: firstText(config.logoEstadoUrl) },
+    { nome: "ANVISA", url: firstText(config.logoAnvisaUrl) },
+    { nome: "Meio ambiente", url: firstText(config.logoMeioAmbienteUrl) },
+  ].filter((item) => item.url);
+  const seen = new Set<string>();
+  return [...configured, ...aliases].filter((item) => {
+    const key = `${item.nome}|${item.url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function snapshotSection(cert: CertificadoApp, section: string) {
@@ -286,9 +309,10 @@ function renderTraceability(text: string) {
   `;
 }
 
-function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel, cargo, registro, assinaturaModo }: Record<string, string>) {
+function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel, cargo, registro, assinaturaModo, institutionalLogosHtml }: Record<string, string>) {
   const seloHtml = seloUrl ? `<img class="brasao" src="${escapeHtml(seloUrl)}" alt="Selo institucional" />` : "";
   const miniLogoHtml = miniLogoUrl ? `<img class="mini-logo" src="${escapeHtml(miniLogoUrl)}" alt="Logo da empresa emissora" />` : "";
+  const institutionHtml = institutionalLogosHtml || "";
   const showSignature = assinaturaModo !== "ocultar" && (assinaturaUrl || responsavel || cargo || registro || assinaturaModo === "linha");
   const assinaturaImg = assinaturaUrl && assinaturaModo !== "linha" ? `<img class="assinatura-img" src="${escapeHtml(assinaturaUrl)}" alt="Assinatura do responsável técnico" />` : "";
   const assinaturaHtml = showSignature
@@ -300,7 +324,7 @@ function renderFooterBranding({ seloUrl, miniLogoUrl, assinaturaUrl, responsavel
         ${registro ? `<div class="assinatura-reg">${escapeHtml(registro)}</div>` : ""}
       </div>`
     : "";
-  const columns = [seloHtml, miniLogoHtml, assinaturaHtml].filter(Boolean);
+  const columns = [institutionHtml, seloHtml, miniLogoHtml, assinaturaHtml].filter(Boolean);
   if (!columns.length) return "";
   return `<div class="footer-grid">${columns.map((html) => `<div class="footer-col">${html}</div>`).join("")}</div>`;
 }
@@ -444,6 +468,14 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const arteFundoSrc = await toBase64Img(arteFundoUrl);
   const seloUrl = firstText(config.seloInstitucionalUrl, snapshotEmpresa.seloInstitucionalUrl);
   const seloSrc = await toBase64Img(seloUrl);
+  const institutionalLogos = asInstitutionalLogos(config);
+  const institutionalLogoSources = await Promise.all(institutionalLogos.map(async (item) => ({ ...item, src: await toBase64Img(item.url) })));
+  const institutionalLogosHtml = institutionalLogoSources.filter((item) => item.src).length
+    ? `<div class="institutional-logos">${institutionalLogoSources
+        .filter((item) => item.src)
+        .map((item) => `<div class="institutional-logo"><img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.nome)}" /><span>${escapeHtml(item.nome)}</span></div>`)
+        .join("")}</div>`
+    : "";
   const assinaturaUrl = firstText(config.assinaturaUrl, snapshotEmpresa.assinaturaUrl, snapshotCertificado.assinaturaUrl);
   const assinaturaSrc = await toBase64Img(assinaturaUrl);
   const assinaturaDocumentos = asRecord(config.assinaturaDocumentos);
@@ -503,7 +535,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     .replaceAll("{{texto_fixacao}}", escapeHtml(firstText(config.textoFixacao, snapshotEmpresa.certificadoTextoFixacao, company?.certificadoTextoFixacao, "FIXAR OBRIGATORIAMENTE EM LOCAL VISÍVEL")))
     .replaceAll("{{licencas_section_html}}", renderLicencas(licencas))
     .replaceAll("{{texto_certificado}}", textoCertificado)
-    .replaceAll("{{selos_assinatura_html}}", renderFooterBranding({ seloUrl: seloSrc, miniLogoUrl: logoSrc, assinaturaUrl: assinaturaSrc, responsavel, cargo, registro, assinaturaModo }))
+    .replaceAll("{{selos_assinatura_html}}", renderFooterBranding({ seloUrl: seloSrc, miniLogoUrl: logoSrc, assinaturaUrl: assinaturaSrc, responsavel, cargo, registro, assinaturaModo, institutionalLogosHtml }))
     .replaceAll("{{rodape_html}}", renderRodape(footerLines, cit));
 
   const printWindow = window.open("", "_blank", "width=1100,height=800");

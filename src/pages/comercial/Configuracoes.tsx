@@ -677,6 +677,42 @@ export default function Configuracoes() {
                 />
               </div>
 
+              <div className="space-y-3 rounded-2xl border border-dashed p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">Logos institucionais do certificado</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Cadastre somente as marcas autorizadas para este tenant. Elas aparecem na área inferior do certificado,
+                    ao lado da assinatura, somente quando configuradas.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <AssetUploadCard
+                    title="Logo do município"
+                    description="Brasão ou identificação oficial do município emissor/atendido."
+                    value={certificadoConfig.logoMunicipioUrl}
+                    onChange={(value) => updateCertificadoConfig("logoMunicipioUrl", value)}
+                  />
+                  <AssetUploadCard
+                    title="Logo do estado"
+                    description="Marca oficial estadual, quando aplicável ao documento."
+                    value={certificadoConfig.logoEstadoUrl}
+                    onChange={(value) => updateCertificadoConfig("logoEstadoUrl", value)}
+                  />
+                  <AssetUploadCard
+                    title="Logo ANVISA"
+                    description="Identificação institucional da ANVISA, quando autorizada."
+                    value={certificadoConfig.logoAnvisaUrl}
+                    onChange={(value) => updateCertificadoConfig("logoAnvisaUrl", value)}
+                  />
+                  <AssetUploadCard
+                    title="Logo meio ambiente"
+                    description="Órgão ou selo ambiental aplicável ao serviço."
+                    value={certificadoConfig.logoMeioAmbienteUrl}
+                    onChange={(value) => updateCertificadoConfig("logoMeioAmbienteUrl", value)}
+                  />
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Título do certificado</Label>
@@ -700,7 +736,7 @@ export default function Configuracoes() {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Uso da assinatura no certificado</Label>
+                  <Label>Assinatura do responsável no certificado</Label>
                   <select
                     value={certificadoConfig.assinaturaModo || "imagem"}
                     onChange={(event) => updateCertificadoConfig("assinaturaModo", event.target.value)}
@@ -711,7 +747,7 @@ export default function Configuracoes() {
                     <option value="ocultar">Não exibir assinatura</option>
                     <option value="obrigatoria">Bloquear emissão sem assinatura configurada</option>
                   </select>
-                  <p className="text-xs text-muted-foreground">A configuração poderá ser refinada por família documental na etapa SaaS de perfis documentais.</p>
+                  <p className="text-xs text-muted-foreground">Envie a imagem da assinatura acima para o certificado sair assinado. O modo obrigatório bloqueia a emissão sem assinatura configurada.</p>
                 </div>
               </div>
               <div className="space-y-2">
