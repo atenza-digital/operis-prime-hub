@@ -154,8 +154,12 @@ function photosHtml(photos = [], fit = "cover") {
   return `<div class="gallery gallery-${validPhotos.length}">${validPhotos.map((photo, index) => `<figure class="gallery-item ${fitClass}"><img src="${photo.src || photo}" alt="${escapeHtml(photo.caption || `Evidência ${index + 1}`)}" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`;
 }
 
-function footerBranding({ seloUrl = "", logoUrl = "", assinaturaUrl = "", responsavel = "", cargo = "", registro = "", assinaturaModo = "imagem" }) {
+function footerBranding({ seloUrl = "", logoUrl = "", assinaturaUrl = "", responsavel = "", cargo = "", registro = "", assinaturaModo = "imagem", institutionalLogos = [] }) {
   const columns = [];
+  const logos = institutionalLogos.filter((item) => item?.url);
+  if (logos.length) {
+    columns.push(`<div class="institutional-logos">${logos.map((item) => `<div class="institutional-logo"><img src="${item.url}" alt="${escapeHtml(item.nome || "Logo institucional")}" /><span>${escapeHtml(item.nome || "")}</span></div>`).join("")}</div>`);
+  }
   if (seloUrl) columns.push(`<img class="brasao" src="${seloUrl}" alt="Selo institucional" />`);
   if (logoUrl) columns.push(`<img class="mini-logo" src="${logoUrl}" alt="Logo da empresa emissora" />`);
 
@@ -284,6 +288,7 @@ const ciperLogo = await dataUri("src/assets/logo_ciperprag_certificado.png");
 const ciperArt = await dataUri("src/assets/icone_lateral_certificado.png");
 const ciperSeal = await dataUri("src/assets/brasao_prefeitura_parauapebas.png");
 const ciperSignature = await dataUri("src/assets/assinatura_certificado.png");
+const ciperAnvisa = await dataUri("scripts/seed-assets/ciperprag/logo-anvisa.png");
 const demoLogo = brandLogo("Empresa Demonstração", "#0f766e");
 const clientLogo = brandLogo("Komatsu", "#334155");
 const photos = [
@@ -325,6 +330,7 @@ const baseCiper = {
   seloUrl: ciperSeal,
   logoUrl: ciperLogo,
   assinaturaUrl: ciperSignature,
+  institutionalLogos: [{ nome: "ANVISA", url: ciperAnvisa }],
   assinaturaModo: "imagem",
   responsavel: "Aline Costa Vieira",
   cargo: "Diretora / Responsável técnica",

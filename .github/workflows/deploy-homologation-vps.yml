@@ -197,6 +197,15 @@ jobs:
             "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
             "docker exec '${CONTAINER_NAME}' npm run homologation:stock"
 
+      - name: Seed certificate assets for Ciperprag homologacao
+        shell: bash
+        run: |
+          ssh -p "${{ secrets.HOMOLOG_VPS_PORT || '22' }}" \
+            -i ~/.ssh/homolog_vps_key \
+            -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.HOMOLOG_VPS_USER }}@${{ secrets.HOMOLOG_VPS_HOST }}" \
+            "docker exec '${CONTAINER_NAME}' npm run homologation:certificate-assets"
+
       - name: Homologation data consistency audits on VPS
         shell: bash
         run: |
