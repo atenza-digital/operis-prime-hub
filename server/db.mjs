@@ -75,6 +75,23 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS commercial_config JSONB NOT NULL DEFAULT '{}'::jsonb
   `);
 
+  // Compatibility for homologation tenants created before the SaaS asset
+  // aliases were introduced. The legacy field represented the certificate
+  // icon/background, so promote it only when the new icon is still empty.
+  await query(`
+    UPDATE ciperprag_hub.empresa_config
+    SET certificado_config = COALESCE(certificado_config, '{}'::jsonb)
+      || CASE
+           WHEN certificado_config ? 'brandIconUrl' THEN '{}'::jsonb
+           WHEN certificado_config ? 'arteFundoUrl'
+             THEN jsonb_build_object('brandIconUrl', certificado_config->>'arteFundoUrl')
+           ELSE '{}'::jsonb
+         END,
+        atualizado_em = NOW()
+    WHERE COALESCE(certificado_config, '{}'::jsonb) ? 'arteFundoUrl'
+      AND NOT (COALESCE(certificado_config, '{}'::jsonb) ? 'brandIconUrl')
+  `);
+
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.numeracao_config
     ADD COLUMN IF NOT EXISTS certificado_formato VARCHAR(50) DEFAULT 'CERT-{SEQ}/{ANO}',

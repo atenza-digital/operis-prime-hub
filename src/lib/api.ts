@@ -457,6 +457,11 @@ export interface EmpresaConfig {
     logoInterfaceUrl?: string;
     arteFundoUrl?: string;
     seloInstitucionalUrl?: string;
+    logoMunicipioUrl?: string;
+    logoEstadoUrl?: string;
+    logoAnvisaUrl?: string;
+    logoMeioAmbienteUrl?: string;
+    logosInstitucionais?: Array<{ nome?: string; url?: string }>;
     assinaturaUrl?: string;
     assinaturaModo?: "imagem" | "linha" | "ocultar" | "obrigatoria";
     assinaturaDocumentos?: Record<string, "imagem" | "linha" | "ocultar" | "obrigatoria">;
