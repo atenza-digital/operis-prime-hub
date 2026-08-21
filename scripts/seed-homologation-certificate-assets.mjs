@@ -21,6 +21,12 @@ function mergeInstitutionalLogos(current, anvisaUrl) {
   return [...withoutAnvisa, { nome: "ANVISA", url: anvisaUrl }];
 }
 
+function shouldForceOfficialAssets(slug) {
+  // Homologacao must be reproducible: stale tenant URLs must not override the
+  // approved reference assets committed with this environment.
+  return slug.toLowerCase() === "ciperprag";
+}
+
 async function main() {
   const [logo, watermark, municipalSeal, signature, anvisa] = await Promise.all([
     asset("logo-ciperprag-documental.png", "image/png"),
@@ -45,15 +51,16 @@ async function main() {
   const current = rows[0].certificado_config && typeof rows[0].certificado_config === "object"
     ? rows[0].certificado_config
     : {};
+  const forceOfficialAssets = shouldForceOfficialAssets(tenantSlug);
   const next = {
     ...current,
-    documentLogoLightUrl: current.documentLogoLightUrl || logo,
-    logoPrincipalUrl: current.logoPrincipalUrl || logo,
-    brandIconUrl: current.brandIconUrl || watermark,
-    seloInstitucionalUrl: current.seloInstitucionalUrl || municipalSeal,
-    assinaturaUrl: current.assinaturaUrl || signature,
-    logoAnvisaUrl: current.logoAnvisaUrl || anvisa,
-    logosInstitucionais: mergeInstitutionalLogos(current.logosInstitucionais, current.logoAnvisaUrl || anvisa),
+    documentLogoLightUrl: forceOfficialAssets ? logo : (current.documentLogoLightUrl || logo),
+    logoPrincipalUrl: forceOfficialAssets ? logo : (current.logoPrincipalUrl || logo),
+    brandIconUrl: forceOfficialAssets ? watermark : (current.brandIconUrl || watermark),
+    seloInstitucionalUrl: forceOfficialAssets ? municipalSeal : (current.seloInstitucionalUrl || municipalSeal),
+    assinaturaUrl: forceOfficialAssets ? signature : (current.assinaturaUrl || signature),
+    logoAnvisaUrl: forceOfficialAssets ? anvisa : (current.logoAnvisaUrl || anvisa),
+    logosInstitucionais: mergeInstitutionalLogos(current.logosInstitucionais, forceOfficialAssets ? anvisa : (current.logoAnvisaUrl || anvisa)),
   };
 
   await query(
