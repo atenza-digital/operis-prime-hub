@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import QRCode from 'qrcode';
 import { pool, query } from '../server/db.mjs';
 import { hashPassword } from '../server/auth.mjs';
+import { ensureCustomerDefaultLocations } from '../server/customer-locations.mjs';
 
 const baseUrl = process.env.OPERATIONAL_TEST_URL || 'http://localhost:14311';
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(baseUrl) && baseUrl !== 'https://fieldops-homologacao.atenza.digital') throw new Error('Use apenas desenvolvimento ou homologação.');
@@ -41,6 +42,16 @@ try {
   await query("INSERT INTO ciperprag_hub.produtos_estoque(id,tenant_id,codigo,nome,unidade,quantidade_atual) VALUES($1,$2,$1,'Produto QA','L',20)",[ids.product,tenantId]);
   await query("INSERT INTO ciperprag_hub.contratos(id,tenant_id,cliente_id,cliente,servico,tipo,contratado,executado,status,servico_catalogo_id,valor_unitario) VALUES($1,$2,$3,'Cliente QA LTDA','Higienização de bebedouro','sanitario',10,0,'ativo',$4,100)",[ids.contract,tenantId,ids.client,ids.service]);
   for (const [id,contract] of [[ids.order,ids.contract],[ids.open,null],[ids.stock,null]]) await query("INSERT INTO ciperprag_hub.ordens_servico(id,tenant_id,numero,cliente_id,cliente,cnpj,servico,tipo,contrato_id,servico_catalogo_id,local_execucao,status,data_emissao,quantidade,unidade) VALUES($1,$2,$1,$3,'Cliente QA LTDA','11.222.333/0001-44','Higienização de bebedouro','sanitario',$4,$5,'Canteiro C2','aberta',CURRENT_DATE,1,'un.')",[id,tenantId,ids.client,contract,ids.service]);
+  await ensureCustomerDefaultLocations(query);
+  const {rows:locations}=await query('SELECT tenant_id FROM ciperprag_hub.cliente_locais_execucao WHERE cliente_id=$1',[ids.client]);
+  assert.equal(locations.length,1);
+  assert.equal(locations[0].tenant_id,tenantId);
+  await query('UPDATE ciperprag_hub.cliente_locais_execucao SET tenant_id=NULL WHERE cliente_id=$1 AND tenant_id=$2',[ids.client,tenantId]);
+  await ensureCustomerDefaultLocations(query);
+  const {rows:repairedLocations}=await query('SELECT tenant_id FROM ciperprag_hub.cliente_locais_execucao WHERE cliente_id=$1',[ids.client]);
+  assert.equal(repairedLocations.length,1);
+  assert.equal(repairedLocations[0].tenant_id,tenantId);
+  results.push('Local automático pertence ao mesmo tenant do cliente, inclusive após nova inicialização');
   const login = await api('/auth/login',{email,password,tenantSlug:slug});
   token = login.token;
   assert.ok(token,'Login deve retornar token');

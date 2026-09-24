@@ -12,6 +12,8 @@
 - Arquivos emitidos sao persistidos e baixados sem recalcular o documento com dados atuais. PDFs antigos nao sao sobrescritos.
 - Configuracao visual existente do tenant nao e substituida automaticamente no deploy.
 - Relatorios tecnicos incluem atividades e todas as fotos individualizadas; snapshots financeiros nao sao expostos ao operacional.
+- Locais automaticos herdam o tenant do cliente. A inicializacao corrige apenas os locais deterministicos criados pela rotina antiga, sem substituir locais manuais.
+- OS usa a empresa emissora tambem no texto de recebimento; medicao mantem a ultima linha junto do total, evitando cabecalho de tabela sem itens.
 
 ## Testes reproduziveis
 

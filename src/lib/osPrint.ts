@@ -368,7 +368,7 @@ export function buildOsPrintHtml(
         <li>Caso alguma irregularidade ou risco seja constatado, a atividade deve ser suspensa e comunicada ao responsável do serviço.</li>
         <li>É proibido executar qualquer trabalho para o qual o colaborador não tenha sido orientado e autorizado.</li>
       </ul>
-      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || "Ciperprag")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
+      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || company?.razaoSocial || "emissora")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
     </div>
 
     <div class="sign-grid">

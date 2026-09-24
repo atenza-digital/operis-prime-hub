@@ -82,5 +82,7 @@ describe("template da OS", () => {
     expect(html).not.toContain("000.000.000-00");
     expect(html).not.toContain("CPF:");
     expect(html).toContain("Data de Emissão:");
+    expect(html).toContain("Recebi da empresa emissora");
+    expect(html).not.toContain("Recebi da empresa Ciperprag");
   });
 });

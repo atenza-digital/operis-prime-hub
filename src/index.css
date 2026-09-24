@@ -254,6 +254,11 @@
     display: table-row-group;
   }
 
+  .measurement-table tbody tr:last-child {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
   .measurement-table tr {
     break-inside: avoid;
     page-break-inside: avoid;

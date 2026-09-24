@@ -23,6 +23,8 @@ for path in sorted(folder.glob('*.pdf')):
             assert path.stem.replace('certificado-', '') in text
         if path.name == 'medicao.pdf':
             assert f'Página {index+1} de {document.page_count}' in text, 'Incorrect measurement pagination'
+            if 'OS /' in text:
+                assert 'Higienização de bebedouro' in text, 'Table header repeated without any service row'
         for font in page.get_fonts():
             xref, _, _, name, *_ = font
             assert 'Montserrat' in name and '+' in name, f'{path.name}: unexpected/unsubset font {name}'

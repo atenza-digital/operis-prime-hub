@@ -7,7 +7,7 @@ import { sanitizeStorageSegment } from "../server/storage.mjs";
 const schemaName = "ciperprag_hub";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDir = path.join(rootDir, "docs", "evidencias", "etapa8_infra_saas");
-const outputFile = path.join(evidenceDir, "TRI_TENANT_ISOLATION_2026-07-19.md");
+const outputFile = process.env.TRI_TENANT_REPORT || path.join(evidenceDir, "TRI_TENANT_ISOLATION_2026-07-19.md");
 
 const args = new Map(
   process.argv
@@ -544,6 +544,7 @@ async function main() {
   console.log(`Auditoria tri-tenant gerada: ${path.relative(rootDir, outputFile)}`);
   console.log(`Tenants avaliados: ${selectedTenants.map((tenant) => tenant.slug).join(", ") || "nenhum"}`);
   console.log(`Falhas: ${failures.length}`);
+  if (failures.length) console.error(JSON.stringify(failures, null, 2));
   console.log(`Alertas: ${findings.filter((finding) => finding.severity === "alerta").length}`);
 
   if (failures.length) process.exitCode = 1;
