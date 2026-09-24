@@ -10,7 +10,7 @@ if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(baseUrl) && baseUrl !==
 const run = crypto.randomBytes(5).toString('hex');
 const tenantId = crypto.randomUUID(), userId = crypto.randomUUID(), roleId = crypto.randomUUID();
 const slug = `qa-atividades-${run}`, email = `${slug}@example.invalid`, password = crypto.randomBytes(24).toString('base64url');
-const ids = Object.fromEntries(['client','service','second','contract','product','order','open','stock'].map(key=>[key,`QA-${key.slice(0,3)}-${run}`]));
+const ids = Object.fromEntries(['client','service','second','third','contract','product','order','open','stock'].map(key=>[key,`QA-${key.slice(0,3)}-${run}`]));
 const output = process.env.OPERATIONAL_TEST_OUTPUT || `output/validacao-atividades-${run}`;
 const today = new Date().toISOString().slice(0,10);
 const results = [];
@@ -37,6 +37,7 @@ try {
   await query('INSERT INTO ciperprag_hub.numeracao_config(tenant_id) VALUES($1)',[tenantId]);
   await query("INSERT INTO ciperprag_hub.clientes(id,tenant_id,razao_social,nome_fantasia,cnpj,endereco,municipio,uf) VALUES($1,$2,'Cliente QA LTDA','Canteiro não é razão social','11.222.333/0001-44','Rua dos testes','Parauapebas','PA')",[ids.client,tenantId]);
   for (const [id,name,validity] of [[ids.service,'Higienização de bebedouro',0],[ids.second,'Manutenção técnica',30]]) await query("INSERT INTO ciperprag_hub.servicos_catalogo(id,tenant_id,nome,tipo,unidade,gera_certificado,validade_certificado_dias,exige_foto,permite_nao_execucao) VALUES($1,$2,$3,'sanitario','un.',TRUE,$4,TRUE,TRUE)",[id,tenantId,name,validity]);
+  await query("INSERT INTO ciperprag_hub.servicos_catalogo(id,tenant_id,nome,tipo,unidade,gera_certificado,exige_foto) VALUES($1,$2,'Inspeção sem certificado','manutencao','un.',FALSE,FALSE)",[ids.third,tenantId]);
   await query("INSERT INTO ciperprag_hub.produtos_estoque(id,tenant_id,codigo,nome,unidade,quantidade_atual) VALUES($1,$2,$1,'Produto QA','L',20)",[ids.product,tenantId]);
   await query("INSERT INTO ciperprag_hub.contratos(id,tenant_id,cliente_id,cliente,servico,tipo,contratado,executado,status,servico_catalogo_id,valor_unitario) VALUES($1,$2,$3,'Cliente QA LTDA','Higienização de bebedouro','sanitario',10,0,'ativo',$4,100)",[ids.contract,tenantId,ids.client,ids.service]);
   for (const [id,contract] of [[ids.order,ids.contract],[ids.open,null],[ids.stock,null]]) await query("INSERT INTO ciperprag_hub.ordens_servico(id,tenant_id,numero,cliente_id,cliente,cnpj,servico,tipo,contrato_id,servico_catalogo_id,local_execucao,status,data_emissao,quantidade,unidade) VALUES($1,$2,$1,$3,'Cliente QA LTDA','11.222.333/0001-44','Higienização de bebedouro','sanitario',$4,$5,'Canteiro C2','aberta',CURRENT_DATE,1,'un.')",[id,tenantId,ids.client,contract,ids.service]);
@@ -69,6 +70,7 @@ try {
       await page.getByRole('button',{name:'Editar',exact:true}).first().click();
       assert.equal(await page.getByRole('region',{name:'Atividade 2',exact:true}).getByPlaceholder('Ex.: Canteiro C2').inputValue(),'Canteiro C3');
       await page.setViewportSize({width:390,height:844});
+      await page.waitForTimeout(400);
       await page.screenshot({path:output+'/atividades-mobile.png',fullPage:true});
       await page.getByRole('region',{name:'Atividade 2',exact:true}).getByRole('button',{name:'Remover',exact:true}).click();
       await dialog.getByRole('button',{name:'Salvar',exact:true}).click();
@@ -141,6 +143,23 @@ try {
   assert.equal(updated.certificates.filter(c=>c.status==='emitido').length,5);
   assert.equal(updated.certificates.filter(c=>c.status==='revogado').length,1);
   results.push('OS encerrada protegida; medição por atividade; substituição de um único certificado');
+  const mixedPhoto=await QRCode.toDataURL('FOTO DA MANUTENCAO, NAO DA HIGIENIZACAO');
+  const mixed=await api(`/orders/${ids.open}/encerrar`,{dataExecucao:today,atividades:[
+    {...activities[0],id:'sem-acesso',naoExecutada:true,motivoNaoExecucao:'Sem acesso ao equipamento',fotos:[],produtosUtilizados:[]},
+    {...activities[0],id:'manutencao',servicoId:ids.second,tagEquipamento:'MAN-01',fotos:[mixedPhoto],produtosUtilizados:[]},
+    {...activities[0],id:'inspecao',servicoId:ids.third,tagEquipamento:'INS-01',fotos:[],produtosUtilizados:[]},
+  ]});
+  assert.equal(mixed.certificateHashes.length,1);
+  const mixedData=await api('/bootstrap',undefined,'GET');
+  const mixedCert=mixedData.certificates.find(c=>c.osId===ids.open);
+  assert.equal(mixedCert.servico,'Manutenção técnica');
+  assert.deepEqual(mixedCert.snapshotDados.os.fotos,[mixedPhoto]);
+  assert.equal(mixedData.orders.find(o=>o.id===ids.open).atividades[2].fotos.length,0);
+  const mixedAttachment=mixedData.attachments.find(a=>a.entidadeTipo==='certificado'&&a.entidadeId===mixedCert.id&&a.templateVersao==='documental-v1');
+  const mixedPdf=await fetch(baseUrl+`/api/attachments/${mixedAttachment.id}/download`,{headers:{Authorization:`Bearer ${token}`}});
+  assert.equal(mixedPdf.status,200);
+  await fs.writeFile(`${output}/certificado-MAN-01.pdf`,Buffer.from(await mixedPdf.arrayBuffer()));
+  results.push('Três serviços distintos na mesma OS: não executado não certifica/consome; item sem foto não herda evidência; declaração usa o serviço do item');
   // Issued bytes must not change when company settings or customer names change.
   await query("UPDATE ciperprag_hub.empresa_config SET razao_social='Nome alterado após emissão',certificado_config='{}' WHERE tenant_id=$1",[tenantId]);
   await query("UPDATE ciperprag_hub.clientes SET razao_social='Cliente alterado após emissão' WHERE id=$1 AND tenant_id=$2",[ids.client,tenantId]);

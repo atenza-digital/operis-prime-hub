@@ -199,7 +199,7 @@ function renderGaleria(fotos: EvidencePhoto[], limiteFotos: number, exibirFotos:
         .map(
           (foto, index) => `
             <figure class="gallery-item ${fitClass}">
-              <img src="${escapeHtml(foto.src)}" alt="Evidência ${index + 1}" onerror="this.closest('.gallery-item')?.remove()" />
+              <img src="${escapeHtml(foto.src)}" alt="Evidência ${index + 1}" />
               ${foto.legenda ? `<figcaption>${escapeHtml(foto.legenda)}</figcaption>` : ""}
             </figure>`,
         )
@@ -215,10 +215,10 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
     : (cert.produtosQuimicos ?? []).map((nome) => ({
         nome,
         grupoQuimico: "-",
-        qtUso: "Conf. necessidade",
-        diluente: "Água",
-        volAplicado: "Conf. área",
-        combate: "Aplicação direta",
+        qtUso: "Não informado",
+        diluente: "Não informado",
+        volAplicado: "Não informado",
+        combate: "Não informado",
         antidoto: "Não informado",
       }));
 
@@ -231,11 +231,11 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
             <tr>
               <td>${escapeHtml(produto.nome)}</td>
               <td>${escapeHtml(produto.grupoQuimico ?? "-")}</td>
-              <td>${escapeHtml(produto.qtUso ?? "Conf. necessidade")}</td>
-              <td>${escapeHtml(produto.diluente ?? "Água")}</td>
-              <td>${escapeHtml(produto.volAplicado ?? "Conf. área")}</td>
-              <td>${escapeHtml(produto.combate ?? "Aplicação direta")}</td>
-              <td>${escapeHtml(produto.antidoto ?? "Não aplicável")}</td>
+              <td>${escapeHtml(produto.qtUso ?? "Não informado")}</td>
+              <td>${escapeHtml(produto.diluente ?? "Não informado")}</td>
+              <td>${escapeHtml(produto.volAplicado ?? "Não informado")}</td>
+              <td>${escapeHtml(produto.combate ?? "Não informado")}</td>
+              <td>${escapeHtml(produto.antidoto ?? "Não informado")}</td>
             </tr>`,
         )
         .join("")
