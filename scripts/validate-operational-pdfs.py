@@ -16,6 +16,12 @@ for path in sorted(folder.glob('*.pdf')):
     fonts = set()
     for index, page in enumerate(document):
         text = page.get_text()
+        if path.name == 'os.pdf' and index == 0:
+            logos = [b for b in page.get_text('dict')['blocks'] if b['type'] == 1]
+            assert logos and logos[0]['bbox'][0] < 32, 'OS logo is not aligned to the inner left margin'
+            x0, y0, x1, y1 = logos[0]['bbox']
+            ratio = logos[0]['width'] / logos[0]['height']
+            assert abs((x1-x0)/(y1-y0)-ratio) < .02, 'OS logo was distorted'
         assert len(text.strip()) > 80, f'{path.name} page {index+1}: blank or footer-only page'
         if path.name.startswith('certificado'):
             assert document.page_count == 1

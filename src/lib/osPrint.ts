@@ -244,8 +244,8 @@ export function buildOsPrintHtml(
     thead { display: table-header-group; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
-    .brand-center { text-align: center; padding-top: 6px; }
-    .brand-center img { width: 330px; max-width: 100%; height: 82px; object-fit: contain; }
+    .brand-left { text-align: left; padding: 6px 8px 0; min-width: 0; }
+    .brand-left img { display: block; width: 330px; max-width: 100%; height: 82px; object-fit: contain; object-position: left center; }
     .logo-fallback { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; max-width: 330px; padding: 8px 18px; border: 1px solid #d1d5db; border-radius: 10px; color: #111827; font-size: 18px; font-weight: 800; text-transform: uppercase; }
     .os-meta { padding: 16px 18px 0 0; font-size: 20px; font-weight: 700; white-space: nowrap; }
     .title { text-align: center; font-size: 22px; font-weight: 700; padding: 6px 0 10px; border-bottom: 1.2px solid #222; }
@@ -277,7 +277,7 @@ export function buildOsPrintHtml(
 <body>
   <div class="page">
     <div class="top-brand">
-      <div class="brand-center">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
+      <div class="brand-left">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
       <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
     </div>
     <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>

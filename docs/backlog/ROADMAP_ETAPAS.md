@@ -1,6 +1,6 @@
 # Roadmap por Etapas - Atenza FieldOps
 
-Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das etapas abaixo.
+Este arquivo preserva o historico por etapas. A posicao atual reconciliada, desde 24/09/2026, esta em [STATUS_ATUAL.md](STATUS_ATUAL.md). Status e contagens abaixo sao historicos e nao devem ser usados como saldo atual de pendencias.
 
 ## Resumo atual
 
@@ -8,7 +8,7 @@ Este arquivo e o mapa canonico do backlog. Nenhum item deve ficar solto fora das
 - Etapa atual: Etapa 8 de 8, com a Etapa 7 concluida e a Etapa 8 avancando em homologacao nos itens de hardening e governanca SaaS.
 - Proxima etapa recomendada: executar a rodada externa completa com a Ciperprag usando o roteiro consolidado, registrar evidencias e corrigir somente reprovacoes ou observacoes confirmadas.
 - Itens de backlog mapeados apos feedback externo incorporado: 48.
-- Itens de backlog remanescentes: 37.
+- Contagem historica de remanescentes: 37; substituida pela matriz de status atual, sem duplicar entregas e validacoes.
 - Itens fora de etapa: 0.
 - Feedback externo incorporado: observacoes de teste do estagiario Tarcisio Lucas em 16/07/2026.
 

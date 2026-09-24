@@ -2,9 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool, query } from "../server/db.mjs";
+import { normalizeCommercialConfig } from "../server/commercial-config.mjs";
+import { operationalAuditPolicy } from "./lib/operational-audit-policy.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = path.join(rootDir, "docs", "evidencias", "etapa7_homologacao");
+const evidenceDir = process.env.AUDIT_E2E_OUTPUT || path.join(rootDir, "docs", "evidencias", "etapa7_homologacao");
 const tenantSlug = process.argv.find((arg) => arg.startsWith("--tenant="))?.split("=")[1] || "ciperprag";
 
 function brDateTime(value = new Date()) {
@@ -68,10 +70,14 @@ async function hasColumn(tableName, columnName) {
 async function scalarCheck(title, sql, params = []) {
   const { rows } = await query(sql, params);
   const total = Number(rows[0]?.total || 0);
+  const policy = operationalAuditPolicy(title, total, {});
+  // Keep the count predicate identical and export identifiers/status only, never customer PII.
+  const { rows: samples } = total ? await query(sql.replace('SELECT COUNT(*)::int AS total', `SELECT ${policy.columns}`) + ' ORDER BY id LIMIT 50', params) : { rows: [] };
   return {
     title,
     total,
     status: total === 0 ? "OK" : "Verificar",
+    samples,
   };
 }
 
@@ -87,6 +93,8 @@ async function main() {
 
   const tenant = tenantRows[0];
   const tenantId = tenant.id;
+  const { rows: companies } = await query('SELECT commercial_config FROM ciperprag_hub.empresa_config WHERE tenant_id=$1 ORDER BY id LIMIT 1', [tenantId]);
+  const commercial = normalizeCommercialConfig(companies[0]?.commercial_config, tenantSlug);
 
   const sections = await Promise.all([
     groupedCount("contratos_templates", ["tipo", "status"], tenantId),
@@ -213,6 +221,10 @@ async function main() {
     ));
   }
 
+  for (const check of checks) {
+    const policy = operationalAuditPolicy(check.title, check.total, commercial);
+    Object.assign(check, { status: policy.status, classification: policy.classification, action: policy.action });
+  }
   const generatedAt = brDateTime();
   const report = [
     "# Auditoria de Homologacao E2E",
@@ -225,6 +237,14 @@ async function main() {
     "",
     markdownTable(["Verificacao", "Status", "Total"], checks.map((check) => [check.title, check.status, check.total])),
     "",
+    "Categorias com ocorrencias nao equivalem a quantidade de erros. Nao aplicavel respeita as regras comerciais do tenant. Auditoria somente leitura.",
+    "",
+    "## Detalhamento das ocorrencias",
+    "",
+    ...checks.filter(check => check.total > 0).flatMap(check => [
+      `### ${check.title}`, '', `Status: ${check.status}. Total: ${check.total}. Amostra: ${check.samples.length} (limite 50).`, '',
+      check.action, '', markdownTable(Object.keys(check.samples[0] || {}), check.samples.map(row => Object.values(row))), '',
+    ]),
     "## Contagens por area",
     "",
     ...sections.flatMap((section) => {
@@ -235,7 +255,7 @@ async function main() {
     }),
     "## Como usar",
     "",
-    "- Use os itens com status `Verificar` como fila de validacao durante a homologacao.",
+    "- Revisar integridade documental primeiro; depois conferir etapas operacionais. Itens nao aplicaveis nao exigem ativar recursos desabilitados.",
     "- Este relatorio nao altera dados e nao substitui o teste manual do usuario.",
     "- Divergencias encontradas devem ser registradas no roteiro e acompanhadas ate resolucao.",
     "",
@@ -244,9 +264,10 @@ async function main() {
   await fs.mkdir(evidenceDir, { recursive: true });
   const outputPath = path.join(evidenceDir, "auditoria-e2e-dados.md");
   await fs.writeFile(outputPath, report, "utf8");
+  await fs.writeFile(path.join(evidenceDir, 'auditoria-e2e-dados.json'), JSON.stringify({ generatedAt, tenant: tenant.slug, commercial, checks }, null, 2), 'utf8');
 
   console.log(`Auditoria gerada: ${outputPath}`);
-  console.log(`Itens para verificar: ${checks.filter((check) => check.status !== "OK").length}`);
+  console.log(JSON.stringify({ categoriesWithOccurrences: checks.filter(c => c.total > 0).length, checks }, null, 2));
 }
 
 main()

@@ -84,5 +84,8 @@ describe("template da OS", () => {
     expect(html).toContain("Data de Emissão:");
     expect(html).toContain("Recebi da empresa emissora");
     expect(html).not.toContain("Recebi da empresa Ciperprag");
+    expect(html).toContain('class="brand-left"');
+    expect(html).toContain('object-position: left center');
+    expect(html).toContain('object-fit: contain');
   });
 });
