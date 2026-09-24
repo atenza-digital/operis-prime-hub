@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
@@ -17,6 +17,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Award, BookOpen, CheckCircle2, ClipboardList, Eye, FileCheck2, MapPin, PenLine, Printer, Search, Tag, User, Users, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { OrderActivityEditor, initialOrderActivities } from '@/components/OrderActivityEditor';
+import type { OrderActivity } from '@/lib/api';
 
 function fmtDate(date: string) {
   if (!date) return "—";
@@ -61,6 +63,8 @@ async function prepareEvidencePhoto(file: File) {
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Não foi possível preparar a foto para envio.");
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
     let quality = 0.82;
@@ -120,13 +124,6 @@ export default function OrdensServico() {
   const [encDialog, setEncDialog] = useState(false);
   const [encOsId, setEncOsId] = useState("");
   const [dataExecucao, setDataExecucao] = useState("");
-  const [quantidade, setQuantidade] = useState("1");
-  const [tagEquipamento, setTagEquipamento] = useState("");
-  const [checklist, setChecklist] = useState<Array<{ item: string; concluido: boolean; observacao?: string }>>([]);
-  const [naoExecutada, setNaoExecutada] = useState(false);
-  const [motivoNaoExecucao, setMotivoNaoExecucao] = useState("");
-  const [fotos, setFotos] = useState<{ preview: string; base64: string }[]>([]);
-  const [produtosUtilizados, setProdutosUtilizados] = useState<Array<{ produtoId: string; quantidade: number }>>([]);
   const [encerrada, setEncerrada] = useState(false);
   const [certHash, setCertHash] = useState("");
   const [certHashes, setCertHashes] = useState<string[]>([]);
@@ -134,10 +131,11 @@ export default function OrdensServico() {
   const [editOs, setEditOs] = useState<OSApp | null>(null);
   const [editTecnico, setEditTecnico] = useState("");
   const [editLocal, setEditLocal] = useState("");
-  const [editTag, setEditTag] = useState("");
   const [savingClose, setSavingClose] = useState(false);
+  const [preparingPhotos, setPreparingPhotos] = useState(false);
+  const [closeActivities, setCloseActivities] = useState<OrderActivity[]>([]);
+  const [editActivities, setEditActivities] = useState<OrderActivity[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
     setLoading(true);
@@ -158,12 +156,9 @@ export default function OrdensServico() {
   const ordens = useMemo(() => data?.orders ?? [], [data?.orders]);
   const tecnicos = useMemo(() => data?.technicians ?? [], [data?.technicians]);
   const osSelecionada = ordens.find((item) => item.id === encOsId);
-  const servicoSelecionado = data?.services.find((item) => item.nome === osSelecionada?.servico);
-  const clienteSelecionado = data?.clients.find((item) => item.id === osSelecionada?.clienteId || item.cnpj === osSelecionada?.clienteCnpj);
-  const equipamentosOs = clienteSelecionado?.equipamentos?.filter((item) => item.ativo) ?? [];
 
   const ordensFiltradas = useMemo(() => {
-    let list = [...ordens].reverse();
+    let list = [...ordens].sort((a,b) => b.dataEmissao.localeCompare(a.dataEmissao) || b.numero.localeCompare(a.numero, 'pt-BR', { numeric: true }));
     if (filtroStatus !== "todos") list = list.filter((item) => item.status === filtroStatus);
     if (busca) {
       const termo = cleanText(busca).toLowerCase();
@@ -186,29 +181,11 @@ export default function OrdensServico() {
     encerrada: ordens.filter((item) => item.status === "encerrada").length,
   };
 
-  async function handleFotoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files || []);
-    try {
-      const prepared = await Promise.all(files.slice(0, 3 - fotos.length).map(prepareEvidencePhoto));
-      setFotos((prev) => [...prev, ...prepared.map((base64) => ({ preview: base64, base64 }))].slice(0, 3));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível preparar a foto.");
-    }
-    event.target.value = "";
-  }
-
   function openEnc(osId: string) {
     const os = ordens.find((item) => item.id === osId);
-    const service = data?.services.find((item) => item.nome === os?.servico);
+    if (os && data) setCloseActivities(initialOrderActivities(os, data));
     setEncOsId(osId);
     setDataExecucao(todayInputDateBr());
-    setQuantidade("1");
-    setTagEquipamento(os?.tagEquipamentoServico || os?.tags?.split(",")[0]?.trim() || "");
-    setChecklist((service?.checklistItens ?? []).map((item) => ({ item, concluido: false, observacao: "" })));
-    setNaoExecutada(false);
-    setMotivoNaoExecucao("");
-    setFotos([]);
-    setProdutosUtilizados((service?.produtosEstoque || []).map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidadePrevista || 0) })));
     setEncerrada(false);
     setCertHash("");
     setCertHashes([]);
@@ -217,26 +194,12 @@ export default function OrdensServico() {
 
   async function handleEncerrar() {
     if (!osSelecionada || !dataExecucao) return;
-    if (savingClose) return;
-    if (servicoSelecionado?.exigeFoto && !naoExecutada && fotos.length === 0) {
-      toast.error("Este serviço exige ao menos uma foto de evidência.");
-      return;
-    }
-    if (naoExecutada && !motivoNaoExecucao.trim()) {
-      toast.error("Informe o motivo da não execução.");
-      return;
-    }
+    if (savingClose || preparingPhotos) return;
     setSavingClose(true);
     try {
       const response = await closeOrder(osSelecionada.id, {
+        atividades: closeActivities,
         dataExecucao,
-        quantidade: Number(quantidade || 1),
-        tagEquipamentoServico: tagEquipamento,
-        fotos: fotos.map((item) => item.base64),
-        checklistRespostas: checklist,
-        naoExecutada,
-        motivoNaoExecucao,
-        produtosUtilizados,
       });
       setCertHash(response.certificateHash || "");
       setCertHashes(response.certificateHashes || (response.certificateHash ? [response.certificateHash] : []));
@@ -251,14 +214,16 @@ export default function OrdensServico() {
   }
 
   function handleImprimirOS(os: OSApp) {
+    const archived = data?.attachments.find(a=>a.entidadeTipo==='os' && a.entidadeId===os.id && a.categoria==='pdf_historico' && a.templateVersao==='documental-v1');
+    if (archived) { void openAttachment(archived).catch(error=>toast.error(error.message)); return; }
     printOsDocument(os, data);
   }
 
   function openEdit(os: OSApp) {
+    if (data) setEditActivities(initialOrderActivities(os, data));
     setEditOs(os);
     setEditTecnico(os.tecnicoNome);
     setEditLocal(os.localExecucao);
-    setEditTag(os.tagEquipamentoServico || os.tags || "");
   }
 
   async function handleSaveEdit() {
@@ -266,7 +231,7 @@ export default function OrdensServico() {
     if (savingEdit) return;
     setSavingEdit(true);
     try {
-      await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal, tagEquipamentoServico: editTag, tags: editTag });
+      await updateOrder(editOs.id, { tecnicoNome: editTecnico, localExecucao: editLocal, atividades: editActivities });
       toast.success("OS atualizada!");
       setEditOs(null);
       reload();
@@ -311,7 +276,7 @@ export default function OrdensServico() {
               <FileCheck2 className="h-4 w-4 text-primary" />
               3. Evidências
             </p>
-            <p className="mt-2 text-muted-foreground">Anexe até 3 fotos da execução para compor histórico, certificado e auditoria.</p>
+            <p className="mt-2 text-muted-foreground">Anexe até 3 fotos por atividade/equipamento para compor histórico, certificado e auditoria.</p>
           </div>
           <div className="rounded-2xl border bg-card p-4">
             <p className="flex items-center gap-2 font-semibold">
@@ -410,68 +375,14 @@ export default function OrdensServico() {
       ) : null}
 
       <Dialog open={encDialog} onOpenChange={setEncDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FileCheck2 className="h-5 w-5 text-primary" />{encerrada ? "OS encerrada" : `Encerrar ${osSelecionada?.numero}`}</DialogTitle></DialogHeader>
           {!encerrada ? (
             <div className="space-y-4">
               {osSelecionada ? <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cleanText(osSelecionada.clienteNome)}</span><span className="text-muted-foreground">Serviço</span><span>{cleanText(osSelecionada.servico)}</span><span className="text-muted-foreground">Equipe</span><span>{cleanJoin(osSelecionada.equipeTecnicosNomes, osSelecionada.tecnicoNome)}</span><span className="text-muted-foreground">Local</span><span>{cleanText(osSelecionada.localExecucao)}</span></div> : null}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
-                <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag do equipamento atendido</Label>
-                {equipamentosOs.length > 0 ? (
-                  <Select value={tagEquipamento || "sem-tag"} onValueChange={(value) => setTagEquipamento(value === "sem-tag" ? "" : value)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sem-tag">Sem tag específica</SelectItem>
-                      {equipamentosOs.map((equipamento) => <SelectItem key={equipamento.id || equipamento.tag} value={equipamento.tag}>{cleanText(equipamento.tag)} — {cleanText(equipamento.descricao || equipamento.tipo || "Equipamento")}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input value={tagEquipamento} onChange={(event) => setTagEquipamento(event.target.value)} placeholder="Ex: BEB-02, CX-01, ARM-03" />
-                )}
-              </div>
-              {servicoSelecionado?.popCodigo || servicoSelecionado?.popTitulo ? (
-                <div className="rounded-lg border bg-muted/30 p-3 text-xs">
-                  <p className="flex items-center gap-1.5 font-semibold"><BookOpen className="h-3.5 w-3.5 text-primary" /> POP vinculado</p>
-                  <p className="mt-1 text-muted-foreground">{servicoSelecionado.popCodigo || "POP"} {servicoSelecionado.popVersao ? `· versão ${servicoSelecionado.popVersao}` : ""}</p>
-                  {servicoSelecionado.popTitulo ? <p className="font-medium">{cleanText(servicoSelecionado.popTitulo)}</p> : null}
-                </div>
-              ) : null}
-              {servicoSelecionado?.produtosEstoque?.length ? (
-                <div className="space-y-2 rounded-lg border p-3">
-                  <Label className="flex items-center gap-1.5"><ClipboardList className="h-3.5 w-3.5" /> Produtos utilizados</Label>
-                  <p className="text-[11px] text-muted-foreground">Os valores informados serão baixados do estoque e vinculados a esta OS.</p>
-                  {servicoSelecionado.produtosEstoque.map((item) => {
-                    const usage = produtosUtilizados.find((entry) => entry.produtoId === item.produtoId);
-                    return <div key={item.produtoId} className="flex items-center gap-2"><span className="min-w-0 flex-1 text-xs">{cleanText(item.produtoNome || item.produtoCodigo || item.produtoId)}</span><Input className="h-8 w-24" type="number" min="0" step="0.001" value={usage?.quantidade ?? 0} onChange={(event) => setProdutosUtilizados((current) => current.map((entry) => entry.produtoId === item.produtoId ? { ...entry, quantidade: Number(event.target.value) } : entry))} /><span className="text-[11px] text-muted-foreground">{item.unidade || "un."}</span></div>;
-                  })}
-                </div>
-              ) : null}
-              {checklist.length > 0 ? (
-                <div className="space-y-2 rounded-lg border p-3">
-                  <Label className="flex items-center gap-1.5"><ClipboardList className="h-3.5 w-3.5" /> Checklist do serviço</Label>
-                  {checklist.map((item, index) => (
-                    <label key={`${item.item}-${index}`} className="flex items-start gap-2 rounded-md border p-2 text-xs">
-                      <Checkbox checked={item.concluido} onCheckedChange={(checked) => setChecklist((prev) => prev.map((entry, entryIndex) => entryIndex === index ? { ...entry, concluido: Boolean(checked) } : entry))} />
-                      <span>{cleanText(item.item)}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : null}
-              {servicoSelecionado?.permiteNaoExecucao ? (
-                <div className="space-y-2 rounded-lg border p-3">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <Checkbox checked={naoExecutada} onCheckedChange={(checked) => setNaoExecutada(Boolean(checked))} />
-                    Registrar como não executada
-                  </label>
-                  {naoExecutada ? <Textarea value={motivoNaoExecucao} onChange={(event) => setMotivoNaoExecucao(event.target.value)} placeholder="Informe o motivo da não execução..." rows={3} /> : null}
-                </div>
-              ) : null}
-              <div className="space-y-2"><Label>Fotos de evidência <span className="text-xs text-muted-foreground">(até 3)</span></Label><input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotoChange} /><div className="flex gap-3">{[0, 1, 2].map((index) => <div key={index} className="relative">{fotos[index] ? <div className="group relative h-24 w-24 overflow-hidden rounded-lg border-2 border-primary"><img src={fotos[index].preview} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" /><button onClick={() => setFotos((prev) => prev.filter((_, fotoIndex) => fotoIndex !== index))} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5"><X className="h-3 w-3 text-white" /></button></div> : <button onClick={() => fileInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50">Foto {index + 1}</button>}</div>)}</div></div>
-              <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)} disabled={savingClose}>Cancelar</Button><Button onClick={handleEncerrar} disabled={savingClose}>{savingClose ? "Encerrando..." : "Encerrar OS"}</Button></DialogFooter>
+              <label className="block space-y-1 text-sm">Data de execução<Input type="date" value={dataExecucao} onChange={e=>setDataExecucao(e.target.value)}/></label>
+              {data && <OrderActivityEditor activities={closeActivities} onChange={setCloseActivities} data={data} closing preparePhoto={prepareEvidencePhoto} onBusyChange={setPreparingPhotos}/>}
+              <DialogFooter><Button variant="outline" onClick={()=>setEncDialog(false)} disabled={savingClose}>Cancelar</Button><Button onClick={handleEncerrar} disabled={savingClose || preparingPhotos}>{savingClose ? 'Encerrando...' : 'Encerrar OS'}</Button></DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
@@ -487,6 +398,7 @@ export default function OrdensServico() {
           <DialogHeader><DialogTitle className="flex items-center justify-between"><span>{viewOs?.numero}</span>{viewOs ? <Button size="sm" variant="outline" className="mr-6 gap-1.5" onClick={() => handleImprimirOS(viewOs)}><Printer className="h-3.5 w-3.5" /> Imprimir</Button> : null}</DialogTitle></DialogHeader>
           {viewOs ? (
             <div className="space-y-3 text-sm">
+              {viewOs.atividades?.length ? <section className="space-y-2"><h3 className="font-semibold">Atividades executadas / planejadas</h3>{viewOs.atividades.map(a=><div key={a.id} className="rounded border p-3"><strong>{a.servicoNome}</strong><p>{a.quantidade} {a.unidade} · {a.localExecucao} · {a.tagEquipamento || 'Sem TAG'}</p><p>{a.naoExecutada ? `Não executada: ${a.motivoNaoExecucao}` : `${a.fotos.length} foto(s) deste item`}</p></div>)}</section> : null}
               <div className="grid grid-cols-2 gap-3">
                 {[
                   ["Número", viewOs.numero],
@@ -546,12 +458,12 @@ export default function OrdensServico() {
       </Dialog>
 
       <Dialog open={!!editOs} onOpenChange={(value) => { if (!value) setEditOs(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><PenLine className="h-4 w-4 text-primary" /> Editar OS — {editOs?.numero}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5"><Label>Técnico responsável</Label><Select value={editTecnico} onValueChange={setEditTecnico}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tecnicos.filter((item) => item.ativo).map((item) => <SelectItem key={item.id} value={item.nome}>{cleanText(item.nome)} — {cleanText(item.cargo)}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-1.5"><Label>Local de execução</Label><Input value={editLocal} onChange={(event) => setEditLocal(event.target.value)} /></div>
-            <div className="space-y-1.5"><Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag/equipamento</Label><Input value={editTag} onChange={(event) => setEditTag(event.target.value)} placeholder="Ex: BEB-02, CX-01, ARM-03" /></div>
+            {data && <OrderActivityEditor activities={editActivities} onChange={setEditActivities} data={data} preparePhoto={prepareEvidencePhoto}/>}
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setEditOs(null)} disabled={savingEdit}>Cancelar</Button><Button onClick={handleSaveEdit} disabled={savingEdit}>{savingEdit ? "Salvando..." : "Salvar"}</Button></DialogFooter>
         </DialogContent>

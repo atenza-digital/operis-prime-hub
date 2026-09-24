@@ -1,15 +1,17 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { readFile, readdir } from 'node:fs/promises';
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { authenticateToken, changePassword, hashPassword, loginWithPassword, normalizeEmail, revokeSession } from "./auth.mjs";
 import { ensureDatabaseShape, pool, query, withTransaction } from "./db.mjs";
 import { assertCertificateSource, resolveCertificateSource } from "./certificate-rules.mjs";
+import { assertExecutionDate, legacyActivities, normalizeActivities, operationError } from "./order-activities.mjs";
 import { buildAttachmentSecurityMetadata, createAttachmentStoragePlan, persistAttachmentContent, readAttachmentContentFromStorage, resolveAttachmentPolicy, validateAttachmentPayload } from "./storage.mjs";
 import { buildProposalCatalogContext, extractProposalPdfDeterministically, generateProposalAssistDraft, normalizeProposalAssistDraft } from "./proposal-ai.mjs";
 import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-config.mjs";
-import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
+import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements, sanitizeOrders } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
@@ -201,7 +203,7 @@ function certificateSnapshotSha256(snapshot) {
 }
 
 function makeId(prefix) {
-  return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(3).toString('hex')}`;
 }
 
 function formatSequential(format, value) {
@@ -652,46 +654,6 @@ async function saveImmutableDocumentAttachment(client, {
   };
 }
 
-function buildHistoricalOrderHtml(snapshot, order) {
-  const data = snapshot.encerramento || snapshot.emissao || {};
-  const servico = data.servico || {};
-  const pop = servico.pop || {};
-  const operacao = data.operacao || {};
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(order.numero)}</title><style>body{font-family:Arial,sans-serif;color:#111;padding:28px}h1{color:#065f46}table{border-collapse:collapse;width:100%;margin:12px 0}td,th{border:1px solid #999;padding:7px;text-align:left}.muted{color:#666;font-size:12px}.box{border:1px solid #aaa;padding:12px;margin:12px 0}</style></head><body>
-    <h1>Ordem de Serviço ${htmlEscape(order.numero)}</h1>
-    <p class="muted">Documento histórico gerado em ${new Date().toLocaleString("pt-BR")}.</p>
-    <table><tr><th>Cliente</th><td>${htmlEscape(data.cliente?.nome || order.cliente)}</td><th>CNPJ</th><td>${htmlEscape(data.cliente?.cnpj || order.cnpj)}</td></tr>
-    <tr><th>Serviço</th><td>${htmlEscape(servico.nome || order.servico)}</td><th>Origem</th><td>${htmlEscape(data.os?.contratoId || order.contrato_id || "Atendimento avulso")}</td></tr>
-    <tr><th>Técnico</th><td>${htmlEscape(data.tecnico?.nome || order.tecnico)}</td><th>Local</th><td>${htmlEscape(operacao.localExecucao || order.local_execucao)}</td></tr>
-    <tr><th>Emissão</th><td>${htmlEscape(data.os?.dataEmissao || formatDbDate(order.data_emissao))}</td><th>Execução</th><td>${htmlEscape(data.os?.dataExecucao || formatDbDate(order.data_execucao))}</td></tr></table>
-    <div class="box"><strong>POP:</strong> ${htmlEscape([pop.codigo, pop.titulo, pop.versao ? `versão ${pop.versao}` : ""].filter(Boolean).join(" - ") || "-")}</div>
-    <h2>Procedimentos</h2>${htmlList(servico.procedimentos || [])}
-    <h2>Checklist</h2>${htmlList((operacao.checklistRespostas || servico.checklistItens || []).map((item) => typeof item === "string" ? item : `${item.concluido ? "[X]" : "[ ]"} ${item.item}`))}
-    <h2>Evidências</h2><p>${(operacao.evidencias || []).length} evidência(s) vinculada(s).</p>
-  </body></html>`;
-}
-
-function buildHistoricalMeasurementHtml(snapshot, measurement) {
-  const itens = snapshot.itens || [];
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(measurement.numero)}</title><style>body{font-family:Arial,sans-serif;padding:28px}h1{color:#065f46}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:7px;text-align:left}.right{text-align:right}</style></head><body>
-    <h1>Medição ${htmlEscape(measurement.numero)}</h1>
-    <p><strong>Cliente:</strong> ${htmlEscape(snapshot.cliente?.nome || measurement.cliente_nome)}</p>
-    <p><strong>Período:</strong> ${htmlEscape(snapshot.periodo?.inicio || measurement.periodo_inicio)} até ${htmlEscape(snapshot.periodo?.fim || measurement.periodo_fim)}</p>
-    <table><thead><tr><th>OS</th><th>Serviço</th><th>Data</th><th>Qtd.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>
-    ${itens.map((item) => `<tr><td>${htmlEscape(item.osNumero)}</td><td>${htmlEscape(item.servico)}</td><td>${htmlEscape(item.dataExecucao)}</td><td>${htmlEscape(item.quantidade)} ${htmlEscape(item.unidade)}</td><td class="right">${Number(item.valorUnitario || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td><td class="right">${Number(item.valorTotal || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td></tr>`).join("")}
-    </tbody><tfoot><tr><th colspan="5" class="right">Total</th><th class="right">${Number(snapshot.total || measurement.total || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</th></tr></tfoot></table>
-  </body></html>`;
-}
-
-function buildHistoricalCertificateHtml(snapshot, certificate) {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${htmlEscape(certificate.numero)}</title><style>body{font-family:Arial,sans-serif;padding:28px}h1{color:#065f46}.box{border:1px solid #999;padding:14px;margin:12px 0}</style></head><body>
-    <h1>Certificado ${htmlEscape(certificate.numero)}</h1>
-    <div class="box"><strong>Hash:</strong> ${htmlEscape(certificate.hash)}</div>
-    <p>Certificamos que <strong>${htmlEscape(snapshot.cliente?.nome || certificate.cliente_nome)}</strong>, CNPJ ${htmlEscape(snapshot.cliente?.cnpj || certificate.cliente_cnpj)}, recebeu o serviço de <strong>${htmlEscape(snapshot.servico?.nome || certificate.servico)}</strong>.</p>
-    <p><strong>OS:</strong> ${htmlEscape(snapshot.os?.numero || certificate.os_numero)} | <strong>Data de execução:</strong> ${htmlEscape(snapshot.os?.dataExecucao || certificate.data_execucao)}</p>
-    <p><strong>Validade até:</strong> ${htmlEscape(snapshot.certificado?.validadeAte || "")}</p>
-  </body></html>`;
-}
 
 function formatDbDate(value) {
   return value?.toISOString?.().split("T")[0] ?? value ?? null;
@@ -759,7 +721,7 @@ function buildOrderOperationalSnapshot({ order, customer, contract, service, com
       id: order.cliente_id || customer?.id || null,
       nome: order.cliente || customer?.razao_social || null,
       cnpj: order.cnpj || customer?.cnpj || null,
-      endereco: order.cliente_endereco || (customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null),
+      endereco: order.cliente_endereco || (customer ? formatCustomerAddress(customer) : null),
       logoUrl: order.cliente_logo_url || customer?.logo_url || null,
     },
     servico: buildServiceSnapshot(service),
@@ -785,6 +747,7 @@ function buildOrderOperationalSnapshot({ order, customer, contract, service, com
       veiculoDescricao: order.veiculo_descricao || null,
     },
     operacao: {
+      atividades: order.atividades || [],
       localExecucao: order.local_execucao || null,
       tags: order.tags || null,
       tagEquipamentoServico: order.tag_equipamento_servico || null,
@@ -800,6 +763,8 @@ function buildOrderOperationalSnapshot({ order, customer, contract, service, com
       })),
     },
     empresa: company ? {
+      logoUrl: company.logo_url,
+      certificadoConfig: company.certificado_config || {},
       razaoSocial: company.razao_social,
       nomeFantasia: company.nome_fantasia,
       cnpj: company.cnpj,
@@ -879,6 +844,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
     os: {
       id: order.id,
       numero: order.numero,
+      atividadeId: order.atividade_id || null,
       contratoId: source.contractId,
       servicoCatalogoId: source.serviceId,
       dataExecucao,
@@ -1304,6 +1270,8 @@ async function getOrders(tenantId) {
   const attachmentsByOrder = await getAttachmentsByEntity("os", tenantId);
   const { rows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE tenant_id = $1 ORDER BY data_emissao, id", [tenantId]);
   return rows.map((row) => ({
+    servicoCatalogoId: row.servico_catalogo_id,
+    atividades: row.atividades || [],
     id: row.id,
     numero: row.numero,
     agendamentoId: row.agendamento_id,
@@ -1344,6 +1312,7 @@ async function getOrders(tenantId) {
 async function getCertificates(tenantId) {
   const { rows } = await query("SELECT * FROM ciperprag_hub.certificados WHERE tenant_id = $1 ORDER BY emitido_em DESC, id DESC", [tenantId]);
   return rows.map((row) => ({
+    atividadeId: row.atividade_id,
     id: row.id,
     hash: row.hash,
     numero: row.numero,
@@ -1484,105 +1453,112 @@ function normalizeCertificateTags(order) {
   return unique.length ? unique : [null];
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
-  const scopedTenantId = tenantId || order.tenant_id;
-  const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
-  const contract = contractRows[0];
-  const service = await getServiceForTenantSnapshot(client, order.servico, scopedTenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
-  const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, scopedTenantId]);
-  const customer = customerRows[0];
-  const source = resolveCertificateSource({ order, customer, service });
-  assertCertificateSource(source);
-  const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
-  const company = companyRows[0];
-  const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
-  const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
-  const hashes = [];
-
-  for (const [index, tag] of normalizeCertificateTags(order).entries()) {
-    const { rows: numRows } = await client.query(
-      `UPDATE ciperprag_hub.numeracao_config
-       SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW()
-       WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1)
-       RETURNING certificado_formato, certificado_ultimo`,
-      [scopedTenantId],
-    );
-    const certId = makeId("CERT");
-    const hash = index === 0 && order.certificado_hash ? order.certificado_hash : await generateUniqueCertificateHash(client);
-    const certNumber = formatSequential(numRows[0]?.certificado_formato, numRows[0]?.certificado_ultimo || 1);
-    const certificateOrder = {
-      ...order,
-      cliente: source.clientName,
-      cnpj: source.clientCnpj,
-      cliente_endereco: source.clientAddress,
-      cliente_logo_url: source.clientLogoUrl,
-      servico_catalogo_id: source.serviceId,
-      servico: source.serviceName,
-      tipo: source.serviceType,
-      tag_equipamento_servico: tag,
-      tags: tag || order.tags,
-    };
-    const snapshot = buildCertificateSnapshot({
-      order: certificateOrder,
-      customer,
-      service,
-      company,
-      hash,
-      number: certNumber,
-      dataExecucao: executionDate,
-      validadeDias,
-      publicBaseUrl,
-      userId,
-    });
-
-    const insertResult = await client.query(
-      `INSERT INTO ciperprag_hub.certificados
-       (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status, tag_equipamento_servico)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido',$21)
-       ON CONFLICT (hash) DO NOTHING`,
-      [
-        certId,
-        scopedTenantId,
-        hash,
-        certNumber,
-        order.id,
-        order.numero,
-        source.clientId,
-        source.clientName,
-        source.clientCnpj,
-        source.clientAddress,
-        source.clientLogoUrl,
-        source.contractId,
-        source.serviceName,
-        order.tecnico,
-        order.local_execucao,
-        executionDate,
-        validadeDias,
-        service?.produtos_quimicos || [],
-        JSON.stringify(normalizeJsonArray(service?.produtos_detalhados)),
-        JSON.stringify(snapshot),
-        tag,
-      ],
-    );
-    hashes.push(hash);
-    if (insertResult.rowCount > 0) {
-      const certificate = { ...certificateOrder, id: certId, hash, numero: certNumber, os_numero: order.numero };
-      await saveImmutableDocumentAttachment(client, {
-        tenantId: scopedTenantId,
-        tenantSlug,
-        userId,
-        entityType: "certificado",
-        entityId: certId,
-        fileName: `certificado-${certNumber.replaceAll("/", "-")}.pdf`,
-        html: buildHistoricalCertificateHtml(snapshot, certificate),
-        metadata: { origem: "emissao_certificado", certificadoHash: hash, osId: order.id, tagEquipamentoServico: tag },
-      });
+async function prepareOrderActivities(client, order, body, closing = false) {
+  const mainService = await getServiceForTenantSnapshot(client, order.servico, order.tenant_id, order.servico_catalogo_id || null);
+  let supplied = body.atividades;
+  if (!supplied) {
+    supplied = legacyActivities({ ...order, servico_catalogo_id: mainService?.id,
+      ...(closing ? { fotos: body.fotos || [], quantidade: body.quantidade ?? order.quantidade,
+        tag_equipamento_servico: body.tagEquipamentoServico || order.tag_equipamento_servico,
+        nao_executada: body.naoExecutada, motivo_nao_execucao: body.motivoNaoExecucao } : {}) });
+    supplied = supplied.map(a => ({ ...a, produtosUtilizados: body.produtosUtilizados || a.produtosUtilizados, checklistRespostas: body.checklistRespostas || a.checklistRespostas }));
+  }
+  const activities = normalizeActivities(supplied, { closing });
+  for (const activity of activities) {
+    const service = await getServiceForTenantSnapshot(client, '', order.tenant_id, activity.servicoId);
+    if (!service || service.ativo === false) throw operationError('O serviço da atividade não está ativo neste tenant.');
+    activity.servicoNome = service.nome;
+    activity.unidade = service.unidade;
+    activity.tipo = service.tipo;
+    activity.servicoSnapshot = buildServiceSnapshot(service);
+    activity.geraCertificado = Boolean(service.gera_certificado);
+    activity.validadeDias = service.validade_certificado_dias;
+    activity.recorrenciaDias = Number(service.recorrencia_dias || 0);
+    // Additional services are avulso unless linked to a matching customer contract.
+    if (!activity.contratoId && activity.servicoId === mainService?.id) activity.contratoId = order.contrato_id || null;
+    activity.valorUnitario = 0;
+    if (activity.contratoId) {
+      const { rows } = await client.query('SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2', [activity.contratoId, order.tenant_id]);
+      const contract = rows[0];
+      if (!contract || contract.cliente_id !== order.cliente_id || (contract.servico_catalogo_id ? contract.servico_catalogo_id !== activity.servicoId : contract.servico !== service.nome)) {
+        throw operationError('Contrato incompatível com o cliente ou serviço da atividade.');
+      }
+      activity.valorUnitario = Number(contract.valor_unitario || 0);
+    }
+    if (closing && activity.naoExecutada && !service.permite_nao_execucao) throw operationError('Este serviço não permite registrar não execução.');
+    if (closing && !activity.naoExecutada && service.exige_foto && !activity.fotos.length) throw operationError('Anexe foto da atividade: ' + service.nome + ' / ' + activity.tagEquipamento);
+    activity.produtosDetalhados = [];
+    for (const usage of activity.produtosUtilizados) {
+      const { rows } = await client.query('SELECT * FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2', [usage.produtoId, order.tenant_id]);
+      const product = rows[0];
+      if (!product || product.ativo === false) throw operationError('Produto não disponível neste tenant.');
+      const technical = normalizeJsonArray(service.produtos_detalhados).find(p => p.produtoId === product.id || String(p.nome || '').toLocaleLowerCase('pt-BR') === product.nome.toLocaleLowerCase('pt-BR')) || {};
+      activity.produtosDetalhados.push({ ...technical, nome: product.nome, qtUso: usage.quantidade + ' ' + product.unidade });
     }
   }
-  await client.query("UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3", [order.id, hashes[0], scopedTenantId]);
-  return { primaryHash: hashes[0], hashes };
+  return activities;
 }
 
+function formatCustomerAddress(customer) {
+  return customer ? [customer.endereco, customer.bairro, [customer.municipio, customer.uf].filter(Boolean).join('-')].filter(Boolean).join(', ') : null;
+}
+
+async function issueCertificateForOrder(client, inputOrder, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, onlyActivityId = null, activityOverride = null } = {}) {
+  const scopedTenantId = tenantId || inputOrder.tenant_id;
+  const { rows: locked } = await client.query('SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [inputOrder.id, scopedTenantId]);
+  const order = locked[0];
+  if (!order || order.status !== 'encerrada' || order.nao_executada) throw operationError('Somente OS encerrada com execução pode emitir certificado.', 409);
+  const executionDate = formatDbDate(dataExecucao || order.data_execucao);
+  assertExecutionDate(executionDate);
+  const { rows: previous } = await client.query('SELECT * FROM ciperprag_hub.certificados WHERE os_id = $1 AND tenant_id = $2 ORDER BY emitido_em, id', [order.id, scopedTenantId]);
+  // Legacy issuances are returned intact; never fan out their shared evidence again.
+  if (!onlyActivityId && previous.length && !order.atividades?.length) return { primaryHash: order.certificado_hash || previous[0].hash, hashes: previous.map(c => c.hash) };
+  const { rows: customerRows } = await client.query('SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2', [order.cliente_id, scopedTenantId]);
+  const { rows: companyRows } = await client.query('SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1', [scopedTenantId]);
+  const customer = customerRows[0], company = companyRows[0];
+  const activities = onlyActivityId && activityOverride ? [activityOverride] : order.atividades?.length ? order.atividades : await prepareOrderActivities(client, order, {}, false);
+  const hashes = [];
+  for (const activity of activities) {
+    if (activity.naoExecutada || !activity.geraCertificado || (onlyActivityId && activity.id !== onlyActivityId)) continue;
+    const existing = previous.filter(c => c.atividade_id === activity.id);
+    if (!onlyActivityId && existing.length) {
+      hashes.push((existing.find(c => c.status === 'emitido') || existing[0]).hash);
+      continue;
+    }
+    const serviceSnapshot = activity.servicoSnapshot || {};
+    const service = { id: activity.servicoId, nome: activity.servicoNome, tipo: activity.tipo,
+      gera_certificado: true, produtos_detalhados: activity.produtosDetalhados || [],
+      produtos_quimicos: (activity.produtosDetalhados || []).map(p => p.nome), normas_aplicaveis: serviceSnapshot.normasAplicaveis || [] };
+    const source = resolveCertificateSource({ order, customer, service });
+    assertCertificateSource(source);
+    const { rows: numRows } = await client.query(
+      'UPDATE ciperprag_hub.numeracao_config SET certificado_ultimo = certificado_ultimo + 1, atualizado_em = NOW() WHERE id = (SELECT id FROM ciperprag_hub.numeracao_config WHERE tenant_id = $1 ORDER BY id LIMIT 1) RETURNING certificado_formato, certificado_ultimo', [scopedTenantId]);
+    if (!numRows.length) throw operationError('Configure a numeração dos certificados.', 409);
+    const certId = makeId('CERT'), hash = await generateUniqueCertificateHash(client);
+    const certNumber = formatSequential(numRows[0].certificado_formato, numRows[0].certificado_ultimo);
+    const validadeDias = Number(activity.validadeDias ?? company?.certificado_validade_padrao_dias ?? 0);
+    const certificateOrder = { ...order, contrato_id: activity.contratoId, atividade_id: activity.id, servico: service.nome,
+      servico_catalogo_id: service.id, tipo: service.tipo, quantidade: activity.quantidade, unidade: activity.unidade,
+      local_execucao: activity.localExecucao, tag_equipamento_servico: activity.tagEquipamento, tags: activity.tagEquipamento, fotos: activity.fotos };
+    const snapshot = buildCertificateSnapshot({ order: certificateOrder, customer, service, company, hash, number: certNumber, dataExecucao: executionDate, validadeDias, publicBaseUrl, userId });
+    await client.query(
+      `INSERT INTO ciperprag_hub.certificados
+      (id, tenant_id, hash, numero, os_id, os_numero, cliente_id, cliente_nome, cliente_cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tecnico_nome, local_execucao, data_execucao, emitido_em, validade_dias, produtos_quimicos, produtos_detalhados, snapshot_dados, status, tag_equipamento_servico, atividade_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$18,$19,$20,'emitido',$21,$22)`,
+      [certId, scopedTenantId, hash, certNumber, order.id, order.numero, source.clientId, source.clientName, source.clientCnpj,
+        source.clientAddress, source.clientLogoUrl, activity.contratoId, service.nome, order.tecnico, activity.localExecucao, executionDate,
+        validadeDias, service.produtos_quimicos, JSON.stringify(service.produtos_detalhados), JSON.stringify(snapshot), activity.tagEquipamento || null, activity.id]);
+    hashes.push(hash);
+    const { buildCertificateHtml } = await import('./generated/documents.js');
+    const cert = { id: certId, numero: certNumber, hash, osId: order.id, osNumero: order.numero, dataExecucao: executionDate, validadeDias,
+      produtosDetalhados: service.produtos_detalhados, snapshotDados: snapshot };
+    await saveImmutableDocumentAttachment(client, { tenantId: scopedTenantId, tenantSlug, userId, entityType: 'certificado', entityId: certId,
+      fileName: 'certificado-' + certNumber.replaceAll('/', '-') + '.pdf', snapshot, template: { code: 'certificado-garantia', version: 'documental-v1' },
+      html: await buildCertificateHtml(cert, { companyConfig: null, orders: [], clients: [] }), metadata: { origem: 'emissao_certificado', certificadoHash: hash, osId: order.id, atividadeId: activity.id } });
+  }
+  if (hashes.length && !onlyActivityId) await client.query('UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3', [order.id, hashes[0], scopedTenantId]);
+  return { primaryHash: hashes[0] || null, hashes };
+}
 async function getCompanyConfig(tenantId) {
   const { rows } = await query(
     `SELECT e.*, t.slug AS tenant_slug, COALESCE(t.nome_fantasia, t.razao_social, t.slug) AS tenant_nome
@@ -2122,6 +2098,7 @@ async function getMeasurements(tenantId) {
           JSON_BUILD_OBJECT(
             'id', i.id,
             'osId', i.os_id,
+            'atividadeId', i.atividade_id,
             'osNumero', i.os_numero,
             'contratoId', i.contrato_id,
             'servico', i.servico,
@@ -2139,7 +2116,7 @@ async function getMeasurements(tenantId) {
     LEFT JOIN ciperprag_hub.medicao_itens i ON i.medicao_id = m.id
     WHERE m.tenant_id = $1
     GROUP BY m.id
-    ORDER BY m.criado_em DESC
+    ORDER BY m.criado_em DESC, m.id DESC
   `, [tenantId]);
 
   return rows.map((row) => ({
@@ -2351,7 +2328,7 @@ async function getBootstrap(tenantId, permissions = []) {
     stockProducts,
     contracts: sanitizeContracts(contracts, permissions),
     schedules,
-    orders,
+    orders: sanitizeOrders(orders, permissions),
     certificates,
     technicians,
     vehicles,
@@ -4140,25 +4117,26 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       throw error;
     }
 
-    const items = orderRows.map((order) => {
-      const quantidade = Number(order.quantidade || 0);
-      const valorUnitario = Number(order.valor_unitario || 0);
+    const items = orderRows.flatMap((order) => (order.atividades?.length ? order.atividades.filter(a=>!a.naoExecutada) : [null]).map(activity => {
+      const quantidade = Number(activity?.quantidade ?? order.quantidade ?? 0);
+      const valorUnitario = Number(activity?.valorUnitario ?? order.valor_unitario ?? 0);
       const valorTotal = moneyLineTotal(quantidade, valorUnitario);
       return {
         osId: order.id,
+        atividadeId: activity?.id || null,
         osNumero: order.numero,
-        contratoId: order.contrato_id,
-        servico: order.servico,
+        contratoId: activity ? activity.contratoId : order.contrato_id,
+        servico: activity?.servicoNome || order.servico,
         dataExecucao: order.data_execucao?.toISOString?.().split("T")[0] ?? order.data_execucao ?? order.data_emissao?.toISOString?.().split("T")[0] ?? order.data_emissao,
         quantidade,
-        unidade: order.unidade,
+        unidade: activity?.unidade || order.unidade,
         valorUnitario,
         valorTotal,
       };
-    });
+    }));
     const total = Math.round(items.reduce((sum, item) => sum + Math.round(item.valorTotal * 100), 0)) / 100;
     const id = makeId("MED");
-    const endereco = customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null;
+    const endereco = customer ? formatCustomerAddress(customer) : null;
     const snapshot = {
       numero: number,
       classificacao: classification,
@@ -4178,6 +4156,11 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
         cnpj: company?.cnpj || null,
         endereco: company?.endereco || null,
         logoUrl: company?.logo_url || null,
+        certificadoConfig: company?.certificado_config || {},
+        corPrimaria: company?.cor_primaria,
+        corSecundaria: company?.cor_secundaria,
+        corDestaque: company?.cor_destaque,
+        responsavelTecnico: company?.responsavel_tecnico,
       },
       formaPagamento: company?.medicao_forma_pagamento_padrao || null,
       localEntrega: company?.medicao_local_entrega_padrao || null,
@@ -4195,11 +4178,14 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     for (const item of items) {
       await client.query(
         `INSERT INTO ciperprag_hub.medicao_itens
-         (medicao_id, tenant_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total, medicao_ativa)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE)`,
-        [id, tenantId, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal],
+         (medicao_id, tenant_id, os_id, os_numero, contrato_id, servico, data_execucao, quantidade, unidade, valor_unitario, valor_total, medicao_ativa, atividade_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,$12)`,
+        [id, tenantId, item.osId, item.osNumero, item.contratoId, item.servico, item.dataExecucao, item.quantidade, item.unidade, item.valorUnitario, item.valorTotal, item.atividadeId],
       );
     }
+    const { buildMeasurementHtml } = await import('./generated/documents.js');
+    const cssFiles = (await readdir(path.resolve(__dirname, '../dist/assets'))).filter(file => file.endsWith('.css'));
+    const documentCss = (await Promise.all(cssFiles.map(file => readFile(path.resolve(__dirname, '../dist/assets', file), 'utf8')))).join('\n');
     await saveImmutableDocumentAttachment(client, {
       tenantId: req.auth.user.tenant.id,
       tenantSlug: req.auth.user.tenant.slug,
@@ -4207,7 +4193,9 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
       entityType: "medicao",
       entityId: id,
       fileName: `medicao-${number.replaceAll("/", "-")}.pdf`,
-      html: buildHistoricalMeasurementHtml(snapshot, { id, numero: number, cliente_nome: clienteNome, periodo_inicio: dataInicio, periodo_fim: dataFim, total }),
+      html: buildMeasurementHtml(snapshot, { id, numero: number }, documentCss),
+      snapshot,
+      template: { code: 'medicao', version: 'documental-v1' },
       metadata: { origem: "geracao_medicao", numero: number, periodo: { inicio: dataInicio, fim: dataFim } },
     });
     await logAuditEvent(client, req, {
@@ -4244,7 +4232,7 @@ app.post("/api/measurements/generate", requirePermission("medicoes.manage"), asy
     };
     });
   } catch (error) {
-    if (error?.code === "23505" && String(error?.constraint || "").includes("ux_medicao_itens_tenant_os_ativa")) {
+    if (error?.code === "23505" && /ux_medicao_(itens_tenant_os|atividade)_ativa/.test(String(error?.constraint || ""))) {
       return res.status(409).json({ error: "Uma ou mais OS ja estao vinculadas a uma medicao ativa. Cancele ou substitua formalmente a medicao anterior antes de medir novamente." });
     }
     throw error;
@@ -4369,9 +4357,11 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
   const leaderName = req.body.tecnicoNome;
   const tenantId = req.auth.user.tenant.id;
   const result = await withTransaction(async (client) => {
-    const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1 AND tenant_id = $2", [agendamentoId, tenantId]);
+    const { rows: agRows } = await client.query("SELECT * FROM ciperprag_hub.agendamentos WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [agendamentoId, tenantId]);
     const ag = agRows[0];
-    if (!ag) throw new Error("Agendamento não encontrado");
+    if (!ag) throw operationError('Agendamento não encontrado.',404);
+    if (ag.os_id) return ag.os_id;
+    if (ag.status !== 'agendado') throw operationError('Somente agendamento ativo pode gerar OS.',409);
     const { rows: contractRows } = ag.contrato_id
       ? await client.query(
         `SELECT c.*, t.tipo AS template_tipo, t.status AS template_status
@@ -4396,7 +4386,7 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
     const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [leaderName || ag.tecnicos_nomes?.[0], tenantId]);
     const tech = techRows[0];
     const service = await getServiceForTenantSnapshot(client, ag.servico, tenantId, ag.servico_catalogo_id || contract?.servico_catalogo_id || null);
-    const scheduleRule = validateScheduleOrigin({ contractId: ag.contrato_id, contract, service: service ? { ...service, ativo: true, id: service.id } : null });
+    const scheduleRule = validateScheduleOrigin({ contractId: ag.contrato_id, contract, service });
     if (!scheduleRule.ok) {
       const error = new Error(scheduleRule.error);
       error.status = 400;
@@ -4416,7 +4406,7 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       `INSERT INTO ciperprag_hub.ordens_servico
       (id, tenant_id, numero, agendamento_id, cliente_id, cliente, cnpj, cliente_endereco, cliente_logo_url, contrato_id, servico, tipo, tecnico, tecnico_cpf, tecnico_data_admissao, equipe_tecnicos_ids, equipe_tecnicos_nomes, veiculo_id, veiculo_descricao, local_id, local_execucao, tags, observacao, data_emissao, quantidade, unidade, servico_catalogo_id, status, fotos)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,CURRENT_DATE,1,$24,$25,'aberta',$26)`,
-      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? `${customer.endereco}, ${customer.bairro}, ${customer.municipio}-${customer.uf}` : null, customer?.logo_url || null, ag.contrato_id, service?.nome || ag.servico, service?.tipo || ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, service.id, []],
+      [orderId, tenantId, number, agendamentoId, ag.cliente_id, ag.cliente, customer?.cnpj || ag.cliente_cnpj, customer ? formatCustomerAddress(customer) : null, customer?.logo_url || null, ag.contrato_id, service?.nome || ag.servico, service?.tipo || ag.tipo, tech?.nome || leaderName || ag.tecnicos_nomes?.[0] || "", tech?.cpf || null, tech?.data_admissao || null, ag.tecnicos_ids || [], ag.tecnicos_nomes || [], ag.veiculo_id || null, ag.veiculo_descricao || null, ag.local_id || null, ag.local_execucao || null, ag.tags || null, ag.observacao || null, contract?.unidade || service?.unidade || null, service.id, []],
     );
     const { rows: insertedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
     const snapshot = buildOrderOperationalSnapshot({
@@ -4446,294 +4436,114 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
 });
 
 app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) => {
-  const current = (await getOrders(req.auth.user.tenant.id)).find((item) => item.id === req.params.id);
-  if (!current) return res.status(404).json({ error: "OS não encontrada" });
-  const body = { ...current, ...req.body };
-  await query(
-    `UPDATE ciperprag_hub.ordens_servico SET
-      tecnico=$2, local_execucao=$3, observacao=$4, tags=$5, tag_equipamento_servico=$6, updated_at=NOW()
-     WHERE id = $1 AND tenant_id = $7`,
-    [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null, req.auth.user.tenant.id],
-  ).catch(async () => {
-    await query(`UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4, tags=$5, tag_equipamento_servico=$6 WHERE id = $1 AND tenant_id = $7`, [req.params.id, body.tecnicoNome, body.localExecucao, body.observacao || null, body.tags || null, body.tagEquipamentoServico || null, req.auth.user.tenant.id]);
-  });
-  await logAuditEvent(null, req, {
-    entityType: "os",
-    entityId: req.params.id,
-    action: "order_updated",
-    summary: `OS ${current.numero || req.params.id} atualizada`,
-    before: {
-      tecnicoNome: current.tecnicoNome,
-      localExecucao: current.localExecucao,
-      observacao: current.observacao,
-      tags: current.tags,
-      tagEquipamentoServico: current.tagEquipamentoServico,
-    },
-    after: {
-      tecnicoNome: body.tecnicoNome,
-      localExecucao: body.localExecucao,
-      observacao: body.observacao,
-      tags: body.tags,
-      tagEquipamentoServico: body.tagEquipamentoServico,
-    },
+  await withTransaction(async client => {
+    const { rows } = await client.query('SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [req.params.id, req.auth.user.tenant.id]);
+    const order = rows[0];
+    if (!order) throw operationError('OS não encontrada.', 404);
+    if (order.status !== 'aberta') throw operationError('Uma OS encerrada não pode ser editada.', 409);
+    const activities = await prepareOrderActivities(client, order, req.body);
+    await client.query(
+      'UPDATE ciperprag_hub.ordens_servico SET tecnico=$2, local_execucao=$3, observacao=$4, atividades=$5, tags=$6, tag_equipamento_servico=$6, atualizado_em=NOW() WHERE id=$1 AND tenant_id=$7',
+      [order.id, req.body.tecnicoNome ?? order.tecnico, req.body.localExecucao ?? order.local_execucao,
+        req.body.observacao ?? order.observacao, JSON.stringify(activities), activities.map(a => a.tagEquipamento).filter(Boolean).join(', '), order.tenant_id]);
+    await logAuditEvent(client, req, { entityType: 'os', entityId: order.id, action: 'order_updated', summary: 'Atividades da OS atualizadas', before: { atividades: order.atividades }, after: { atividades: activities.map(({ fotos, ...a }) => ({ ...a, fotos: fotos.length })) } });
   });
   res.json({ ok: true });
 });
 
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
-  const orderId = req.params.id;
-  const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
-  const tenantId = req.auth.user.tenant.id;
-
-  const response = await withTransaction(async (client) => {
-    const { rows: orderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
-    const order = orderRows[0];
-    if (!order) throw new Error("OS não encontrada");
-
-    const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, tenantId]);
-    const contract = contractRows[0];
-    const service = await getServiceForTenantSnapshot(client, order.servico, tenantId, order.servico_catalogo_id || contract?.servico_catalogo_id || null);
-    const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [tenantId]);
+  const orderId = req.params.id, tenantId = req.auth.user.tenant.id;
+  const response = await withTransaction(async client => {
+    const { rows } = await client.query('SELECT * FROM ciperprag_hub.ordens_servico WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [orderId, tenantId]);
+    const order = rows[0];
+    if (!order) throw operationError('OS não encontrada.', 404);
+    if (order.status === 'encerrada') {
+      const { rows: certificates } = await client.query("SELECT hash FROM ciperprag_hub.certificados WHERE os_id=$1 AND tenant_id=$2 AND status='emitido' ORDER BY emitido_em, id", [orderId, tenantId]);
+      return { alreadyClosed: true, certificateHash: certificates[0]?.hash || null, certificateHashes: certificates.map(c => c.hash) };
+    }
+    const dataExecucao = req.body.dataExecucao;
+    assertExecutionDate(dataExecucao);
+    const activities = await prepareOrderActivities(client, order, req.body, true);
+    const { rows: companyRows } = await client.query('SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id=$1 ORDER BY id LIMIT 1', [tenantId]);
     const company = companyRows[0];
-    const { rows: customerRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [order.cliente_id, tenantId]);
-    const customer = customerRows[0];
-    const { rows: techRows } = await client.query("SELECT * FROM ciperprag_hub.tecnicos WHERE nome = $1 AND tenant_id = $2", [order.tecnico, tenantId]);
-    const technician = techRows[0];
-    const qty = Number(quantidade || 1);
-    const isNotExecuted = Boolean(naoExecutada);
-    const uploadPolicy = resolveAttachmentPolicy("os.foto", company?.certificado_config || {});
-    const rawFotos = Array.isArray(fotos) ? fotos : [];
-    if (rawFotos.length > uploadPolicy.maxFiles) {
-      const error = new Error(`Anexe no maximo ${uploadPolicy.maxFiles} fotos de evidencia.`);
-      error.status = 400;
-      throw error;
+    const { rows: customers } = await client.query('SELECT * FROM ciperprag_hub.clientes WHERE id=$1 AND tenant_id=$2', [order.cliente_id, tenantId]);
+    const policy = resolveAttachmentPolicy('os.foto', company?.certificado_config || {});
+    const contractTotals = new Map(), productTotals = new Map();
+    for (const activity of activities) {
+      activity.fotos = activity.fotos.map((photo, index) => validateAttachmentPayload({ contentBase64: photo, allowedMimeTypes: policy.allowedMimeTypes, maxBytes: policy.maxBytes, label: 'Foto ' + (index + 1) }).dataUrl);
+      if (activity.naoExecutada) continue;
+      if (activity.contratoId) contractTotals.set(activity.contratoId, (contractTotals.get(activity.contratoId) || 0) + activity.quantidade);
+      for (const usage of activity.produtosUtilizados) productTotals.set(usage.produtoId, (productTotals.get(usage.produtoId) || 0) + usage.quantidade);
     }
-    const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
-      contentBase64: foto,
-      declaredMimeType: null,
-      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
-      maxBytes: uploadPolicy.maxBytes,
-      label: `foto ${index + 1}`,
-    }));
-
-    if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
-      const error = new Error("Informe o motivo da nao execucao.");
-      error.status = 400;
-      throw error;
+    // Stable lock ordering prevents concurrent OS closures from deadlocking.
+    for (const id of [...contractTotals.keys()].sort()) {
+      const amount = contractTotals.get(id);
+      const { rows: contracts } = await client.query('SELECT * FROM ciperprag_hub.contratos WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [id, tenantId]);
+      const contract = contracts[0];
+      if (!contract || contract.status !== 'ativo' || Number(contract.contratado) - Number(contract.executado || 0) < amount) throw operationError('Contrato sem saldo suficiente para as atividades executadas.', 409);
+      await client.query("UPDATE ciperprag_hub.contratos SET executado=COALESCE(executado,0)+$2, ultima_execucao=$3, status=CASE WHEN COALESCE(executado,0)+$2 >= contratado THEN 'vencido' ELSE 'ativo' END, atualizado_em=NOW() WHERE id=$1 AND tenant_id=$4", [id, amount, dataExecucao, tenantId]);
     }
-
-    if (!isNotExecuted && service?.exige_foto && validatedFotos.length === 0) {
-      const error = new Error("Este servico exige ao menos uma foto de evidencia.");
-      error.status = 400;
-      throw error;
-    }
-
-    await client.query(
-      `UPDATE ciperprag_hub.ordens_servico
-       SET status = 'encerrada',
-           data_execucao = $2,
-           quantidade = $3,
-           tag_equipamento_servico = $4,
-           fotos = $5,
-           checklist_respostas = $6,
-           nao_executada = $7,
-           motivo_nao_execucao = $8
-       WHERE id = $1 AND tenant_id = $9`,
-      [orderId, dataExecucao, isNotExecuted ? 0 : qty, tagEquipamentoServico || null, validatedFotos.map((foto) => foto.dataUrl), JSON.stringify(checklistRespostas || []), isNotExecuted, motivoNaoExecucao || null, tenantId],
-    );
-
-    await client.query("DELETE FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND categoria = 'foto' AND tenant_id = $2", [orderId, tenantId]);
-    for (const [index, parsed] of validatedFotos.entries()) {
-      const fotoHash = sha256Hex(parsed.buffer);
-      const extension = parsed.mimeType === "image/png" ? "png" : "jpg";
-      const fotoFileName = `evidencia-${String(index + 1).padStart(2, "0")}.${extension}`;
-      const storageTarget = createAttachmentStoragePlan({
-        tenantSlug: req.auth.user.tenant.slug,
-        entityType: "os",
-        entityId: orderId,
-        category: "foto",
-        fileName: fotoFileName,
-        hashSha256: fotoHash,
-      });
-      const persisted = await persistAttachmentContent({
-        storagePlan: storageTarget,
-        buffer: parsed.buffer,
-        contentBase64: parsed.dataUrl,
-        mimeType: parsed.mimeType,
-        hashSha256: fotoHash,
-        fileName: fotoFileName,
-        metadata: {
-          origem: "encerramento_os",
-          posicao: index + 1,
-          dataExecucao,
-          hashSha256: fotoHash,
-          ...buildAttachmentSecurityMetadata(uploadPolicy),
-        },
-      });
-      await client.query(
-        `INSERT INTO ciperprag_hub.evidencias_anexos
-         (id, tenant_id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, conteudo_base64, metadados, hash_sha256, storage_provider, storage_bucket, storage_key, storage_etag, criado_por)
-         VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [
-          `${makeId("EV")}-${index + 1}`,
-          tenantId,
-          orderId,
-          fotoFileName,
-          parsed.mimeType,
-          parsed.bytes,
-          persisted.contentBase64,
-          JSON.stringify(persisted.metadata),
-          fotoHash,
-          persisted.provider,
-          persisted.bucket,
-          persisted.key,
-          persisted.etag,
-          req.auth.user.id,
-        ],
-      );
-    }
-    const { rows: updatedOrderRows } = await client.query("SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2", [orderId, tenantId]);
-    const { rows: evidenceRows } = await client.query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo = 'os' AND entidade_id = $1 AND tenant_id = $2 ORDER BY criado_em, id", [orderId, tenantId]);
-    const snapshot = buildOrderOperationalSnapshot({
-      order: updatedOrderRows[0],
-      customer,
-      contract,
-      service,
-      company,
-      technician,
-      evidences: evidenceRows,
-      checklistRespostas: checklistRespostas || [],
-      phase: "encerramento",
-      existing: order.snapshot_dados || {},
-    });
-    await client.query(
-      "UPDATE ciperprag_hub.ordens_servico SET snapshot_dados = $2, snapshot_encerrado_em = NOW() WHERE id = $1 AND tenant_id = $3",
-      [orderId, JSON.stringify(snapshot), tenantId],
-    );
-
-    const stockUsage = Array.isArray(produtosUtilizados) ? produtosUtilizados : [];
-    if (!isNotExecuted && stockUsage.length) {
-      const { rows: existingMovements } = await client.query(
-        "SELECT produto_id FROM ciperprag_hub.estoque_movimentacoes WHERE tenant_id = $1 AND os_id = $2 AND tipo = 'saida' LIMIT 1",
-        [tenantId, orderId],
-      );
-      if (existingMovements.length === 0) {
-        for (const usage of stockUsage) {
-          const usageQuantity = Number(usage.quantidade || 0);
-          if (!usage.produtoId || !Number.isFinite(usageQuantity) || usageQuantity <= 0) continue;
-          const { rows: productRows } = await client.query(
-            "SELECT id, nome, quantidade_atual, unidade FROM ciperprag_hub.produtos_estoque WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
-            [usage.produtoId, tenantId],
-          );
-          const product = productRows[0];
-          if (!product) {
-            const error = new Error("Produto utilizado nao pertence a este tenant.");
-            error.status = 400;
-            throw error;
-          }
-          const beforeStock = Number(product.quantidade_atual || 0);
-          const afterStock = beforeStock - usageQuantity;
-          if (afterStock < 0) {
-            const error = new Error(`Saldo insuficiente de ${product.nome}. Disponivel: ${beforeStock} ${product.unidade}.`);
-            error.status = 400;
-            throw error;
-          }
-          await client.query("UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual = $2, atualizado_em = NOW() WHERE id = $1 AND tenant_id = $3", [product.id, afterStock, tenantId]);
-          await client.query(
-            `INSERT INTO ciperprag_hub.estoque_movimentacoes
-             (id, tenant_id, produto_id, tipo, quantidade, saldo_anterior, saldo_posterior, os_id, servico_id, observacao, criado_por)
-             VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
-            [makeId("MOV"), tenantId, product.id, usageQuantity, beforeStock, afterStock, orderId, order.servico_catalogo_id || contract?.servico_catalogo_id || service?.id || null, "Baixa automatica no encerramento da OS", req.auth.user.id],
-          );
-        }
+    for (const id of [...productTotals.keys()].sort()) {
+      const { rows: products } = await client.query('SELECT * FROM ciperprag_hub.produtos_estoque WHERE id=$1 AND tenant_id=$2 FOR UPDATE', [id, tenantId]);
+      const product = products[0], amount = productTotals.get(id), before = Number(product?.quantidade_atual || 0);
+      if (!product || before < amount) throw operationError('Saldo insuficiente do produto ' + (product?.nome || id), 409);
+      let balance = before;
+      for (const activity of activities.filter(a => !a.naoExecutada)) for (const usage of activity.produtosUtilizados.filter(p => p.produtoId === id)) {
+        await client.query(`INSERT INTO ciperprag_hub.estoque_movimentacoes
+          (id,tenant_id,produto_id,tipo,quantidade,saldo_anterior,saldo_posterior,os_id,servico_id,observacao,criado_por)
+          VALUES ($1,$2,$3,'saida',$4,$5,$6,$7,$8,$9,$10)`,
+          [makeId('MOV'),tenantId,id,usage.quantidade,balance,balance-usage.quantidade,orderId,activity.servicoId,'Atividade ' + activity.id + ' / ' + activity.tagEquipamento,req.auth.user.id]);
+        balance -= usage.quantidade;
       }
+      await client.query('UPDATE ciperprag_hub.produtos_estoque SET quantidade_atual=$2, atualizado_em=NOW() WHERE id=$1 AND tenant_id=$3', [id,balance,tenantId]);
     }
-    await saveImmutableDocumentAttachment(client, {
-      tenantId,
-      tenantSlug: req.auth.user.tenant.slug,
-      userId: req.auth.user.id,
-      entityType: "os",
-      entityId: orderId,
-      fileName: `os-${updatedOrderRows[0].numero || orderId}-final.pdf`,
-      html: buildHistoricalOrderHtml(snapshot, updatedOrderRows[0]),
-      metadata: { origem: "encerramento_os", osNumero: updatedOrderRows[0].numero, dataExecucao },
-    });
-
-    if (!isNotExecuted) {
-      await client.query(
-        `UPDATE ciperprag_hub.contratos
-         SET executado = COALESCE(executado, 0) + $2,
-             ultima_execucao = $3,
-             status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END,
-             atualizado_em = NOW()
-         WHERE id = $1 AND tenant_id = $4`,
-        [order.contrato_id, qty, dataExecucao, tenantId],
-      ).catch(async () => {
-        await client.query(
-          `UPDATE ciperprag_hub.contratos
-           SET executado = COALESCE(executado, 0) + $2,
-               ultima_execucao = $3,
-               status = CASE WHEN COALESCE(executado, 0) + $2 >= contratado THEN 'vencido' ELSE 'ativo' END
-           WHERE id = $1 AND tenant_id = $4`,
-          [order.contrato_id, qty, dataExecucao, tenantId],
-        );
-      });
+    const allNotExecuted = activities.every(a => a.naoExecutada);
+    const quantity = activities.filter(a => !a.naoExecutada).reduce((sum,a) => sum+a.quantidade,0);
+    await client.query(`UPDATE ciperprag_hub.ordens_servico SET status='encerrada', data_execucao=$2, quantidade=$3, atividades=$4,
+      fotos=$5, tags=$6, tag_equipamento_servico=$6, nao_executada=$7, motivo_nao_execucao=$8, atualizado_em=NOW()
+      WHERE id=$1 AND tenant_id=$9`, [orderId,dataExecucao,quantity,JSON.stringify(activities),
+      activities.flatMap(a=>a.fotos),activities.map(a=>a.tagEquipamento).filter(Boolean).join(', '),allNotExecuted,
+      allNotExecuted ? activities.map(a=>a.motivoNaoExecucao).join('; ') : null,tenantId]);
+    for (const activity of activities) for (const [index, photo] of activity.fotos.entries()) {
+      const parsed = validateAttachmentPayload({ contentBase64: photo, allowedMimeTypes: policy.allowedMimeTypes, maxBytes: policy.maxBytes, label: 'Foto' });
+      const hash = sha256Hex(parsed.buffer), fileName = activity.id + '-foto-' + (index+1) + (parsed.mimeType === 'image/png' ? '.png' : '.jpg');
+      const plan = createAttachmentStoragePlan({ tenantSlug: req.auth.user.tenant.slug, entityType:'os',entityId:orderId,category:'foto',fileName,hashSha256:hash });
+      const stored = await persistAttachmentContent({ storagePlan:plan,buffer:parsed.buffer,contentBase64:photo,mimeType:parsed.mimeType,hashSha256:hash,fileName,
+        metadata:{ origem:'encerramento_os',atividadeId:activity.id,tagEquipamento:activity.tagEquipamento,dataExecucao,...buildAttachmentSecurityMetadata(policy) } });
+      await client.query(`INSERT INTO ciperprag_hub.evidencias_anexos
+        (id,tenant_id,entidade_tipo,entidade_id,categoria,nome_arquivo,mime_type,tamanho_bytes,conteudo_base64,metadados,hash_sha256,storage_provider,storage_bucket,storage_key,storage_etag,criado_por)
+        VALUES ($1,$2,'os',$3,'foto',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [makeId('EV'),tenantId,orderId,fileName,parsed.mimeType,parsed.bytes,stored.contentBase64,JSON.stringify(stored.metadata),hash,stored.provider,stored.bucket,stored.key,stored.etag,req.auth.user.id]);
     }
-
-    if (order.agendamento_id) {
-      await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'encerrado' WHERE id = $1 AND tenant_id = $2", [order.agendamento_id, tenantId]);
+    const { rows: updated } = await client.query('SELECT * FROM ciperprag_hub.ordens_servico WHERE id=$1 AND tenant_id=$2', [orderId,tenantId]);
+    const closed = updated[0];
+    const service = await getServiceForTenantSnapshot(client,order.servico,tenantId,order.servico_catalogo_id);
+    const { rows: contracts } = await client.query('SELECT * FROM ciperprag_hub.contratos WHERE id=$1 AND tenant_id=$2',[closed.contrato_id,tenantId]);
+    const { rows: technicians } = await client.query('SELECT * FROM ciperprag_hub.tecnicos WHERE nome=$1 AND tenant_id=$2',[closed.tecnico,tenantId]);
+    const { rows: evidences } = await client.query("SELECT * FROM ciperprag_hub.evidencias_anexos WHERE entidade_tipo='os' AND entidade_id=$1 AND tenant_id=$2",[orderId,tenantId]);
+    const snapshot = buildOrderOperationalSnapshot({ order:closed,customer:customers[0],service,company,contract:contracts[0],technician:technicians[0],evidences,
+      checklistRespostas:activities.flatMap(a=>(a.checklistRespostas||[]).map(c=>({...c,item:(a.tagEquipamento || a.servicoNome)+': '+c.item}))),phase:'encerramento',existing:order.snapshot_dados || {} });
+    await client.query('UPDATE ciperprag_hub.ordens_servico SET snapshot_dados=$2,snapshot_encerrado_em=NOW() WHERE id=$1 AND tenant_id=$3',[orderId,JSON.stringify(snapshot),tenantId]);
+    const { buildOrderHtml } = await import('./generated/documents.js');
+    await saveImmutableDocumentAttachment(client,{ tenantId,tenantSlug:req.auth.user.tenant.slug,userId:req.auth.user.id,entityType:'os',entityId:orderId,
+      fileName:'os-'+order.numero.replaceAll('/','-')+'-final.pdf',snapshot,template:{code:'ordem-servico',version:'documental-v1'},
+      html:buildOrderHtml(snapshot,closed),metadata:{origem:'encerramento_os',osNumero:order.numero,dataExecucao} });
+    if (order.agendamento_id) await client.query("UPDATE ciperprag_hub.agendamentos SET status='encerrado' WHERE id=$1 AND tenant_id=$2",[order.agendamento_id,tenantId]);
+    const certificates = allNotExecuted ? { primaryHash:null,hashes:[] } : await issueCertificateForOrder(client,closed,{tenantId,tenantSlug:req.auth.user.tenant.slug,userId:req.auth.user.id,publicBaseUrl:getPublicBaseUrl(req)});
+    for (const activity of activities.filter(a=>!a.naoExecutada && a.recorrenciaDias>0)) {
+      await client.query(`INSERT INTO ciperprag_hub.recorrencia_sugestoes
+        (id,tenant_id,cliente_id,cliente_nome,cliente_cnpj,contrato_id,servico_catalogo_id,servico,tipo,local_execucao,tags,suggested_date,source_agendamento_id,source_os_id,status,local_id,observacao,tecnicos_ids,tecnicos_nomes,veiculo_id,veiculo_descricao)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pendente',$15,$16,$17,$18,$19,$20)`,
+        [makeId('RC'),tenantId,order.cliente_id,order.cliente,order.cnpj,activity.contratoId,activity.servicoId,activity.servicoNome,activity.tipo,
+          activity.localExecucao,activity.tagEquipamento,addDays(dataExecucao,activity.recorrenciaDias),order.agendamento_id,orderId,
+          activity.localExecucao===order.local_execucao ? order.local_id : null,order.observacao,order.equipe_tecnicos_ids||[],order.equipe_tecnicos_nomes||[],order.veiculo_id,order.veiculo_descricao]);
     }
-
-    let certificateHash = null;
-    let certificateHashes = [];
-    if (!isNotExecuted && (service?.gera_certificado || order.tipo === "sanitario")) {
-      const certificateResult = await issueCertificateForOrder(
-        client,
-        { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
-        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
-      );
-      certificateHash = certificateResult.primaryHash;
-      certificateHashes = certificateResult.hashes;
-      await logAuditEvent(client, req, {
-        entityType: "certificado",
-        entityId: certificateHash,
-        action: "certificate_generated",
-        summary: `Certificado ${certificateHash} gerado automaticamente no encerramento da OS ${order.numero || orderId}`,
-        after: { hash: certificateHash, hashes: certificateHashes, osId: orderId, osNumero: order.numero, cliente: order.cliente, servico: order.servico },
-      });
-    }
-
-    const recorrenciaDias = Number(service?.recorrencia_dias || contract?.validade_dias || 0);
-    if (!isNotExecuted && recorrenciaDias > 0) {
-      await client.query(
-        `INSERT INTO ciperprag_hub.recorrencia_sugestoes
-         (id, tenant_id, cliente_id, cliente_nome, cliente_cnpj, contrato_id, servico_catalogo_id, servico, tipo, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, suggested_date, source_agendamento_id, source_os_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'pendente')`,
-        [makeId("RC"), tenantId, order.cliente_id, order.cliente, order.cnpj, order.contrato_id, service?.id || null, order.servico, order.tipo, order.local_id || null, order.local_execucao, order.tags || null, order.observacao || null, order.equipe_tecnicos_ids || [], order.equipe_tecnicos_nomes || [], order.veiculo_id || null, order.veiculo_descricao || null, addDays(dataExecucao, recorrenciaDias), order.agendamento_id || null, orderId],
-      );
-    }
-    await logAuditEvent(client, req, {
-      entityType: "os",
-      entityId: orderId,
-      action: "order_closed",
-      summary: `OS ${order.numero || orderId} encerrada${isNotExecuted ? " como nao executada" : ""}`,
-      before: { status: order.status, quantidade: order.quantidade, dataExecucao: order.data_execucao },
-      after: {
-        status: "encerrada",
-        dataExecucao,
-        quantidade: isNotExecuted ? 0 : qty,
-        naoExecutada: isNotExecuted,
-        fotos: validatedFotos.length,
-        certificateHash,
-      },
-    });
-
-    return { certificateHash, certificateHashes };
+    await logAuditEvent(client,req,{entityType:'os',entityId:orderId,action:'order_closed',summary:'OS '+order.numero+' encerrada',
+      before:{status:order.status},after:{status:'encerrada',atividades:activities.length,certificateHashes:certificates.hashes}});
+    return { certificateHash:certificates.primaryHash,certificateHashes:certificates.hashes };
   });
-
-  res.json({ ok: true, ...response });
+  res.json({ok:true,...response});
 });
-
 app.post("/api/orders/:id/certificado", requirePermission("certificados.manage"), async (req, res) => {
   const orderId = req.params.id;
   const tenantId = req.auth.user.tenant.id;
@@ -4744,6 +4554,7 @@ app.post("/api/orders/:id/certificado", requirePermission("certificados.manage")
   const certificateResponse = await withTransaction(async (client) => {
     const certificateResult = await issueCertificateForOrder(client, order, { tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) });
     const certificateHash = certificateResult.primaryHash;
+    if (!certificateResult.hashes.length) throw operationError('Nenhuma atividade executada desta OS exige certificado.',409);
     await logAuditEvent(client, req, {
       entityType: "certificado",
       entityId: certificateHash,
@@ -4813,7 +4624,7 @@ app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage
     }
 
     const { rows: orderRows } = await client.query(
-      "SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 LIMIT 1",
+      "SELECT * FROM ciperprag_hub.ordens_servico WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
       [certificate.os_id, tenantId],
     );
     const order = orderRows[0];
@@ -4824,6 +4635,21 @@ app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage
     }
 
     const originalPrimaryCertificateHash = order.certificado_hash;
+    const { rows: freshCertificates } = await client.query('SELECT status FROM ciperprag_hub.certificados WHERE id=$1 AND tenant_id=$2', [certificateId,tenantId]);
+    if (freshCertificates[0]?.status === 'revogado') throw operationError('Este certificado já foi revogado ou substituído.',409);
+    let activityId = certificate.atividade_id;
+    let activityOverride = null;
+    if (!activityId) {
+      const snap = certificate.snapshot_dados || {};
+      if (!snap.os || !snap.servico) throw operationError('Certificado legado sem dados individualizados. Registre uma nova execução com as fotos de cada equipamento.',409);
+      activityId = 'legacy-' + certificate.id;
+      if (normalizeCertificateTags(order).length>1 && order.fotos?.length) throw operationError('As fotos legadas não estão separadas por equipamento. Registre uma nova execução individualizada.',409);
+      activityOverride = { id:activityId, servicoId:snap.servico.id,servicoNome:snap.servico.nome,tipo:order.tipo,
+        quantidade:snap.os.quantidade || 1,unidade:snap.os.unidade,localExecucao:snap.os.localExecucao,tagEquipamento:certificate.tag_equipamento_servico || '',
+        fotos:snap.os.fotos || [],produtosDetalhados:snap.servico.produtosDetalhados || [],produtosUtilizados:[],geraCertificado:true,
+        validadeDias:certificate.validade_dias,servicoSnapshot:snap.servico,contratoId:certificate.contrato_id };
+    }
+    await client.query("UPDATE ciperprag_hub.certificados SET status='revogado',revogado_em=NOW(),motivo_revogacao=$3 WHERE id=$1 AND tenant_id=$2",[certificateId,tenantId,reason]);
     const replacementOrder = {
       ...order,
       certificado_hash: null,
@@ -4831,15 +4657,17 @@ app.post("/api/certificates/:id/reissue", requirePermission("certificados.manage
       tags: certificate.tag_equipamento_servico || null,
     };
     const issued = await issueCertificateForOrder(client, replacementOrder, {
+      onlyActivityId: activityId,
+      activityOverride,
       tenantId,
       tenantSlug: req.auth.user.tenant.slug,
       userId: req.auth.user.id,
       publicBaseUrl: getPublicBaseUrl(req),
     });
-    if (originalPrimaryCertificateHash !== certificate.hash) {
+    if (originalPrimaryCertificateHash === certificate.hash) {
       await client.query(
         "UPDATE ciperprag_hub.ordens_servico SET certificado_hash = $2 WHERE id = $1 AND tenant_id = $3",
-        [order.id, originalPrimaryCertificateHash, tenantId],
+        [order.id, issued.primaryHash, tenantId],
       );
     }
     const { rows: replacementRows } = await client.query(

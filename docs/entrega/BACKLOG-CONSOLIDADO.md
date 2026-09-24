@@ -1,5 +1,7 @@
 # Backlog Consolidado
 
+> Documento historico. A referencia atual e [STATUS_ATUAL.md](../backlog/STATUS_ATUAL.md), reconciliada em 24/09/2026. Itens de estoque/PDF/R2 ja entregues nao devem ser reabertos apenas por constarem abaixo. A fonte documental vigente e Montserrat; mencoes antigas a Noto Sans estao superadas.
+
 Este backlog não é uma lista paralela de ideias. Cada item deve pertencer a uma etapa do P0, P1 ou P2. Novas demandas identificadas durante auditoria, testes ou homologação devem ser encaixadas em uma dessas etapas.
 
 ## P0 - Entrega vertical Ciperprag

@@ -77,7 +77,7 @@ function renderDocumentLogo(logoSrc: string, companyName: string) {
   return `<div class="logo-fallback">${escapeHtml(companyName || "Empresa emissora")}</div>`;
 }
 
-function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCatalogo | undefined {
+export function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCatalogo | undefined {
   const service = snapshotSection<Record<string, unknown>>(os, "servico");
   if (!service) return fallback;
   const pop = service.pop && typeof service.pop === "object" ? (service.pop as Record<string, unknown>) : {};
@@ -230,16 +230,22 @@ export function buildOsPrintHtml(
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(os.numero)}</title>
+  <meta name="author" content="${escapeHtml(company?.razaoSocial || '')}" />
+  <meta name="subject" content="Ordem de serviço - ${escapeHtml(clienteNome)}" />
   <style>
     ${documentTypographyCss}
     * { box-sizing: border-box; }
     @page { size: A4; margin: 6mm; }
     body { margin: 0; color: #111; background: #fff; }
-    .page { width: 100%; height: 284mm; border: 1.2px solid #222; page-break-after: always; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+    .page { width: 100%; border: 1.2px solid #222; position: relative; }
+    .page + .page { break-before: page; }
+    tr, .sign-grid, .bottom-grid { break-inside: avoid; }
+    .section-title { break-after: avoid; }
+    thead { display: table-header-group; }
     .page:last-child { page-break-after: auto; }
     .top-brand { display: grid; grid-template-columns: 1fr auto; align-items: start; min-height: 92px; }
-    .brand-center { text-align: center; padding-top: 6px; }
-    .brand-center img { width: 330px; max-width: 100%; height: auto; }
+    .brand-left { text-align: left; padding: 6px 8px 0; min-width: 0; }
+    .brand-left img { display: block; width: 330px; max-width: 100%; height: 82px; object-fit: contain; object-position: left center; }
     .logo-fallback { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; max-width: 330px; padding: 8px 18px; border: 1px solid #d1d5db; border-radius: 10px; color: #111827; font-size: 18px; font-weight: 800; text-transform: uppercase; }
     .os-meta { padding: 16px 18px 0 0; font-size: 20px; font-weight: 700; white-space: nowrap; }
     .title { text-align: center; font-size: 22px; font-weight: 700; padding: 6px 0 10px; border-bottom: 1.2px solid #222; }
@@ -256,7 +262,7 @@ export function buildOsPrintHtml(
     .small { font-size: 12px; }
     .bullets { margin: 0; padding: 0 0 0 20px; }
     .bullets li { margin: 1px 0; line-height: 1.22; }
-    .footer-wrap { margin-top: auto; padding-top: 8px; }
+    .footer-wrap { margin-top: auto; padding-top: 8px; break-inside: avoid; }
     .footer-line { border-top: 2px solid #0b9e6d; margin: 0 12px 6px; }
     .footer { text-align: center; font-size: 11px; line-height: 1.2; padding: 0 8px 6px; }
     .sign-grid { padding: 10px 12px 12px; border-left: 1px solid #222; border-right: 1px solid #222; border-bottom: 1px solid #222; min-height: 108px; }
@@ -271,7 +277,7 @@ export function buildOsPrintHtml(
 <body>
   <div class="page">
     <div class="top-brand">
-      <div class="brand-center">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
+      <div class="brand-left">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
       <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
     </div>
     <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>
@@ -284,14 +290,13 @@ export function buildOsPrintHtml(
         <col style="width: 20%">
       </colgroup>
       <tr><td class="label">SETOR:</td><td>OPERACIONAL</td><td class="label"></td><td></td></tr>
-      <tr><td class="label">FUNÇÃO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Técnico de Manutenção" : "Técnico Sanitário"))}</td><td class="label">CPF</td><td>${escapeHtml(os.tecnicoCpf || "")}</td></tr>
-      <tr><td class="label">CLIENTE:</td><td>${escapeHtml(clienteNome)}</td><td class="label">CNPJ</td><td><strong>${escapeHtml(clienteCnpj)}</strong></td></tr>
+      <tr><td class="label">CLIENTE:</td><td>${escapeHtml(clienteNome)}</td><td class="label">CNPJ</td><td style="white-space:nowrap;font-size:11px"><strong>${escapeHtml(clienteCnpj)}</strong></td></tr>
       <tr><td class="label">Local de execução:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Origem</td><td>${escapeHtml(os.contratoId || "Atendimento avulso")}</td></tr>
     </table>
 
     <div class="section-title">Descrição das Atividades:</div>
     <div class="box tall-box">
-      ${escapeHtml(inferActivityLine(os, contract, service))}
+      ${os.atividades?.length ? `<table><thead><tr><th>Serviço</th><th>Quantidade</th><th>Local / equipamento</th></tr></thead><tbody>${os.atividades.map(a => `<tr><td>${escapeHtml(a.servicoNome)}${a.naoExecutada ? ' (não executada)' : ''}</td><td>${escapeHtml(a.quantidade)} ${escapeHtml(a.unidade)}</td><td>${escapeHtml(a.localExecucao)} / ${escapeHtml(a.tagEquipamento)}</td></tr>`).join('')}</tbody></table>` : escapeHtml(inferActivityLine(os, contract, service))}
       ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versão ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
       ${renderPopDetails(service)}
     </div>
@@ -363,13 +368,11 @@ export function buildOsPrintHtml(
         <li>Caso alguma irregularidade ou risco seja constatado, a atividade deve ser suspensa e comunicada ao responsável do serviço.</li>
         <li>É proibido executar qualquer trabalho para o qual o colaborador não tenha sido orientado e autorizado.</li>
       </ul>
-      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || "Ciperprag")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
+      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || company?.razaoSocial || "emissora")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
     </div>
 
     <div class="sign-grid">
-      <p><strong>Assinatura do Colaborador:</strong> <span class="sign-line"></span></p>
-      <p><strong>Assinatura do Colaborador:</strong> <span class="sign-line"></span></p>
-      <p><strong>Assinatura do Colaborador:</strong> <span class="sign-line"></span></p>
+      ${(os.equipeTecnicosNomes?.length ? os.equipeTecnicosNomes : [os.tecnicoNome || '', '', '']).map(nome=>`<p><strong>Assinatura do Colaborador${nome ? ` (${escapeHtml(nome)})` : ''}:</strong> <span class="sign-line"></span></p>`).join('')}
     </div>
 
     <div class="bottom-grid">

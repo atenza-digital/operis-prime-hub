@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { AlertCircle, Ban, CalendarDays, CheckCircle2, Clock3, Printer, Receipt, Search, Send, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
+import { fetchAttachmentBlob } from '@/lib/api';
 import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -517,7 +518,7 @@ function MeasurementPrint({ measurement, data }: { measurement: MedicaoApp; data
   );
 }
 
-function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: MedicaoApp; data: BootstrapData | null; emittedBy?: { name?: string; role?: string } }) {
+export function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: MedicaoApp; data: BootstrapData | null; emittedBy?: { name?: string; role?: string } }) {
   const company = data?.companyConfig;
   const issuedAt = new Date(measurement.criadoEm || Date.now());
   const issueDate = issuedAt.toLocaleDateString("pt-BR");
@@ -537,7 +538,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
   const issuerRole = textFrom(issuerSnapshot?.cargo) || company?.cargoResponsavel || textFrom(emittedBy?.role) || "Responsável pela emissão";
   const configuredIssuerRole = textFrom(documentConfig.medicaoResponsavelCargo) || issuerRole;
   const logoSrc = companyDocumentLogo(company);
-  const traceabilityLabel = `${measurement.numero} • Revisão ${textFrom((snapshot as Record<string, unknown>)?.revisao) || "1"} • Página 1 de 1`;
+  const traceabilityLabel = `${measurement.numero} • Revisão ${textFrom((snapshot as Record<string, unknown>)?.revisao) || "1"}`;
   const issuePlaceDate = measurementIssuePlaceDate(measurement, company);
   const observationText =
     textFrom((snapshot as Record<string, unknown>)?.observacao) ||
@@ -613,7 +614,7 @@ function MeasurementPrintSaas({ measurement, data, emittedBy }: { measurement: M
         <section className="measurement-summary mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-slate-200 text-[10.5px]">
           <div className="border-r border-slate-200 px-4 py-2.5">
             <p className="font-semibold text-slate-500">OS consolidadas</p>
-            <p className="mt-1 text-lg font-black">{measurement.itens.length}</p>
+            <p className="mt-1 text-lg font-black">{new Set(measurement.itens.map(item => item.osId)).size}</p>
           </div>
           <div className="border-r border-slate-200 px-4 py-2.5">
             <p className="font-semibold text-slate-500">Itens medidos</p>
@@ -871,6 +872,11 @@ export default function Medicao() {
     const target = measurement ?? selected;
     if (!target) {
       toast.error("Selecione uma medição para imprimir.");
+      return;
+    }
+    const archived = data?.attachments.find(a=>a.entidadeTipo==='medicao' && a.entidadeId===target.id && a.categoria==='pdf_historico' && a.templateVersao==='documental-v1');
+    if (archived) {
+      void fetchAttachmentBlob(archived.id).then(({blob})=>{ const url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),120_000); }).catch(error=>toast.error(error.message));
       return;
     }
     setSelected(target);

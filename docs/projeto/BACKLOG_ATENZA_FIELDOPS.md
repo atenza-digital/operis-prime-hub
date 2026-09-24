@@ -1,5 +1,7 @@
 # Backlog consolidado - Atenza FieldOps
 
+> Historico de auditoria. Desde 24/09/2026, consultar [a matriz de status atual](../backlog/STATUS_ATUAL.md). As contagens e os status antigos abaixo foram preservados para rastreabilidade, nao como lista de trabalho pendente.
+
 Este backlog consolida a auditoria completa, documentacao existente, diferencas entre AS-IS e TO-BE, debitos tecnicos, SaaS, seguranca, UI/UX, acessibilidade, testes e preparacao para producao.
 
 Prioridades:

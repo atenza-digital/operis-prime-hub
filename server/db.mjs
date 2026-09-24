@@ -1,4 +1,6 @@
 import pg from "pg";
+import { readFile } from "node:fs/promises";
+import { ensureCustomerDefaultLocations } from "./customer-locations.mjs";
 
 const { Pool } = pg;
 
@@ -255,30 +257,7 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_cliente_equipamentos_local ON ciperprag_hub.cliente_equipamentos(local_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_cliente_equipamentos_tenant ON ciperprag_hub.cliente_equipamentos(tenant_id)");
 
-  await query(`
-    WITH tenant AS (
-      SELECT id FROM ciperprag_hub.tenants WHERE slug = 'ciperprag' LIMIT 1
-    )
-    INSERT INTO ciperprag_hub.cliente_locais_execucao (id, tenant_id, cliente_id, nome, endereco, bairro, municipio, uf, cep, ativo)
-    SELECT
-      'LOC-' || c.id,
-      tenant.id,
-      c.id,
-      COALESCE(NULLIF(c.nome_fantasia, ''), c.razao_social),
-      c.endereco,
-      c.bairro,
-      c.municipio,
-      c.uf,
-      c.cep,
-      TRUE
-    FROM ciperprag_hub.clientes c
-    CROSS JOIN tenant
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM ciperprag_hub.cliente_locais_execucao l
-      WHERE l.cliente_id = c.id
-    )
-  `);
+  await ensureCustomerDefaultLocations(query);
 
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.contratos
@@ -522,7 +501,7 @@ export async function ensureDatabaseShape() {
     CREATE TABLE IF NOT EXISTS ciperprag_hub.medicoes (
       id VARCHAR(30) PRIMARY KEY,
       tenant_id UUID REFERENCES ciperprag_hub.tenants(id),
-      numero VARCHAR(40) NOT NULL UNIQUE,
+      numero VARCHAR(40) NOT NULL,
       cliente_id VARCHAR(20),
       cliente_nome TEXT NOT NULL,
       cliente_cnpj VARCHAR(18),
@@ -648,7 +627,7 @@ export async function ensureDatabaseShape() {
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_medicao ON ciperprag_hub.medicao_itens(medicao_id)");
   await query("CREATE INDEX IF NOT EXISTS idx_medicao_itens_os ON ciperprag_hub.medicao_itens(os_id)");
   await query("DROP INDEX IF EXISTS ciperprag_hub.ux_medicao_itens_os_ativa");
-  await query("CREATE UNIQUE INDEX IF NOT EXISTS ux_medicao_itens_tenant_os_ativa ON ciperprag_hub.medicao_itens(tenant_id, os_id) WHERE medicao_ativa IS TRUE AND tenant_id IS NOT NULL");
+  // Per-activity uniqueness is installed after all legacy tables exist.
 
   await query(`
     CREATE TABLE IF NOT EXISTS ciperprag_hub.evidencias_anexos (
@@ -884,4 +863,5 @@ export async function ensureDatabaseShape() {
         WHERE c.hash = o.certificado_hash
       )
   `);
+  await query(await readFile(new URL('../database/migrations/030_order_activities.sql', import.meta.url), 'utf8'));
 }

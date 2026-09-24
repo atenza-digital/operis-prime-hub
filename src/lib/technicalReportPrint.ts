@@ -1,6 +1,7 @@
 import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { formatDateBr } from "@/lib/formatters";
 import { repairMojibake } from "@/lib/repairMojibake";
+import { serviceFromSnapshot } from '@/lib/osPrint';
 import type { BootstrapData, EmpresaConfig, OSApp, ServicoCatalogo } from "@/lib/api";
 
 function escapeHtml(value: string | number | null | undefined) {
@@ -23,7 +24,7 @@ function normalizeOsNumber(numero?: string) {
 }
 
 function getService(os: OSApp, bootstrap: BootstrapData | null): ServicoCatalogo | undefined {
-  return bootstrap?.services.find((service) => service.nome === os.servico || service.id === (os.snapshotDados as Record<string, unknown> | undefined)?.servicoId);
+  return serviceFromSnapshot(os, bootstrap?.services.find((service) => service.nome === os.servico || service.id === os.servicoCatalogoId));
 }
 
 function getCompanyLogo(company?: EmpresaConfig | null) {
@@ -51,7 +52,7 @@ function renderList(items: string[] | undefined, fallback: string) {
 }
 
 function renderChecklist(os: OSApp, service?: ServicoCatalogo) {
-  const respostas = os.checklistRespostas ?? [];
+  const respostas = os.atividades?.length ? os.atividades.flatMap(a=>(a.checklistRespostas || []).map(item=>({...item,item:`${a.tagEquipamento || a.servicoNome}: ${item.item}`}))) : os.checklistRespostas ?? [];
   if (respostas.length) {
     return respostas
       .map(
@@ -85,7 +86,9 @@ function renderChecklist(os: OSApp, service?: ServicoCatalogo) {
 }
 
 function renderPhotos(os: OSApp) {
-  const photos = (os.evidencias?.length ? os.evidencias.map((item) => item.conteudoBase64).filter(Boolean) : os.fotos ?? []).slice(0, 3);
+  const photos = os.atividades?.length
+    ? os.atividades.flatMap(a => a.fotos.map((src,index) => ({ src, label: `${a.servicoNome} / ${a.tagEquipamento || a.localExecucao} - Foto ${index+1}` })))
+    : (os.evidencias?.length ? os.evidencias.filter(e=>e.mimeType?.startsWith('image/') || e.conteudoBase64?.startsWith('data:image/')).map(e=>e.conteudoBase64).filter(Boolean) : os.fotos ?? []).map((src,index)=>({src,label:`Foto ${index+1}`}));
   if (!photos.length) {
     return `<p class="muted">Nenhuma foto vinculada a esta OS.</p>`;
   }
@@ -94,10 +97,10 @@ function renderPhotos(os: OSApp) {
     <div class="photo-grid">
       ${photos
         .map(
-          (photo, index) => `
+          (photo) => `
             <figure>
-              <img src="${escapeHtml(photo)}" alt="Evidência fotográfica ${index + 1}" />
-              <figcaption>Foto ${index + 1}</figcaption>
+              <img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.label)}" />
+              <figcaption>${escapeHtml(photo.label)}</figcaption>
             </figure>
           `,
         )
@@ -107,8 +110,14 @@ function renderPhotos(os: OSApp) {
 }
 
 export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | null) {
-  const company = bootstrap?.companyConfig;
-  const service = getService(os, bootstrap);
+  const snapshot = os.snapshotDados as {encerramento?: {empresa?: EmpresaConfig}} | undefined;
+  const company = snapshot?.encerramento?.empresa || bootstrap?.companyConfig;
+  const sourceService = getService(os, bootstrap);
+  const service = os.atividades?.length ? { ...sourceService,
+    epis: [...new Set(os.atividades.flatMap(a=>a.servicoSnapshot?.epis || []))],
+    normasAplicaveis: [...new Set(os.atividades.flatMap(a=>a.servicoSnapshot?.normasAplicaveis || []))],
+    produtosQuimicos: os.atividades.flatMap(a=>(a.produtosDetalhados || []).map(p=>`${a.tagEquipamento || a.localExecucao}: ${p.nome} - ${p.qtUso || ''}`)),
+  } as ServicoCatalogo : sourceService;
   const primary = getPrimaryColor(company);
   const companyLogo = getCompanyLogo(company);
   const equipe = os.equipeTecnicosNomes?.length ? os.equipeTecnicosNomes.join(" • ") : os.tecnicoNome;
@@ -278,6 +287,7 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
       gap: 4mm;
     }
     figure {
+      break-inside: avoid;
       margin: 0;
       border: 1px solid #d8e1e8;
       border-radius: 12px;
@@ -368,6 +378,7 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
       </div>
     </section>
 
+    ${os.atividades?.length ? `<section class="section"><h2>Atividades e equipamentos</h2><table><thead><tr><th>Serviço</th><th>Local / equipamento</th><th>Quantidade</th><th>Situação</th></tr></thead><tbody>${os.atividades.map(a=>`<tr><td>${escapeHtml(a.servicoNome)}</td><td>${escapeHtml(a.localExecucao)} / ${escapeHtml(a.tagEquipamento)}</td><td>${escapeHtml(a.quantidade)} ${escapeHtml(a.unidade)}</td><td>${a.naoExecutada ? escapeHtml(a.motivoNaoExecucao) : 'Executada'}</td></tr>`).join('')}</tbody></table></section>` : ''}
     <section class="section">
       <h2>Descrição técnica</h2>
       <div class="card">
