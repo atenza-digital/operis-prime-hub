@@ -16,21 +16,23 @@ Implementado não significa aceito pelo cliente. Publicado em homologação não
 | Estoque básico e consumo | Cadastro, movimentos, saldo, baixa transacional e consulta por período/OS | Smoke publicado e catálogo carregado; conferir com o perfil real da Aline |
 | Agendamento avulso | Serviço do catálogo sem contrato, local livre e geração de OS sem duplicação | Teste autenticado em homologação; regras contratuais continuam válidas quando há contrato |
 | Medição por atividade | Itens e valores preservados, bloqueios de duplicidade e continuidade da tabela | Medição de cinco itens testada; matriz extensa permanece abaixo |
-| PDFs de OS/certificado/medição | Renderizador compartilhado, Montserrat local, tags, metadados e arquivo imutável | Oito PDFs/dez páginas na publicação `f1f332b`; não sobrescrever históricos |
+| PDFs de OS/certificado/medição | Renderizador compartilhado, Montserrat local, tags, metadados e arquivo imutável | Oito PDFs/dez páginas na publicação `35c138b`; não sobrescrever históricos |
 | Ordenação e falhas repetidas | Documentos recentes primeiro; repetição de fechamento/emissão não repete consumo | Testes e inspeção do fluxo; aceite da navegação real pendente |
 | Locais automáticos por tenant | Inicialização e reparo dos locais automáticos respeitam a empresa do cliente | Auditoria tri-tenant da publicação `f1f332b`: zero falhas/alertas |
 | Propostas por PDF | Extração determinística, original preservado, assistência de IA como rascunho revisável | Código e testes existentes; regressão comercial completa na versão atual pendente |
 | Comercial configurável | Contratos/minutas e valor mensal podem ficar desabilitados por tenant sem excluir históricos | Testes das flags; Ciperprag não deve ser obrigada a gerar esses documentos |
 | Relatórios, POP e permissões | Tela de relatórios, evidências por atividade, upload de POP e filtragem de valores no backend | Testes existentes e código; revisão externa por perfil e relatório continua necessária |
 
-Publicação de referência: https://github.com/atenza-digital/operis-prime-hub/actions/runs/36027035852. PR: https://github.com/atenza-digital/operis-prime-hub/pull/26.
+Publicação de referência: https://github.com/atenza-digital/operis-prime-hub/actions/runs/36030487719 (`35c138b`, sucesso). PR: https://github.com/atenza-digital/operis-prime-hub/pull/26.
+
+Validação desta publicação: 67 testes unitários, lint, typecheck, build, smoke de estoque/anexos, fluxo operacional pela URL pública, interface desktop/mobile e oito PDFs/dez páginas. Seis QR Codes lidos por software; impressão e dois aparelhos continuam pendentes. O E2E comercial legado opcional não foi executado nesta rodada.
 
 ## Fechamento desta rodada
 
 | ID | Pendência | Situação / próximo passo |
 | --- | --- | --- |
-| HML-01 | Logo da OS alinhada à margem esquerda interna | Ajuste pontual em validação; título centralizado e número à direita preservados. Não altera PDFs históricos. |
-| HML-02 | Detalhar ocorrências da auditoria operacional | Relatório agora distingue categorias, quantidades, amostras, integridade, fluxo normal e regra comercial desabilitada. Aguardar coleta oficial pelo CI/CD; não alterar dados para zerar indicadores. |
+| HML-01 | Logo da OS alinhada à margem esquerda interna | Publicada e validada em PDF gerado em homologação: posição e proporção verificadas automaticamente e nas duas páginas renderizadas. Título centralizado e número à direita preservados. Não altera PDFs históricos. |
+| HML-02 | Detalhar ocorrências da auditoria operacional | Concluído o diagnóstico: uma proposta e três minutas não aplicáveis às regras atuais; seis agendamentos e oito OS para conferência operacional. Zero ocorrências nos três controles de integridade consultados. Ver `CONFERENCIA_REGISTROS_2026-09-24.md`; a decisão sobre os registros continua com a operação. |
 | HML-03 | Aceite da Aline/Tarcísio | Novas atividades, cinco equipamentos com fotos diferentes, estoque, medição, ordenação e impressão/QR físico. |
 | HML-04 | Regressão comercial/documental completa | Repetir importação/proposta, perfis e relatórios. Testar contratos/minutas em tenant que habilite esses recursos, não ativá-los na Ciperprag. |
 | HML-05 | Revisão formal do PR #26 | Continua exigida para merge em main; não bloqueia teste da branch publicada em homologação. |
