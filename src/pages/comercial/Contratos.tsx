@@ -185,7 +185,7 @@ function ProposalDocumentPrint({ item, client, services, company, logoSrc, docum
     ? [client.endereco, client.bairro, `${client.municipio}-${client.uf}`, client.cep].filter(Boolean).join(", ")
     : "";
   const principalContact = client?.contatos?.find((contact) => contact.principal) || client?.contatos?.[0];
-  const activityAddresses = Array.from(new Set(item.servicos.map((service) => cleanText(service.enderecoAtividade)).filter(Boolean)));
+  const activityAddresses = Array.from(new Set(item.servicos.map((service) => String(service.enderecoAtividade || "").trim()).filter(Boolean)));
   const locations = item.locaisExecucao?.length ? item.locaisExecucao : activityAddresses.length ? activityAddresses : clientAddress ? [clientAddress] : [];
   const servicesRows = item.servicos.map((service, index) => {
     const catalog = services.find((entry) => entry.id === service.servicoId);

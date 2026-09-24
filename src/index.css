@@ -196,7 +196,13 @@
 
 @page measurement-portrait {
   size: A4 portrait;
-  margin: 0;
+  margin: 8mm 0 12mm;
+  @bottom-right {
+    content: "Página " counter(page) " de " counter(pages);
+    font-family: "Montserrat";
+    font-size: 7pt;
+    margin-right: 13mm;
+  }
 }
 
 @media print {
@@ -245,7 +251,7 @@
   }
 
   .measurement-table tfoot {
-    display: table-footer-group;
+    display: table-row-group;
   }
 
   .measurement-table tr {
@@ -286,7 +292,7 @@
   }
 
   .measurement-table {
-    font-size: 8.1px !important;
+    font-size: 8pt !important;
   }
 
   .measurement-table th {

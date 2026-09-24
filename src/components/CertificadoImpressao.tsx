@@ -2,6 +2,7 @@
 import templateCertificado from "@/template_certificado_dinamico.html?raw";
 import { documentTypographyCss } from "@/lib/documentFontFaces";
 import QRCode from "qrcode";
+import { fetchAttachmentBlob } from "@/lib/api";
 
 type RecordLike = Record<string, unknown>;
 type LicenseItem = { titulo?: string; valor?: string };
@@ -174,6 +175,7 @@ function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLik
 function toBase64Img(url: string): Promise<string> {
   if (!url) return Promise.resolve("");
   if (url.startsWith("data:")) return Promise.resolve(url);
+  if (typeof window === "undefined") return Promise.resolve(url);
   return new Promise((resolve) => {
     fetch(url)
       .then((response) => response.blob())
@@ -217,7 +219,7 @@ function renderProdutos(cert: CertificadoApp, exibirProdutos: boolean) {
         diluente: "Água",
         volAplicado: "Conf. área",
         combate: "Aplicação direta",
-        antidoto: "Anti-histamínico",
+        antidoto: "Não informado",
       }));
 
   if (!produtos.length) return "";
@@ -379,8 +381,7 @@ function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snap
   return fromFields;
 }
 
-export async function imprimirCertificado(cert: CertificadoApp) {
-  const bootstrap = await getBootstrap();
+export async function buildCertificateHtml(cert: CertificadoApp, bootstrap: BootstrapData) {
   const company = bootstrap.companyConfig;
   const os = bootstrap.orders.find((item) => item.id === cert.osId);
   const snapshotCertificado = snapshotSection(cert, "certificado");
@@ -390,7 +391,8 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const snapshotServico = snapshotSection(cert, "servico");
   const currentConfig = asRecord(company?.certificadoConfig);
   const snapshotConfig = asRecord(snapshotEmpresa.certificadoConfig);
-  const config = { ...currentConfig, ...snapshotConfig };
+  const hasSnapshot = Object.keys(snapshotCertificado).length > 0;
+  const config = hasSnapshot ? snapshotConfig : currentConfig;
 
   const customer = bootstrap.clients.find(
     (item) =>
@@ -404,7 +406,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const clienteEndereco = firstText(snapshotCliente.endereco, customerAddress, os?.clienteEndereco, cert.clienteEndereco);
   const clienteLogoUrl = firstText(snapshotCliente.logoUrl, customer?.logoUrl, cert.clienteLogoUrl, os?.clienteLogoUrl);
   const localExecucao = firstText(snapshotOs.localExecucao, cert.localExecucao, os?.localExecucao);
-  const tagTexto = firstText(snapshotOs.tagEquipamentoServico, os?.tagEquipamentoServico);
+  const tagTexto = hasSnapshot ? firstText(snapshotOs.tagEquipamentoServico) : firstText(cert.tagEquipamentoServico, os?.tagEquipamentoServico);
   const servicoNome = firstText(snapshotServico.nome, cert.servico);
   const servicoTexto = tagTexto ? `${servicoNome} - ${tagTexto}` : servicoNome;
   const empresaNome = firstText(snapshotEmpresa.razaoSocial, company?.razaoSocial, company?.nomeFantasia);
@@ -419,25 +421,14 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     certificateDocument.hashSha256,
     certificateDocument.snapshotHashSha256,
   );
-  const computedSnapshotHash = persistedSha256
-    ? ""
-    : await sha256Hex(
-        JSON.stringify({
-          tenant: firstText(snapshotEmpresa.tenantId, snapshotEmpresa.tenantSlug, company?.tenantSlug),
-          certificado: { numero: cert.numero, hash: cert.hash },
-          os: { id: cert.osId, numero: cert.osNumero || os?.numero, dataExecucao: cert.dataExecucao },
-          cliente: { nome: clienteNome, cnpj: clienteCnpj, endereco: clienteEndereco },
-          servico: { nome: servicoNome, tag: tagTexto },
-        }),
-      );
-  const sha256Rastreabilidade = firstText(persistedSha256, computedSnapshotHash);
+  const sha256Rastreabilidade = persistedSha256;
   const shaFingerprint = fingerprintSha256(sha256Rastreabilidade);
   const codigoPublico = firstText(snapshotCertificado.codigoPublico, snapshotCertificado.publicCode, config.codigoPublico, buildShortPublicCode(cert.hash));
   const verificationUrl = publicBaseUrl ? buildVerificationUrl(codigoPublico, publicBaseUrl) : "";
   const showQr = firstBool(true, config.exibirQrCode);
   const qrDataUrl = showQr && verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 104, margin: 1 }) : "";
   const limiteFotos = firstNumber(3, config.limiteFotos);
-  const fotos = asStringArray(snapshotOs.fotos).length ? asStringArray(snapshotOs.fotos) : os?.fotos ?? cert.fotos ?? [];
+  const fotos = hasSnapshot ? asStringArray(snapshotOs.fotos) : cert.fotos ?? [];
   const fotoLegendas = asStringArray(snapshotOs.fotosLegendas);
   const fotoObjectFit = firstText(config.fotoObjectFit, config.fotoObjectFitCertificado, "cover") === "contain" ? "contain" : "cover";
   const evidencias = normalizePhotos(fotos, fotoLegendas);
@@ -488,19 +479,17 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const cargo = firstText(config.cargoResponsavel, snapshotEmpresa.cargoResponsavel, company?.cargoResponsavel);
   const registro = firstText(config.registroProfissional, snapshotEmpresa.registroProfissional);
   if (responsavelObrigatorio && !responsavel) {
-    window.alert("Este certificado exige responsável técnico configurado antes da emissão.");
-    return;
+    throw new Error("Este certificado exige responsável técnico configurado antes da emissão.");
   }
   if (assinaturaModo === "obrigatoria" && !assinaturaSrc) {
-    window.alert("Este certificado exige assinatura configurada antes da emissão.");
-    return;
+    throw new Error("Este certificado exige assinatura configurada antes da emissão.");
   }
   const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia);
   const rodapeLinhas = asStringArray(config.rodapeLinhas);
   const defaultRodape = [
-    empresaNome && company?.cnpj ? `${empresaNome} CNPJ: ${company.cnpj}` : empresaNome,
+    empresaNome && firstText(snapshotEmpresa.cnpj, company?.cnpj) ? `${empresaNome} CNPJ: ${firstText(snapshotEmpresa.cnpj, company?.cnpj)}` : empresaNome,
     firstText(snapshotEmpresa.endereco, company?.endereco),
-    [company?.telefone, company?.email].filter(Boolean).join(" | "),
+    [firstText(snapshotEmpresa.telefone, company?.telefone), firstText(snapshotEmpresa.email, company?.email)].filter(Boolean).join(" | "),
   ].filter(Boolean);
   const footerLines = rodapeLinhas.length ? rodapeLinhas : defaultRodape;
   const certificadoReferencia = renderCertificateReference(cert.numero);
@@ -541,9 +530,26 @@ export async function imprimirCertificado(cert: CertificadoApp) {
     .replaceAll("{{selos_assinatura_html}}", renderFooterBranding({ seloUrl: seloSrc, miniLogoUrl: logoSrc, assinaturaUrl: assinaturaSrc, responsavel, cargo, registro, assinaturaModo, institutionalLogosHtml }))
     .replaceAll("{{rodape_html}}", renderRodape(footerLines, cit));
 
-  const printWindow = window.open("", "_blank", "width=1100,height=800");
-  if (!printWindow) return;
-  printWindow.document.write(`${html}<script>window.onload = function(){ window.print(); }</script>`);
+  return html;
+}
+
+export async function imprimirCertificado(cert: CertificadoApp) {
+  const printWindow = window.open('', '_blank', 'width=1100,height=800');
+  if (!printWindow) throw new Error('Permita abrir a janela do certificado no navegador.');
+  printWindow.opener = null;
+  try {
+  const bootstrap = await getBootstrap();
+  const archived = bootstrap.attachments?.find(a => a.entidadeTipo === 'certificado' && a.entidadeId === cert.id && a.categoria === 'pdf_historico' && a.templateVersao === 'documental-v1');
+  if (archived) {
+    const { blob } = await fetchAttachmentBlob(archived.id);
+    const url = URL.createObjectURL(blob);
+    printWindow.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    return;
+  }
+  const html = await buildCertificateHtml(cert, bootstrap);
+  printWindow.document.write(`${html}<script>window.onload=async function(){await document.fonts.ready;window.print();}</script>`);
   printWindow.document.close();
+  } catch (error) { printWindow.close(); throw error; }
 }
 

@@ -70,8 +70,10 @@ export default function Certificados() {
     [certs, ordens],
   );
   const pendentes = useMemo(
-    () => ordens.filter((item) => item.status === "encerrada" && !item.certificadoHash),
-    [ordens],
+    () => ordens.filter((item) => item.status === "encerrada" && !item.naoExecutada && !item.certificadoHash && (item.atividades?.length
+      ? item.atividades.some(a => !a.naoExecutada && a.geraCertificado)
+      : data?.services.some(s => (s.id === item.servicoCatalogoId || s.nome === item.servico) && s.geraCertificado))),
+    [ordens, data?.services],
   );
 
   const certsFiltrados = useMemo(() => {
@@ -84,7 +86,7 @@ export default function Certificados() {
         if (termo && !item.hash.toLowerCase().includes(termo) && !item.clienteNome.toLowerCase().includes(termo) && !item.servico.toLowerCase().includes(termo)) return false;
         return true;
       })
-      .reverse();
+      .sort((a,b) => new Date(b.emitidoEm).getTime() - new Date(a.emitidoEm).getTime() || b.numero.localeCompare(a.numero, 'pt-BR', {numeric:true}));
   }, [certs, busca, clienteFilter, statusFilter]);
 
   const historicoFiltrado = useMemo(() => {
@@ -96,15 +98,18 @@ export default function Certificados() {
         if (termo && !item.numero.toLowerCase().includes(termo) && !item.clienteNome.toLowerCase().includes(termo) && !item.servico.toLowerCase().includes(termo)) return false;
         return true;
       })
-      .reverse();
+      .sort((a,b) => (b.dataExecucao || b.dataEmissao).localeCompare(a.dataExecucao || a.dataEmissao) || b.numero.localeCompare(a.numero, 'pt-BR', {numeric:true}));
   }, [ordens, busca, clienteFilter]);
 
   async function handleGerarCert(id: string) {
     setGerando(id);
-    const response = await generateCertificateForOrder(id);
-    toast.success(response.hashes && response.hashes.length > 1 ? `${response.hashes.length} certificados gerados, um para cada TAG.` : "Certificado gerado!");
-    setGerando(null);
-    reload();
+    try {
+      const response = await generateCertificateForOrder(id);
+      toast.success(response.hashes && response.hashes.length > 1 ? `${response.hashes.length} certificados disponíveis, um para cada atividade.` : "Certificado disponível!");
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível gerar o certificado.');
+    } finally { setGerando(null); }
   }
 
   async function handleRevogar(cert: CertificadoApp) {
@@ -252,7 +257,7 @@ export default function Certificados() {
                         {cert.tagEquipamentoServico ? <div className="flex items-center gap-1.5"><Tag className="h-3 w-3 shrink-0" /> TAG: <span className="font-medium text-foreground">{cert.tagEquipamentoServico}</span></div> : null}
                       </div>
                       <div className="flex flex-wrap gap-2 border-t pt-1">
-                        <Button size="sm" className="h-7 flex-1 gap-1.5 text-xs" onClick={() => imprimirCertificado(cert)}><Printer className="h-3 w-3" /> Imprimir PDF</Button>
+                        <Button size="sm" className="h-7 flex-1 gap-1.5 text-xs" onClick={() => void imprimirCertificado(cert).catch(error => toast.error(error instanceof Error ? error.message : 'Não foi possível abrir o certificado.'))}><Printer className="h-3 w-3" /> Imprimir PDF</Button>
                         <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleCompartilhar(cert)} title="Compartilhar"><Share2 className="h-3.5 w-3.5" /></Button>
                         {cert.status !== "revogado" ? <Button size="sm" variant="ghost" className="h-7 px-2 text-amber-700" onClick={() => handleRevogar(cert)} disabled={acaoCertificado === cert.id}>Revogar</Button> : null}
                         {cert.status !== "revogado" ? <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => handleReemitir(cert)} disabled={acaoCertificado === cert.id}>Reemitir</Button> : null}

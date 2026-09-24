@@ -28,6 +28,7 @@ function shouldForceOfficialAssets(slug) {
 }
 
 async function main() {
+  if (tenantSlug.toLowerCase() !== 'ciperprag') throw new Error('Estes assets são exclusivos do tenant Ciperprag.');
   const [logo, watermark, municipalSeal, signature, anvisa] = await Promise.all([
     asset("logo-ciperprag-documental.png", "image/png"),
     asset("marca-dagua-icone-ciperprag.png", "image/png"),
@@ -52,6 +53,11 @@ async function main() {
     ? rows[0].certificado_config
     : {};
   const forceOfficialAssets = shouldForceOfficialAssets(tenantSlug);
+  // Existing tenants are already configured. Do not overwrite administrator uploads.
+  if (Object.keys(current).some(key => /logo|icon|assinatura|selo/i.test(key))) {
+    console.log(JSON.stringify({ ok: true, tenantSlug, preservedExistingAssets: true }));
+    return;
+  }
   const next = {
     ...current,
     documentLogoLightUrl: forceOfficialAssets ? logo : (current.documentLogoLightUrl || logo),

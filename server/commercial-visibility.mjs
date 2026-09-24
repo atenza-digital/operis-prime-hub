@@ -16,23 +16,29 @@ function withoutKeys(value, keys) {
   return copy;
 }
 
+function withoutNestedValues(value) {
+  if (Array.isArray(value)) return value.map(withoutNestedValues);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !['valorUnitario', 'valorTotal', 'total'].includes(key))
+    .map(([key, child]) => [key, withoutNestedValues(child)]));
+}
+
+export function sanitizeOrders(orders, permissions = []) {
+  return canViewCommercialValues(permissions) || canViewMeasurementValues(permissions) ? orders : withoutNestedValues(orders);
+}
+
 export function sanitizeContracts(contracts, permissions = []) {
   if (canViewCommercialValues(permissions)) return contracts;
-  return contracts.map((contract) => withoutKeys(contract, ["valorUnitario"]));
+  return withoutNestedValues(contracts);
 }
 
 export function sanitizeContractTemplates(templates, permissions = []) {
   if (canViewCommercialValues(permissions)) return templates;
-  return templates.map((template) => ({
-    ...template,
-    servicos: (template.servicos || []).map((service) => withoutKeys(service, ["valorUnitario"])),
-  }));
+  return withoutNestedValues(templates);
 }
 
 export function sanitizeMeasurements(measurements, permissions = []) {
   if (canViewMeasurementValues(permissions)) return measurements;
-  return measurements.map((measurement) => withoutKeys({
-    ...measurement,
-    itens: (measurement.itens || []).map((item) => withoutKeys(item, ["valorUnitario", "valorTotal"])),
-  }, ["total"]));
+  return withoutNestedValues(measurements);
 }
