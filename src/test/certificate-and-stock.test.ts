@@ -104,3 +104,17 @@ describe("validade do certificado ajustável no encerramento", () => {
     expect(resolveValidityDays(null, 0, 15)).toBe(15);
   });
 });
+
+describe("URL pública do QR Code", () => {
+  it("só aceita origem HTTPS com domínio; senão usa a URL configurada", async () => {
+    const { isPublicHttpsOrigin, resolvePublicBaseUrl } = await import("../components/CertificadoImpressao");
+    expect(isPublicHttpsOrigin("https://fieldops-homologacao.atenza.digital")).toBe(true);
+    expect(isPublicHttpsOrigin("http://fieldops-homologacao.atenza.digital")).toBe(false);
+    expect(isPublicHttpsOrigin("https://89.116.214.65:3010")).toBe(false);
+    expect(isPublicHttpsOrigin("http://localhost:5173")).toBe(false);
+    expect(isPublicHttpsOrigin("not a url")).toBe(false);
+    const snapshot = { publicBaseUrl: "https://fieldops.exemplo.com.br" };
+    expect(resolvePublicBaseUrl({}, snapshot, "http://192.168.0.10:3010")).toBe("https://fieldops.exemplo.com.br");
+    expect(resolvePublicBaseUrl({}, snapshot, "https://app.cliente.com.br")).toBe("https://app.cliente.com.br");
+  });
+});
