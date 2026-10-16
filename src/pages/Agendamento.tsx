@@ -194,14 +194,14 @@ export default function Agendamento() {
   const servicoSelecionado = origemAtendimento === "avulso"
     ? servicoAvulso
     : servicos.find((item) => item.id === contratoAtivo?.servicoCatalogoId) || servicos.find((item) => item.nome === contratoAtivo?.servico);
-  const sugestoesLocais = [...new Set([
-    ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
-    ...locaisContrato,
-  ].filter(Boolean))];
   const formularioPronto = Boolean(clienteId && dataAgendada && splitLocais(localExecucao).length > 0 && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
+  const sugestoesLocais = [...new Set([
+    ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
+    ...locaisContrato,
+  ].filter(Boolean))];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
   const agendamentosBase = useMemo(() => {
