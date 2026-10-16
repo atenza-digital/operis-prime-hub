@@ -87,3 +87,20 @@ describe("origem transacional do certificado", () => {
     );
   });
 });
+
+describe("validade do certificado ajustável no encerramento", () => {
+  it("usa o valor informado, senão serviço, senão padrão do tenant", async () => {
+    const { parseValidityOverride, resolveValidityDays } = await import("../../server/certificate-validity.mjs");
+    expect(parseValidityOverride("")).toBeNull();
+    expect(parseValidityOverride(undefined)).toBeNull();
+    expect(parseValidityOverride(90)).toBe(90);
+    expect(parseValidityOverride("0")).toBe(0);
+    expect(() => parseValidityOverride(-1)).toThrow();
+    expect(() => parseValidityOverride(1.5)).toThrow();
+    expect(() => parseValidityOverride(4000)).toThrow();
+    expect(resolveValidityDays(60, 30, 15)).toBe(60);
+    expect(resolveValidityDays(0, 30, 15)).toBe(0);
+    expect(resolveValidityDays(null, 30, 15)).toBe(30);
+    expect(resolveValidityDays(null, 0, 15)).toBe(15);
+  });
+});

@@ -12,6 +12,7 @@ import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-con
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
+import { parseValidityOverride, resolveValidityDays } from "./certificate-validity.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1485,7 +1486,7 @@ function normalizeCertificateTags(order) {
   return unique.length ? unique : [null];
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, validadeDiasOverride = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1497,7 +1498,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
-  const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
+  const validadeDias = resolveValidityDays(validadeDiasOverride, service?.validade_certificado_dias, company?.certificado_validade_padrao_dias);
   const hashes = [];
 
   for (const [index, tag] of normalizeCertificateTags(order).entries()) {
@@ -4486,6 +4487,7 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
   const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
+  const validadeDiasOverride = parseValidityOverride(req.body.validadeDias);
   const tenantId = req.auth.user.tenant.id;
 
   const response = await withTransaction(async (client) => {
@@ -4693,7 +4695,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       const certificateResult = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
-        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req), validadeDiasOverride },
       );
       certificateHash = certificateResult.primaryHash;
       certificateHashes = certificateResult.hashes;
