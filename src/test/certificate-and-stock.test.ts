@@ -87,3 +87,34 @@ describe("origem transacional do certificado", () => {
     );
   });
 });
+
+describe("validade do certificado ajustável no encerramento", () => {
+  it("usa o valor informado, senão serviço, senão padrão do tenant", async () => {
+    const { parseValidityOverride, resolveValidityDays } = await import("../../server/certificate-validity.mjs");
+    expect(parseValidityOverride("")).toBeNull();
+    expect(parseValidityOverride(undefined)).toBeNull();
+    expect(parseValidityOverride(90)).toBe(90);
+    expect(parseValidityOverride("0")).toBe(0);
+    expect(() => parseValidityOverride(-1)).toThrow();
+    expect(() => parseValidityOverride(1.5)).toThrow();
+    expect(() => parseValidityOverride(4000)).toThrow();
+    expect(resolveValidityDays(60, 30, 15)).toBe(60);
+    expect(resolveValidityDays(0, 30, 15)).toBe(0);
+    expect(resolveValidityDays(null, 30, 15)).toBe(30);
+    expect(resolveValidityDays(null, 0, 15)).toBe(15);
+  });
+});
+
+describe("URL pública do QR Code", () => {
+  it("só aceita origem HTTPS com domínio; senão usa a URL configurada", async () => {
+    const { isPublicHttpsOrigin, resolvePublicBaseUrl } = await import("../components/CertificadoImpressao");
+    expect(isPublicHttpsOrigin("https://fieldops-homologacao.atenza.digital")).toBe(true);
+    expect(isPublicHttpsOrigin("http://fieldops-homologacao.atenza.digital")).toBe(false);
+    expect(isPublicHttpsOrigin("https://89.116.214.65:3010")).toBe(false);
+    expect(isPublicHttpsOrigin("http://localhost:5173")).toBe(false);
+    expect(isPublicHttpsOrigin("not a url")).toBe(false);
+    const snapshot = { publicBaseUrl: "https://fieldops.exemplo.com.br" };
+    expect(resolvePublicBaseUrl({}, snapshot, "http://192.168.0.10:3010")).toBe("https://fieldops.exemplo.com.br");
+    expect(resolvePublicBaseUrl({}, snapshot, "https://app.cliente.com.br")).toBe("https://app.cliente.com.br");
+  });
+});

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { joinLocais, splitLocais } from "@/lib/locations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -109,6 +110,19 @@ function monthCalendarDays(year: number, month: number) {
   });
 }
 
+function joinTags(selecionadas: string[], livres: string) {
+  const seen = new Set<string>();
+  return [...selecionadas, ...livres.split(/[\n,;]+/)]
+    .map((tag) => tag.trim())
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (!tag || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(", ");
+}
+
 export default function Agendamento() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +136,7 @@ export default function Agendamento() {
   const [localId, setLocalId] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
   const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
+  const [tagsLivres, setTagsLivres] = useState("");
   const [observacao, setObservacao] = useState("");
   const [tecnicosSelecionados, setTecnicosSelecionados] = useState<string[]>([]);
   const [veiculoId, setVeiculoId] = useState("");
@@ -179,10 +194,14 @@ export default function Agendamento() {
   const servicoSelecionado = origemAtendimento === "avulso"
     ? servicoAvulso
     : servicos.find((item) => item.id === contratoAtivo?.servicoCatalogoId) || servicos.find((item) => item.nome === contratoAtivo?.servico);
-  const formularioPronto = Boolean(clienteId && dataAgendada && localExecucao && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
+  const formularioPronto = Boolean(clienteId && dataAgendada && splitLocais(localExecucao).length > 0 && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
+  const sugestoesLocais = [...new Set([
+    ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
+    ...locaisContrato,
+  ].filter(Boolean))];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
   const agendamentosBase = useMemo(() => {
@@ -252,7 +271,7 @@ export default function Agendamento() {
     setDataAgendada("");
     setLocalExecucao("");
     setLocalId("");
-    setTagsSelecionadas([]);
+    setTagsSelecionadas([]); setTagsLivres("");
     setObservacao("");
     setTecnicosSelecionados([]);
     setVeiculoId("");
@@ -279,9 +298,9 @@ export default function Agendamento() {
         servico: servicoSelecionado.nome,
         tipo: servicoSelecionado.tipo,
         dataAgendada,
-        localId: localId || undefined,
-        localExecucao,
-        tags: tagsSelecionadas.join(", "),
+        localId: localId && splitLocais(localExecucao).length === 1 ? localId : undefined,
+        localExecucao: joinLocais([localExecucao]),
+        tags: joinTags(tagsSelecionadas, tagsLivres),
         observacao,
         tecnicosIds: equipe.map((item) => item.id),
         tecnicosNomes: equipe.map((item) => item.nome),
@@ -428,7 +447,7 @@ export default function Agendamento() {
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Origem do atendimento <span className="text-destructive">*</span></Label>
-                <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
                   <SelectTrigger disabled={!clienteId}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo</SelectItem>
@@ -439,7 +458,7 @@ export default function Agendamento() {
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> {origemAtendimento === "contrato" ? "Contrato / Serviço" : "Serviço do catálogo"} <span className="text-destructive">*</span></Label>
                 {origemAtendimento === "contrato" ? (
-                  <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                  <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
                     <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
                     <SelectContent>
                       {contratosCliente.map((item) => {
@@ -449,7 +468,7 @@ export default function Agendamento() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Select value={servicoCatalogoId} onValueChange={(value) => { setServicoCatalogoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
+                  <Select value={servicoCatalogoId} onValueChange={(value) => { setServicoCatalogoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
                     <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione o serviço" : "Selecione o cliente primeiro"} /></SelectTrigger>
                     <SelectContent>{servicos.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• {item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></SelectItem>)}</SelectContent>
                   </Select>
@@ -464,32 +483,45 @@ export default function Agendamento() {
 
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-              <Input
-                list="agendamento-locais-sugeridos"
-                placeholder="Ex: Canteiro C2, Bloco A ou área definida"
+              <Textarea
+                placeholder={"Um endereço por linha. Ex: Canteiro C2\nBloco A - Rua X, 100"}
+                rows={2}
                 value={localExecucao}
                 onChange={(event) => {
                   const value = event.target.value;
-                  const matched = locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === value);
+                  const linhas = splitLocais(value);
+                  const matched = linhas.length === 1 ? locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === linhas[0]) : undefined;
                   setLocalId(matched?.id || "");
                   setLocalExecucao(value);
                 }}
                 disabled={!clienteId || !servicoSelecionado}
               />
-              <datalist id="agendamento-locais-sugeridos">
-                {[...new Set([
-                  ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
-                  ...locaisContrato,
-                ].filter(Boolean))].map((local) => <option key={local} value={local} />)}
-              </datalist>
-              {(locaisCliente.length > 0 || locaisContrato.length > 0) && (
-                <p className="text-xs text-muted-foreground">Locais cadastrados são sugestões. Se o atendimento ocorrer em outro ponto, informe o local diretamente.</p>
+              {clienteId && servicoSelecionado && sugestoesLocais.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {sugestoesLocais.filter((local) => !splitLocais(localExecucao).some((item) => item.toLowerCase() === local.toLowerCase())).map((local) => (
+                    <button
+                      key={local}
+                      type="button"
+                      className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted/60"
+                      onClick={() => {
+                        const linhas = splitLocais(localExecucao);
+                        const proximo = [...linhas, local];
+                        const matched = proximo.length === 1 ? locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === local) : undefined;
+                        setLocalId(matched?.id || "");
+                        setLocalExecucao(proximo.join("\n"));
+                      }}
+                    >
+                      + {local}
+                    </button>
+                  ))}
+                </div>
               )}
+              <p className="text-xs text-muted-foreground">Informe um ou mais endereços (um por linha). Locais cadastrados aparecem como sugestões; se o atendimento ocorrer em outro ponto, digite diretamente.</p>
             </div>
 
-            {equipamentosCliente.length > 0 && (
-              <div className="rounded-xl border p-4 space-y-3">
+            <div className="rounded-xl border p-4 space-y-3">
                 <Label className="flex items-center gap-1.5 text-xs"><Tag className="h-3.5 w-3.5" /> Equipamentos/tags previstos</Label>
+                {equipamentosCliente.length > 0 && (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {equipamentosCliente.map((equipamento) => (
                     <label key={equipamento.id || equipamento.tag} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
@@ -506,8 +538,13 @@ export default function Agendamento() {
                     </label>
                   ))}
                 </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Outras TAGs (opcional)</Label>
+                  <Input placeholder="Ex: BEB-012, BEB-013 (separe por vírgula)" value={tagsLivres} onChange={(event) => setTagsLivres(event.target.value)} disabled={!clienteId || !servicoSelecionado} />
+                  <p className="text-xs text-muted-foreground">Use para identificar equipamentos que ainda não estão cadastrados no cliente (ex.: bebedouro). Cada TAG gera um certificado.</p>
+                </div>
               </div>
-            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="rounded-xl border p-4 space-y-3">

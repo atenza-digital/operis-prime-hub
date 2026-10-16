@@ -12,6 +12,7 @@ import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-con
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
+import { parseValidityOverride, resolveValidityDays } from "./certificate-validity.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -905,6 +906,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       razaoSocial: company?.razao_social || null,
       nomeFantasia: company?.nome_fantasia || null,
       cnpj: company?.cnpj || null,
+      cnpjSecundario: company?.cnpj_secundario || null,
       endereco: company?.endereco || null,
       telefone: company?.telefone || null,
       email: company?.email || null,
@@ -1484,7 +1486,7 @@ function normalizeCertificateTags(order) {
   return unique.length ? unique : [null];
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, validadeDiasOverride = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1496,7 +1498,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
-  const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
+  const validadeDias = resolveValidityDays(validadeDiasOverride, service?.validade_certificado_dias, company?.certificado_validade_padrao_dias);
   const hashes = [];
 
   for (const [index, tag] of normalizeCertificateTags(order).entries()) {
@@ -1601,6 +1603,7 @@ async function getCompanyConfig(tenantId) {
     razaoSocial: row.razao_social,
     nomeFantasia: row.nome_fantasia,
     cnpj: row.cnpj,
+    cnpjSecundario: row.cnpj_secundario || "",
     endereco: row.endereco,
     telefone: row.telefone,
     email: row.email,
@@ -3446,8 +3449,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
       medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
-      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $26 ORDER BY id LIMIT 1)`,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, cnpj_secundario=$26, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $27 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -3474,6 +3477,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.corDestaque || null,
       JSON.stringify(body.certificadoConfig || {}),
       JSON.stringify(normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug)),
+      String(body.cnpjSecundario || "").trim().slice(0, 18) || null,
       tenantId,
     ],
   );
@@ -4483,6 +4487,7 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
   const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
+  const validadeDiasOverride = parseValidityOverride(req.body.validadeDias);
   const tenantId = req.auth.user.tenant.id;
 
   const response = await withTransaction(async (client) => {
@@ -4690,7 +4695,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       const certificateResult = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
-        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req), validadeDiasOverride },
       );
       certificateHash = certificateResult.primaryHash;
       certificateHashes = certificateResult.hashes;

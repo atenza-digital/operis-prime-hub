@@ -221,6 +221,15 @@ export function buildOsPrintHtml(
     : os.clienteEndereco || "";
   const emissao = fmtDate(os.dataEmissao);
   const execucao = fmtDate(os.dataExecucao || os.dataEmissao);
+  const companyIdLine = [
+    company?.razaoSocial ? `<strong>${escapeHtml(company.razaoSocial)}</strong>` : "",
+    ...[company?.cnpj, company?.cnpjSecundario].filter(Boolean).map((cnpj) => `CNPJ ${escapeHtml(cnpj)}`),
+  ]
+    .filter(Boolean)
+    .join(" - ");
+  const assinaturaConfig = (company?.certificadoConfig ?? {}) as Record<string, unknown>;
+  const assinaturaModo = String((assinaturaConfig.assinaturaDocumentos as Record<string, unknown> | undefined)?.os ?? assinaturaConfig.assinaturaModo ?? "imagem");
+  const assinaturaUrl = assinaturaModo === "imagem" && typeof assinaturaConfig.assinaturaUrl === "string" ? assinaturaConfig.assinaturaUrl : "";
   const companyLine = [company?.endereco, company?.telefone ? `Tel.: ${company.telefone}` : "", company?.email ? `e-mail: ${company.email}` : ""]
     .filter(Boolean)
     .join(", ");
@@ -331,7 +340,7 @@ export function buildOsPrintHtml(
     <div class="footer-wrap">
       <div class="footer-line"></div>
       <div class="footer">
-        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
+        <div>${companyIdLine}</div>
         <div>${escapeHtml(companyLine)}</div>
       </div>
     </div>
@@ -375,6 +384,7 @@ export function buildOsPrintHtml(
     <div class="bottom-grid">
       <div class="responsavel-bloco">
         <div style="font-size: 15px; font-weight: 700;">Data de Emissão: ${escapeHtml(emissao || execucao)}</div>
+        ${assinaturaUrl ? `<img src="${escapeHtml(assinaturaUrl)}" alt="Assinatura do responsável técnico" style="display:block;max-height:46px;max-width:220px;margin-top:6px;object-fit:contain;" />` : ""}
         <div style="margin-top: 10px;"><strong>${escapeHtml(company?.responsavelExecucao || company?.responsavelTecnico || "Responsável técnico")}</strong></div>
         <div>CRT02: ${escapeHtml(company?.cr02 || "")}</div>
       </div>
@@ -388,7 +398,7 @@ export function buildOsPrintHtml(
     <div class="footer-wrap">
       <div class="footer-line"></div>
       <div class="footer">
-        <div><strong>${escapeHtml(company?.razaoSocial || "CIPERPRAG SERVIÇOS LTDA")}</strong> - CNPJ ${escapeHtml(company?.cnpj || "15.722.292/0001-43")}</div>
+        <div>${companyIdLine}</div>
         <div>${escapeHtml(companyLine)}</div>
       </div>
     </div>

@@ -62,6 +62,7 @@ export async function ensureDatabaseShape() {
 
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.empresa_config
+    ADD COLUMN IF NOT EXISTS cnpj_secundario VARCHAR(18),
     ADD COLUMN IF NOT EXISTS certificado_validade_padrao_dias INTEGER NOT NULL DEFAULT 30,
     ADD COLUMN IF NOT EXISTS certificado_texto_legal TEXT,
     ADD COLUMN IF NOT EXISTS certificado_texto_fixacao TEXT DEFAULT 'FIXAR OBRIGATORIAMENTE EM LOCAL VISIVEL',

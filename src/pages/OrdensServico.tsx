@@ -121,6 +121,7 @@ export default function OrdensServico() {
   const [encOsId, setEncOsId] = useState("");
   const [dataExecucao, setDataExecucao] = useState("");
   const [quantidade, setQuantidade] = useState("1");
+  const [validadeDias, setValidadeDias] = useState("");
   const [tagEquipamento, setTagEquipamento] = useState("");
   const [checklist, setChecklist] = useState<Array<{ item: string; concluido: boolean; observacao?: string }>>([]);
   const [naoExecutada, setNaoExecutada] = useState(false);
@@ -203,6 +204,7 @@ export default function OrdensServico() {
     setEncOsId(osId);
     setDataExecucao(todayInputDateBr());
     setQuantidade("1");
+    setValidadeDias("");
     setTagEquipamento(os?.tagEquipamentoServico || os?.tags?.split(",")[0]?.trim() || "");
     setChecklist((service?.checklistItens ?? []).map((item) => ({ item, concluido: false, observacao: "" })));
     setNaoExecutada(false);
@@ -231,6 +233,7 @@ export default function OrdensServico() {
       const response = await closeOrder(osSelecionada.id, {
         dataExecucao,
         quantidade: Number(quantidade || 1),
+        validadeDias: validadeDias.trim() === "" ? undefined : Number(validadeDias),
         tagEquipamentoServico: tagEquipamento,
         fotos: fotos.map((item) => item.base64),
         checklistRespostas: checklist,
@@ -419,6 +422,7 @@ export default function OrdensServico() {
                 <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
               </div>
+              <div className="space-y-1.5"><Label>Validade do certificado (dias)</Label><Input type="number" min="0" max="3650" placeholder="Padrão do serviço" value={validadeDias} onChange={(event) => setValidadeDias(event.target.value)} /><p className="text-xs text-muted-foreground">Opcional. Em branco usa a validade cadastrada no serviço; o vencimento é a data de execução + dias.</p></div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag do equipamento atendido</Label>
                 {equipamentosOs.length > 0 ? (
