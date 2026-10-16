@@ -419,6 +419,7 @@ export interface EmpresaConfig {
   razaoSocial: string;
   nomeFantasia: string;
   cnpj: string;
+  cnpjSecundario?: string;
   endereco: string;
   telefone: string;
   email: string;

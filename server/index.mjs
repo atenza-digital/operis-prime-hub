@@ -905,6 +905,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       razaoSocial: company?.razao_social || null,
       nomeFantasia: company?.nome_fantasia || null,
       cnpj: company?.cnpj || null,
+      cnpjSecundario: company?.cnpj_secundario || null,
       endereco: company?.endereco || null,
       telefone: company?.telefone || null,
       email: company?.email || null,
@@ -1601,6 +1602,7 @@ async function getCompanyConfig(tenantId) {
     razaoSocial: row.razao_social,
     nomeFantasia: row.nome_fantasia,
     cnpj: row.cnpj,
+    cnpjSecundario: row.cnpj_secundario || "",
     endereco: row.endereco,
     telefone: row.telefone,
     email: row.email,
@@ -3446,8 +3448,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
       medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
-      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $26 ORDER BY id LIMIT 1)`,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, cnpj_secundario=$26, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $27 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -3474,6 +3476,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.corDestaque || null,
       JSON.stringify(body.certificadoConfig || {}),
       JSON.stringify(normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug)),
+      String(body.cnpjSecundario || "").trim().slice(0, 18) || null,
       tenantId,
     ],
   );

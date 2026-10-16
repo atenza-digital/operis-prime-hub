@@ -498,7 +498,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia);
   const rodapeLinhas = asStringArray(config.rodapeLinhas);
   const defaultRodape = [
-    empresaNome && company?.cnpj ? `${empresaNome} CNPJ: ${company.cnpj}` : empresaNome,
+    [empresaNome, ...[firstText(snapshotEmpresa.cnpj, company?.cnpj), firstText(snapshotEmpresa.cnpjSecundario, company?.cnpjSecundario)].filter(Boolean).map((cnpj) => `CNPJ: ${cnpj}`)].filter(Boolean).join(" | "),
     firstText(snapshotEmpresa.endereco, company?.endereco),
     [company?.telefone, company?.email].filter(Boolean).join(" | "),
   ].filter(Boolean);
