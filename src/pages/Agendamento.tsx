@@ -185,9 +185,9 @@ export default function Agendamento() {
     () =>
       contratos.filter((item) => {
         const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId);
+        return (item.clienteId === clienteId || item.cliente === clienteNomeSel) && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId);
       }),
-    [clienteNomeSel, contratos],
+    [clienteId, clienteNomeSel, contratos],
   );
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
   const servicoAvulso = useMemo(() => servicos.find((item) => item.id === servicoCatalogoId), [servicoCatalogoId, servicos]);
@@ -450,7 +450,7 @@ export default function Agendamento() {
                 <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
                   <SelectTrigger disabled={!clienteId}><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo</SelectItem>
+                    <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo{contratosCliente.length === 0 ? " (indisponível para este cliente)" : ""}</SelectItem>
                     <SelectItem value="avulso">Serviço avulso (sem contrato)</SelectItem>
                   </SelectContent>
                 </Select>

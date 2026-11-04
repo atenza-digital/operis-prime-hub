@@ -7,3 +7,10 @@
 - feat: validade do certificado ajustável no encerramento da OS (dias, opcional; padrão do serviço quando vazio).
 - feat: agendamento aceita vários locais de execução (um por linha, gravados separados por "; ") e TAGs livres além das cadastradas.
 - fix: QR Code do certificado maior (23 mm), com margem de silêncio e imagem nítida; URL do QR só usa origem HTTPS com domínio (nunca IP, http ou localhost).
+- fix: OS impressa sem função e CPF do técnico.
+- fix: anexo histórico da OS oculto na tela da OS e rotulado como "Registro de auditoria" na Auditoria de Anexos.
+- fix: lista de certificados com o mais recente primeiro e TAGs da mesma OS em ordem crescente.
+- feat: validade do certificado em 30/90/120 dias (cadastro do serviço e encerramento da OS) e "Vence em" no card do certificado.
+- docs: texto do Relatório técnico reescrito em linguagem simples (o que é, quando usar, como gerar).
+- fix: agendamento casa contratos por cliente (id ou nome) e informa quando o contrato não está disponível para o cliente.
+- feat: fotos por TAG no encerramento da OS; cada certificado leva somente as fotos da sua TAG (até 3 por TAG).

@@ -202,7 +202,6 @@ export function buildOsPrintHtml(
   const customer = bootstrap?.clients.find((item) => item.id === os.clienteId);
   const contract = bootstrap?.contracts.find((item) => item.id === os.contratoId);
   const service = serviceFromSnapshot(os, bootstrap?.services.find((item) => item.nome === os.servico));
-  const leadTech = bootstrap?.technicians.find((item) => item.nome === os.tecnicoNome);
   const procedimentos = inferProcedures(service);
   const checklist = inferChecklist(service, os);
   const medidas = inferPreventiveMeasures(service);
@@ -293,7 +292,6 @@ export function buildOsPrintHtml(
         <col style="width: 20%">
       </colgroup>
       <tr><td class="label">SETOR:</td><td>OPERACIONAL</td><td class="label"></td><td></td></tr>
-      <tr><td class="label">FUNÇÃO:</td><td>${escapeHtml(leadTech?.cargo || (service?.tipo === "manutencao" ? "Técnico de Manutenção" : "Técnico Sanitário"))}</td><td class="label">CPF</td><td>${escapeHtml(os.tecnicoCpf || "")}</td></tr>
       <tr><td class="label">CLIENTE:</td><td>${escapeHtml(clienteNome)}</td><td class="label">CNPJ</td><td><strong>${escapeHtml(clienteCnpj)}</strong></td></tr>
       <tr><td class="label">Local de execução:</td><td>${escapeHtml(os.localExecucao)}</td><td class="label">Origem</td><td>${escapeHtml(os.contratoId || "Atendimento avulso")}</td></tr>
     </table>

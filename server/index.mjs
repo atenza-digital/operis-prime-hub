@@ -13,6 +13,7 @@ import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } fr
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
 import { parseValidityOverride, resolveValidityDays } from "./certificate-validity.mjs";
+import { parseTagPhotoGroups, photosForTag } from "./tag-photos.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1486,7 +1487,7 @@ function normalizeCertificateTags(order) {
   return unique.length ? unique : [null];
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, validadeDiasOverride = null } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, validadeDiasOverride = null, fotosPorTag = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1523,6 +1524,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
       tipo: source.serviceType,
       tag_equipamento_servico: tag,
       tags: tag || order.tags,
+      fotos: photosForTag(fotosPorTag, tag) ?? order.fotos,
     };
     const snapshot = buildCertificateSnapshot({
       order: certificateOrder,
@@ -4508,18 +4510,28 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const isNotExecuted = Boolean(naoExecutada);
     const uploadPolicy = resolveAttachmentPolicy("os.foto", company?.certificado_config || {});
     const rawFotos = Array.isArray(fotos) ? fotos : [];
-    if (rawFotos.length > uploadPolicy.maxFiles) {
+    const tagPhotoGroups = parseTagPhotoGroups(req.body.fotosPorTag, uploadPolicy.maxFiles);
+    if (!tagPhotoGroups && rawFotos.length > uploadPolicy.maxFiles) {
       const error = new Error(`Anexe no maximo ${uploadPolicy.maxFiles} fotos de evidencia.`);
       error.status = 400;
       throw error;
     }
-    const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
-      contentBase64: foto,
-      declaredMimeType: null,
-      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
-      maxBytes: uploadPolicy.maxBytes,
-      label: `foto ${index + 1}`,
+    const photoEntries = tagPhotoGroups
+      ? tagPhotoGroups.flatMap((group) => group.fotos.map((raw) => ({ tag: group.tag, raw })))
+      : rawFotos.map((raw) => ({ tag: null, raw }));
+    const validatedFotos = photoEntries.map((entry, index) => ({
+      ...validateAttachmentPayload({
+        contentBase64: entry.raw,
+        declaredMimeType: null,
+        allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+        maxBytes: uploadPolicy.maxBytes,
+        label: `foto ${index + 1}`,
+      }),
+      tag: entry.tag,
     }));
+    const fotosByTag = tagPhotoGroups
+      ? Object.fromEntries(tagPhotoGroups.map((group) => [group.tag, validatedFotos.filter((foto) => foto.tag === group.tag).map((foto) => foto.dataUrl)]))
+      : null;
 
     if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
       const error = new Error("Informe o motivo da nao execucao.");
@@ -4570,6 +4582,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         metadata: {
           origem: "encerramento_os",
           posicao: index + 1,
+          tag: parsed.tag || null,
           dataExecucao,
           hashSha256: fotoHash,
           ...buildAttachmentSecurityMetadata(uploadPolicy),
@@ -4695,7 +4708,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       const certificateResult = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
-        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req), validadeDiasOverride },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req), validadeDiasOverride, fotosPorTag: fotosByTag },
       );
       certificateHash = certificateResult.primaryHash;
       certificateHashes = certificateResult.hashes;
