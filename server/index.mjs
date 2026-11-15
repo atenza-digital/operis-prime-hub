@@ -1244,6 +1244,7 @@ async function getSchedules(tenantId) {
     veiculoDescricao: row.veiculo_descricao,
     status: row.status,
     osId: row.os_id,
+    grupoId: row.grupo_id || null,
     createdAt: row.created_at?.toISOString?.() ?? row.created_at,
   }));
 }
@@ -1324,6 +1325,7 @@ async function getOrders(tenantId) {
     tecnicoDataAdmissao: row.tecnico_data_admissao?.toISOString?.().split("T")[0] ?? row.tecnico_data_admissao,
     equipeTecnicosIds: row.equipe_tecnicos_ids ?? [],
     equipeTecnicosNomes: row.equipe_tecnicos_nomes ?? [],
+    grupoId: row.grupo_id || null,
     veiculoId: row.veiculo_id,
     veiculoDescricao: row.veiculo_descricao,
     localExecucao: row.local_execucao,
@@ -2383,12 +2385,12 @@ async function nextSequential(field, tenantId) {
   });
 }
 
-async function upsertSchedule(body, tenantId) {
+async function upsertSchedule(body, tenantId, run = query) {
   const id = body.id || makeId("AG");
   const desiredStatus = body.status || "agendado";
   const contractId = body.contratoId || null;
   const serviceId = body.servicoCatalogoId || null;
-  const { rows: customerRows } = await query(
+  const { rows: customerRows } = await run(
     "SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2 LIMIT 1",
     [body.clienteId, tenantId],
   );
@@ -2399,7 +2401,7 @@ async function upsertSchedule(body, tenantId) {
     throw error;
   }
 
-  const { rows: serviceRows } = await query(
+  const { rows: serviceRows } = await run(
     serviceId
       ? "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1"
       : "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE tenant_id = $1 AND lower(trim(nome)) = lower(trim($2)) LIMIT 1",
@@ -2414,7 +2416,7 @@ async function upsertSchedule(body, tenantId) {
 
   let contract = null;
   if (contractId && !["cancelado", "encerrado"].includes(desiredStatus)) {
-    const { rows: contractRows } = await query(
+    const { rows: contractRows } = await run(
       `SELECT
          c.id,
          c.status,
@@ -2440,7 +2442,7 @@ async function upsertSchedule(body, tenantId) {
       error.status = 400;
       throw error;
   }
-  const { rowCount } = await query(
+  const { rowCount } = await run(
     `INSERT INTO ciperprag_hub.agendamentos
     (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
@@ -2486,6 +2488,9 @@ async function upsertSchedule(body, tenantId) {
     }),
   );
   assertTenantWrite(rowCount, "Agendamento");
+  if (body.grupoId) {
+    await run("UPDATE ciperprag_hub.agendamentos SET grupo_id = $1 WHERE id = $2 AND tenant_id = $3", [String(body.grupoId).slice(0, 40), id, tenantId]);
+  }
   return id;
 }
 
@@ -4366,6 +4371,32 @@ app.post("/api/agendamentos", requirePermission("agenda.manage"), async (req, re
   res.json({ ok: true, id });
 });
 
+app.post("/api/agendamentos/lote", requirePermission("agenda.manage"), async (req, res) => {
+  const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
+  if (itens.length < 2 || itens.length > 10) {
+    return res.status(400).json({ error: "Informe de 2 a 10 servicos para agendar juntos." });
+  }
+  const tenantId = req.auth.user.tenant.id;
+  const grupoId = makeId("GRP");
+  const ids = await withTransaction(async (client) => {
+    const created = [];
+    for (const [index, item] of itens.entries()) {
+      const id = `${makeId("AG")}-${index + 1}`;
+      await upsertSchedule({ ...item, id, grupoId }, tenantId, (sql, params) => client.query(sql, params));
+      created.push(id);
+    }
+    await logAuditEvent(client, req, {
+      entityType: "agendamento",
+      entityId: grupoId,
+      action: "schedule_group_created",
+      summary: `Agendamento com ${created.length} servicos criado para ${itens[0].clienteNome || itens[0].cliente || grupoId}`,
+      after: { grupoId, ids: created },
+    });
+    return created;
+  });
+  res.json({ ok: true, grupoId, ids });
+});
+
 app.patch("/api/agendamentos/:id", requirePermission("agenda.manage"), async (req, res) => {
   const current = (await getSchedules(req.auth.user.tenant.id)).find((item) => item.id === req.params.id);
   if (!current) return res.status(404).json({ error: "Agendamento não encontrado" });
@@ -4450,6 +4481,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       [orderId, JSON.stringify(snapshot), tenantId],
     );
     await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'os_gerada', os_id = $2 WHERE id = $1 AND tenant_id = $3", [agendamentoId, orderId, tenantId]);
+    if (ag.grupo_id) {
+      await client.query("UPDATE ciperprag_hub.ordens_servico SET grupo_id = $2 WHERE id = $1 AND tenant_id = $3", [orderId, ag.grupo_id, tenantId]);
+    }
     await logAuditEvent(client, req, {
       entityType: "os",
       entityId: orderId,

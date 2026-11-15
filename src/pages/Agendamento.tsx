@@ -3,6 +3,7 @@ import {
   generateOrderFromSchedule,
   getBootstrap,
   saveSchedule,
+  saveScheduleBatch,
   type AgendamentoApp,
   type BootstrapData,
   type OSApp,
@@ -137,6 +138,8 @@ export default function Agendamento() {
   const [localExecucao, setLocalExecucao] = useState("");
   const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
   const [tagsLivres, setTagsLivres] = useState("");
+  const [extrasAvulso, setExtrasAvulso] = useState<string[]>([]);
+  const [extrasContrato, setExtrasContrato] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
   const [tecnicosSelecionados, setTecnicosSelecionados] = useState<string[]>([]);
   const [veiculoId, setVeiculoId] = useState("");
@@ -198,6 +201,8 @@ export default function Agendamento() {
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
+  const servicosExtras = servicos.filter((item) => item.id !== servicoSelecionado?.id);
+  const contratosExtras = contratosCliente.filter((item) => item.id !== contratoId);
   const sugestoesLocais = [...new Set([
     ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
     ...locaisContrato,
@@ -272,6 +277,8 @@ export default function Agendamento() {
     setLocalExecucao("");
     setLocalId("");
     setTagsSelecionadas([]); setTagsLivres("");
+    setExtrasAvulso([]);
+    setExtrasContrato([]);
     setObservacao("");
     setTecnicosSelecionados([]);
     setVeiculoId("");
@@ -287,28 +294,42 @@ export default function Agendamento() {
       return;
     }
     const equipe = tecnicos.filter((item) => tecnicosSelecionados.includes(item.id));
+    const base = {
+      clienteId,
+      clienteNome: clienteAtivo.razaoSocial,
+      clienteCnpj: clienteAtivo.cnpj,
+      dataAgendada,
+      localId: localId && splitLocais(localExecucao).length === 1 ? localId : undefined,
+      localExecucao: joinLocais([localExecucao]),
+      tags: joinTags(tagsSelecionadas, tagsLivres),
+      observacao,
+      tecnicosIds: equipe.map((item) => item.id),
+      tecnicosNomes: equipe.map((item) => item.nome),
+      veiculoId: veiculoSelecionado?.id,
+      veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
+      status: "agendado" as const,
+    };
+    const principal = {
+      ...base,
+      contratoId: origemAtendimento === "contrato" ? contratoId : undefined,
+      servicoCatalogoId: servicoSelecionado.id,
+      servico: servicoSelecionado.nome,
+      tipo: servicoSelecionado.tipo,
+    };
+    const extras = origemAtendimento === "contrato"
+      ? contratosExtras.filter((item) => extrasContrato.includes(item.id)).flatMap((contrato) => {
+        const servico = servicos.find((item) => item.id === contrato.servicoCatalogoId) || servicos.find((item) => item.nome === contrato.servico);
+        return servico ? [{ ...base, contratoId: contrato.id, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }] : [];
+      })
+      : servicosExtras.filter((item) => extrasAvulso.includes(item.id)).map((servico) => ({ ...base, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }));
     try {
-      await saveSchedule({
-        id: newId(),
-        clienteId,
-        clienteNome: clienteAtivo.razaoSocial,
-        clienteCnpj: clienteAtivo.cnpj,
-        contratoId: origemAtendimento === "contrato" ? contratoId : undefined,
-        servicoCatalogoId: servicoSelecionado.id,
-        servico: servicoSelecionado.nome,
-        tipo: servicoSelecionado.tipo,
-        dataAgendada,
-        localId: localId && splitLocais(localExecucao).length === 1 ? localId : undefined,
-        localExecucao: joinLocais([localExecucao]),
-        tags: joinTags(tagsSelecionadas, tagsLivres),
-        observacao,
-        tecnicosIds: equipe.map((item) => item.id),
-        tecnicosNomes: equipe.map((item) => item.nome),
-        veiculoId: veiculoSelecionado?.id,
-        veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
-        status: "agendado",
-      });
-      toast.success("Agendamento criado!");
+      if (extras.length > 0) {
+        await saveScheduleBatch([principal, ...extras]);
+        toast.success(`Agendamento criado com ${extras.length + 1} serviços (uma OS por serviço).`);
+      } else {
+        await saveSchedule({ id: newId(), ...principal });
+        toast.success("Agendamento criado!");
+      }
       resetFormulario();
       reload();
     } catch (error) {
@@ -481,6 +502,28 @@ export default function Agendamento() {
                 <Input type="date" value={dataAgendada} onChange={(event) => setDataAgendada(event.target.value)} disabled={!clienteId || !servicoSelecionado} />
               </div>
             </div>
+
+            {servicoSelecionado ? (
+              <div className="rounded-xl border p-4 space-y-3">
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Outros serviços no mesmo atendimento (opcional)</Label>
+                <p className="text-xs text-muted-foreground">Marque para agendar mais de um serviço juntos (ex.: bebedouro, caixa d'água e controle de pragas). Cada serviço gera sua própria OS, com contrato, certificado e medição corretos, e a impressão sai em um documento só.</p>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {origemAtendimento === "contrato"
+                    ? contratosExtras.map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                        <Checkbox checked={extrasContrato.includes(item.id)} onCheckedChange={() => setExtrasContrato((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                        <span><strong>{item.servico}</strong><span className="block text-muted-foreground">({item.id})</span></span>
+                      </label>
+                    ))
+                    : servicosExtras.map((item) => (
+                      <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                        <Checkbox checked={extrasAvulso.includes(item.id)} onCheckedChange={() => setExtrasAvulso((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                        <span><strong>{item.nome}</strong><span className="block text-muted-foreground">{item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></span>
+                      </label>
+                    ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>

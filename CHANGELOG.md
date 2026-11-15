@@ -16,3 +16,4 @@
 - feat: fotos por TAG no encerramento da OS; cada certificado leva somente as fotos da sua TAG (até 3 por TAG).
 - feat: cadastro de cliente bloqueia CNPJ ou razão social já existentes (409) e avisa ao digitar o CNPJ; id de cliente sem risco de colisão.
 - docs: texto de ajuda no agendamento explicando contrato com saldo x serviço avulso.
+- feat: agendamento com vários serviços no mesmo atendimento (uma OS por serviço, ligadas por grupo; migration 032).

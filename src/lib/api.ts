@@ -154,6 +154,7 @@ export interface Contrato {
 
 export interface AgendamentoApp {
   id: string;
+  grupoId?: string | null;
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
@@ -203,6 +204,7 @@ export interface OSApp {
   id: string;
   numero: string;
   agendamentoId?: string;
+  grupoId?: string | null;
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
@@ -922,6 +924,7 @@ export const generateProposalFromPdf = (
   meta: { fileName: string; bytes: number; model: string; arquivoTemporario: boolean };
 }>("/contract-templates/proposal-assist", { method: "POST", body: JSON.stringify(payload), signal });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
+export const saveScheduleBatch = (itens: Array<Partial<AgendamentoApp>>) => api<{ ok: boolean; grupoId: string; ids: string[] }>("/agendamentos/lote", { method: "POST", body: JSON.stringify({ itens }) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
