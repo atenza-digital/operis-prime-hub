@@ -17,3 +17,4 @@
 - feat: cadastro de cliente bloqueia CNPJ ou razão social já existentes (409) e avisa ao digitar o CNPJ; id de cliente sem risco de colisão.
 - docs: texto de ajuda no agendamento explicando contrato com saldo x serviço avulso.
 - feat: agendamento com vários serviços no mesmo atendimento (uma OS por serviço, ligadas por grupo; migration 032).
+- fix: OS impressa segue o modelo original da cliente (textos de Medidas Preventivas, Obrigações, treinamentos NR35/NR33/NR12, emergência), com quantidade em branco para a equipe de campo, um bloco de observação por serviço e "Altura SIM( ) NÃO( )" para caixa d água; OS agrupadas saem em um documento só.

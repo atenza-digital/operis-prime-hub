@@ -82,3 +82,49 @@ describe("template da OS", () => {
     expect(html).toContain("Data de Emissão:");
   });
 });
+
+describe("OS no modelo original", () => {
+  const baseOs = {
+    id: "OSDB-001",
+    numero: "OS-100/2026",
+    clienteNome: "Cliente de teste",
+    clienteCnpj: "11.222.333/0001-44",
+    contratoId: null,
+    servico: service.nome,
+    tipo: "sanitario" as const,
+    tecnicoNome: "Tarcísio Lucas",
+    tecnicoCpf: "000.000.000-00",
+    localExecucao: "Área administrativa",
+    dataEmissao: "2026-08-19",
+    quantidade: 1,
+    unidade: "ponto",
+    status: "aberta" as const,
+    fotos: [],
+  };
+  const bootstrap = { companyConfig: null, contracts: [], clients: [], services: [service], technicians: [], vehicles: [], orders: [] } as never;
+
+  it("imprime a quantidade em branco e não mostra função nem CPF", () => {
+    const html = buildOsPrintHtml(baseOs as never, { bootstrap: bootstrap });
+    expect(html).toContain("Quantidade");
+    expect(html).not.toMatch(/<td[^>]*>1<\/td><td[^>]*>Descri/);
+    expect(html).not.toContain("FUNÇÃO");
+    expect(html).not.toContain("000.000.000-00");
+  });
+
+  it("usa os textos do modelo original (NR35, ergonomia 23 kg, ato faltoso)", () => {
+    const html = buildOsPrintHtml(baseOs as never, { bootstrap });
+    expect(html).toContain("Treinamento em altura (NR35)");
+    expect(html).toContain("23 kg por colaborador");
+    expect(html).toContain("Constitui ato faltoso e, portanto passível de punição");
+    expect(html).toContain("Recebi da empresa");
+  });
+
+  it("lista todos os serviços do grupo e um bloco de observação por serviço", () => {
+    const segunda = { ...baseOs, id: "OSDB-002", numero: "OS-101/2026", servico: "Higienização de Caixa d'Água", grupoId: "GRP-1" };
+    const primeira = { ...baseOs, grupoId: "GRP-1" };
+    const html = buildOsPrintHtml(primeira as never, { bootstrap, groupOrders: [segunda, primeira] as never });
+    expect(html).toContain(`( X ) ${service.nome.toUpperCase()}, ( X ) HIGIENIZAÇÃO DE CAIXA D&#39;ÁGUA`.replace("&#39;", "'"));
+    expect(html).toContain("Altura SIM( ) NÃO( )");
+    expect(html).toContain("Inclui: 101 / 2026");
+  });
+});

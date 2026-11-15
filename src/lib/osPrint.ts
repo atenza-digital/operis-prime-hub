@@ -32,18 +32,6 @@ function renderBulletList(items: string[]) {
   return items.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
 }
 
-function renderPopDetails(service?: ServicoCatalogo) {
-  if (!service) return "";
-  const details = [
-    service.popObjetivo ? `<div><strong>Objetivo:</strong> ${escapeHtml(service.popObjetivo)}</div>` : "",
-    service.popAplicacao ? `<div><strong>Aplicação:</strong> ${escapeHtml(service.popAplicacao)}</div>` : "",
-    service.popMateriais?.length ? `<div><strong>Materiais/registros:</strong> ${escapeHtml(service.popMateriais.join(", "))}</div>` : "",
-    service.popResponsabilidades?.length ? `<div><strong>Responsabilidades:</strong> ${escapeHtml(service.popResponsabilidades.join(", "))}</div>` : "",
-  ].filter(Boolean);
-  if (!details.length) return "";
-  return `<div style="margin-top:8px;">${details.join("")}</div>`;
-}
-
 function snapshotPhase(os: OSApp) {
   const snapshot = (os.snapshotDados ?? {}) as Record<string, unknown>;
   return (snapshot.encerramento ?? snapshot.emissao ?? null) as Record<string, unknown> | null;
@@ -111,22 +99,20 @@ function serviceFromSnapshot(os: OSApp, fallback?: ServicoCatalogo): ServicoCata
   };
 }
 
-function inferActivityLine(os: OSApp, contract?: Contrato, service?: ServicoCatalogo) {
-  const labels = [os.servico, ...(contract?.tags ?? [])].filter(Boolean);
-  if (!labels.length) return "( X ) EXECUÇÃO DE SERVIÇO CONFORME CONTRATO";
-  return labels
-    .map((item, index) => `${index === 0 ? "( X ) " : ", ( X ) "}${String(item).toUpperCase()}`)
-    .join("");
+function inferActivityLine(labels: string[]) {
+  const names = labels.filter(Boolean);
+  if (!names.length) return "( X ) EXECUÇÃO DE SERVIÇO CONFORME CONTRATO";
+  return names.map((item) => `( X ) ${String(item).toUpperCase()}`).join(", ");
 }
 
 function inferRiskLines(service?: ServicoCatalogo, contract?: Contrato) {
   const riskList = service?.riscos?.length ? service.riscos : contract?.riscos ?? [];
   const descriptions = new Map<string, string>([
-    ["Risco de Acidente", "Queda, batida ou tropeço durante a atividade."],
-    ["Risco Físico", "Ruído, calor e exposição ao ambiente operacional."],
-    ["Risco Químico", "Contato com névoa, vapores, poeiras e agentes químicos."],
-    ["Risco Ergonômico", "Esforço repetitivo e postura inadequada."],
-    ["Risco Biológico", "Contato indireto com agentes contaminantes do ambiente."],
+    ["Risco de Acidente", "Queda ou tropeço"],
+    ["Risco Físico", "Ruído, calor"],
+    ["Risco Químico", "Emissão de névoa, poeiras, vapores organicos."],
+    ["Risco Ergonômico", "Esforço físico repetitivo, postura inadequada."],
+    ["Risco Biológico", "Não se aplica."],
     ["Risco de Queda", "Diferença de nível e acesso a pontos elevados."],
     ["Risco Elétrico", "Contato acidental com circuitos e equipamentos energizados."],
   ]);
@@ -150,44 +136,72 @@ function inferRiskLines(service?: ServicoCatalogo, contract?: Contrato) {
     .join("");
 }
 
-function inferProcedures(service?: ServicoCatalogo) {
-  if (service?.procedimentos?.length) return service.procedimentos;
-  return [
-    "Treinamento operacional para uso e higienização dos EPIs.",
-    "Avaliar a área antes do início do serviço e manter isolamento quando necessário.",
-    "Executar a atividade somente por profissional treinado e identificado.",
-    "Em caso de dúvidas, interromper a atividade e acionar o responsável técnico.",
-  ];
+// Textos do modelo original de OS aprovado pela cliente (os-modelo-1/2.png).
+const TRAINING_BULLETS = [
+  "Treinamento operacional para uso e higienização dos EPIS;",
+  "Treinamento em altura (NR35)",
+  "Treinamento em espaço confinado (NR33)",
+  "Treinamento maquinas e equipamentos (NR12)",
+  "Os trabalhos que envolvam manipulação de produtos químicos só poderão ser executados por profissionais devidamente treinados e identificados.",
+  "Os trabalhos que envolvam manipulação de produtos químicos só poderão ser executados com a FISPQ - Ficha de Informação de Segurança de Produtos Químicos.",
+  "Em caso de dúvidas procure o Técnico de Segurança da sua Área.",
+];
+
+const ERGONOMIA_BULLETS = [
+  "Para cargas superiores a 23 kg por pessoa a atividade deverá ser realizada por dois colaboradores ou mais conforme a necessidade. Caso necessário deverá ser utilizado equipamento de guindar ou carrinhos mão ou similares.",
+  "O transporte manual deverá ser realizado de forma a não tencionar a coluna vertebral, concentrando o peso nas musculaturas das pernas e braços prevenindo lombalgias.",
+];
+
+const MOVIMENTACAO_BULLETS = [
+  "Durante a movimentação dos materiais diversos manualmente os envolvidos deverão posicionar-se de forma a não expor mãos e pés sob os mesmos evitando prensagens em, sob ou entre os mesmos.",
+  "Durante a movimentação de materiais diversos de forma mecanizada os envolvidos deverão utilizar cordas guias de forma a posicionar-se de forma segura. Não sendo permitido permanecer sob cargas suspensas nem guiar manualmente peças em níveis acima do solo.",
+  "Os acessórios de cargas, ou seja, cabos de aço, cintas e manilhas deverão ser inspecionados diariamente por profissional qualificado de forma a identificar possíveis danos que acrescente risco de queda de materiais.",
+  "No local da atividade deverá permanecer no local apenas o pessoal envolvido na atividade respeitando-se o isolamento de área a sinalização de segurança.",
+  "Durante as movimentações de cargas deverá ser avaliada a existência de redes elétricas no raio de ação da lança do equipamento, evitando assim indução elétrica ou impactos acidentais.",
+];
+
+const DISPOSICOES_BULLETS = [
+  "O local deverá permanecer limpo e organizado, eliminando causadores de acidentes tais como: poças d´agua, óleos ou graxas.",
+];
+
+const DISPOSICOES_TEXTO = "Os colaboradores devem utilizar camisas de manga longa e óculos de segurança. Os envolvidos deverão ingerir bastante líquidos evitando a desidratação. Nas frentes de serviços deverão dispor de áreas cobertas para realização de refeições. Os profissionais deverão utilizar o transporte fornecido pela empresa para realização do percurso casa - trabalho - casa.";
+
+const OBRIGACOES_BULLETS = [
+  "Cumprir as disposições legais e regulamentares sobre segurança e medicina do trabalho, inclusive as Ordens de Serviços expedidas pelo empregador;",
+  "Usar o EPI fornecido pelo empregador;",
+  "Submeter-se aos exames médicos previstos nas Normas Regulamentadoras - NR;",
+  "Colaborar com a empresa na aplicação das Normas Regulamentadoras - NR.",
+];
+
+const ATO_FALTOSO_TEXTO = "Constitui ato faltoso e, portanto passível de punição, a recusa injustificada do empregado ao cumprimento do disposto no item anterior, bem como as demais determinações desta Ordem de Serviços.";
+
+const ATO_FALTOSO_BULLETS = [
+  "Não executar qualquer trabalho para o qual não tenha sido orientado e autorizado.",
+  "Todos os acidentes ocorridos no local de trabalho ou fora desde que a serviço da empresa, ou ainda acidente de trajeto de casa para o trabalho e vice-versa, por mais leve que possa parecer, deve ser comunicado o mais rápido possível ao Supervisor do Setor onde trabalha, ou ao Setor de Segurança do Trabalho.",
+  "Caso alguma irregularidade ou risco de acidente seja constatado, antes do início ou ainda no transcorrer dos trabalhos, a atividade deve ser suspensa e imediatamente comunicado ao responsável pelo serviço ou à Segurança do Trabalho.",
+  "É terminantemente proibido qualquer tipo de trabalho envolvendo manutenção e instalações em eletricidade. Estes serviços somente podem ser realizados por pessoas qualificadas e autorizadas pela Segurança do Trabalho. Não execute trabalhos de movimentação de materiais nem permaneça próximo de redes elétricas aéreas ou subterrâneas.",
+];
+
+function uniqueItems(lists: Array<string[] | undefined>) {
+  return [...new Set(lists.flatMap((list) => list ?? []))];
 }
 
-function inferChecklist(service?: ServicoCatalogo, os?: OSApp) {
-  if (os?.checklistRespostas?.length) return os.checklistRespostas.map((item) => `${item.concluido ? "( X )" : "(   )"} ${item.item}`);
-  if (service?.checklistItens?.length) return service.checklistItens.map((item) => `(   ) ${item}`);
-  return [];
-}
-
-function inferPreventiveMeasures(service?: ServicoCatalogo) {
-  const items = [
-    "O transporte manual de peso deve respeitar a capacidade física do colaborador, evitando sobrecarga e lombalgias.",
-    "A movimentação de materiais deve manter mãos e pés fora de pontos de prensagem e queda de objetos.",
-    "Manter o local limpo, organizado e sinalizado durante toda a execução do serviço.",
-  ];
-  if (service?.tipo === "manutencao") {
-    items.push("Avaliar riscos de energia, altura e ferramentas antes da liberação do serviço.");
-  } else {
-    items.push("Seguir as orientações da FISPQ e evitar contato indevido com produtos químicos.");
-  }
-  return items;
-}
-
-function inferEmployeeDuties() {
-  return [
-    "Cumprir as disposições legais e regulamentares sobre segurança e medicina do trabalho.",
-    "Usar os EPIs fornecidos pelo empregador e zelar por sua conservação.",
-    "Submeter-se aos exames médicos previstos nas Normas Regulamentadoras.",
-    "Comunicar imediatamente qualquer irregularidade, incidente ou condição insegura.",
-    "Não executar atividade para a qual não tenha sido orientado e autorizado.",
-  ];
+function renderObservationServices(items: Array<{ os: OSApp; service?: ServicoCatalogo }>) {
+  return items
+    .map(({ os: item, service: svc }) => {
+      const tags = item.tagEquipamentoServico || item.tags || "";
+      const altura = /caixa/i.test(item.servico) ? `<span style="margin-left:18px;">Altura SIM( ) NÃO( )</span>` : "";
+      return `<div style="margin-top: 8px;">
+        <div>${escapeHtml(item.servico)}</div>
+        <table style="margin-top: 2px;">
+          <colgroup><col style="width: 11%"><col style="width: 89%"></colgroup>
+          <tr><td style="border:0;padding:0;">Quantidade</td><td style="border:0;padding:0 0 0 10px;">Descrição/serviços</td></tr>
+          <tr><td style="border:0;padding:0;"><span style="display:inline-block;border-bottom:1px solid #222;min-width:48px;height:12px;"></span></td><td style="border:0;padding:0 0 0 10px;">${escapeHtml(svc?.descricao || item.servico)}</td></tr>
+        </table>
+        <div style="margin-top: 4px;">TAGs: ${escapeHtml(tags)}<span style="display:inline-block;border-bottom:1px solid #222;min-width:180px;height:12px;"></span>${altura}</div>
+      </div>`;
+    })
+    .join("");
 }
 
 export function buildOsPrintHtml(
@@ -195,6 +209,7 @@ export function buildOsPrintHtml(
   options: {
     bootstrap: BootstrapData | null;
     logoSrc?: string;
+    groupOrders?: OSApp[];
   },
 ) {
   const bootstrap = options.bootstrap;
@@ -202,11 +217,19 @@ export function buildOsPrintHtml(
   const customer = bootstrap?.clients.find((item) => item.id === os.clienteId);
   const contract = bootstrap?.contracts.find((item) => item.id === os.contratoId);
   const service = serviceFromSnapshot(os, bootstrap?.services.find((item) => item.nome === os.servico));
-  const procedimentos = inferProcedures(service);
-  const checklist = inferChecklist(service, os);
-  const medidas = inferPreventiveMeasures(service);
-  const obrigacoes = inferEmployeeDuties();
-  const epiList = service?.epis?.length ? service.epis : contract?.epis ?? [];
+  const grupo = options.groupOrders && options.groupOrders.length > 1
+    ? [...options.groupOrders].sort((x, y) => x.numero.localeCompare(y.numero, "pt-BR", { numeric: true }))
+    : [os];
+  const grupoServicos = grupo.map((item) => ({
+    os: item,
+    service: item.id === os.id ? service : serviceFromSnapshot(item, bootstrap?.services.find((svc) => svc.nome === item.servico)),
+  }));
+  const servicoCombinado: ServicoCatalogo | undefined = service
+    ? { ...service, riscos: uniqueItems(grupoServicos.map((item) => item.service?.riscos)), epis: uniqueItems(grupoServicos.map((item) => item.service?.epis)) }
+    : undefined;
+  const osPrincipal = grupo[0];
+  const outrasOs = grupo.slice(1).map((item) => osNumeroLegivel(item.numero, item.dataEmissao));
+  const epiList = servicoCombinado?.epis?.length ? servicoCombinado.epis : contract?.epis ?? [];
   const epcList =
     service?.tipo === "manutencao"
       ? ["Cones e correntes", "Sinalização de área", "Bloqueio e etiquetagem quando aplicável"]
@@ -262,6 +285,8 @@ export function buildOsPrintHtml(
     .large-box { min-height: 122px; }
     .risk-box div { margin-bottom: 2px; }
     .small { font-size: 12px; }
+    .dense .box, .dense p, .dense li { font-size: 11px; line-height: 1.2; }
+    .dense .bullets li { margin: 0; }
     .bullets { margin: 0; padding: 0 0 0 20px; }
     .bullets li { margin: 1px 0; line-height: 1.22; }
     .footer-wrap { margin-top: auto; padding-top: 8px; }
@@ -280,7 +305,7 @@ export function buildOsPrintHtml(
   <div class="page">
     <div class="top-brand">
       <div class="brand-center">${renderDocumentLogo(logoSrc, company?.nomeFantasia || company?.razaoSocial || "Empresa emissora")}</div>
-      <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(os.numero, os.dataEmissao))}</div>
+      <div class="os-meta">OS N&nbsp;${escapeHtml(osNumeroLegivel(osPrincipal.numero, osPrincipal.dataEmissao))}${outrasOs.length ? `<div style="font-size:11px;font-weight:600;white-space:normal;max-width:150px;">Inclui: ${escapeHtml(outrasOs.join(", "))}</div>` : ""}</div>
     </div>
     <div class="title">REGISTRO DE ORDEM DE SERVIÇO</div>
 
@@ -298,42 +323,32 @@ export function buildOsPrintHtml(
 
     <div class="section-title">Descrição das Atividades:</div>
     <div class="box tall-box">
-      ${escapeHtml(inferActivityLine(os, contract, service))}
-      ${service?.popCodigo || service?.popTitulo ? `<div style="margin-top:8px;"><strong>POP:</strong> ${escapeHtml([service.popCodigo, service.popTitulo, service.popVersao ? `versão ${service.popVersao}` : ""].filter(Boolean).join(" - "))}</div>` : ""}
-      ${renderPopDetails(service)}
+      ${escapeHtml(inferActivityLine([...grupo.map((item) => item.servico), ...(contract?.tags ?? [])]))}
     </div>
 
     <div class="section-title">Observação</div>
     <div class="box large-box">
-      <div>${escapeHtml(os.observacao || service?.descricao || os.servico)}</div>
-      <div style="margin-top: 10px;">${escapeHtml(os.localExecucao || clienteEndereco || "")}</div>
-      <table style="margin-top: 6px;">
-        <colgroup><col style="width: 11%"><col style="width: 89%"></colgroup>
-        <tr><td style="border:0;padding:0;">Quantidade</td><td style="border:0;padding:0 0 0 10px;">Descrição/serviços</td></tr>
-        <tr><td style="border:0;padding:0;">${escapeHtml(os.quantidade)}</td><td style="border:0;padding:0 0 0 10px;">${escapeHtml(os.servico)}</td></tr>
-      </table>
-      <div style="margin-top: 4px;">TAGs: ${escapeHtml(os.tagEquipamentoServico || os.tags || "")}<span style="display:inline-block;border-bottom:1px solid #222;min-width:180px;height:12px;"></span></div>
+      ${os.observacao ? `<div>${escapeHtml(os.observacao)}</div>` : ""}
+      ${renderObservationServices(grupoServicos)}
       ${os.naoExecutada ? `<div style="margin-top:8px;"><strong>NÃO EXECUTADA:</strong> ${escapeHtml(os.motivoNaoExecucao || "")}</div>` : ""}
     </div>
 
-    <div class="section-title">Riscos da Atividade:</div>
-    <div class="box mid-box risk-box">${inferRiskLines(service, contract)}</div>
+    <div class="section-title">Procedimentos Específicos:</div>
+    <div class="box mid-box risk-box">${inferRiskLines(servicoCombinado, contract)}</div>
 
     <table class="compact">
       <colgroup><col style="width: 20%"><col style="width: 80%"></colgroup>
-      <tr><td class="label">Relação de EPIs:</td><td>${escapeHtml(joinList(epiList, "Conforme análise preliminar da atividade."))}</td></tr>
-      <tr><td class="label">EPC / Proteção Coletiva:</td><td>${escapeHtml(joinList(epcList, "Sinalização e isolamento da área."))}</td></tr>
+      <tr><td class="label">Relação de EPI´s:</td><td>${escapeHtml(joinList(epiList, "Conforme análise preliminar da atividade."))}</td></tr>
+      <tr><td class="label">Equipamentos de Proteção Coletiva:</td><td>${escapeHtml(joinList(epcList, "Sinalização e isolamento da área."))}</td></tr>
     </table>
 
     <div class="section-title">Procedimentos Específicos:</div>
     <div class="box">
-      <ul class="bullets">${renderBulletList(procedimentos)}</ul>
+      <ul class="bullets">${renderBulletList(TRAINING_BULLETS)}</ul>
     </div>
 
-    ${checklist.length > 0 ? `<div class="section-title">Checklist Operacional:</div><div class="box"><ul class="bullets">${renderBulletList(checklist)}</ul></div>` : ""}
-
     <div class="section-title">Em caso de emergência:</div>
-    <div class="box small">Caso o alarme de emergência seja acionado, os profissionais deverão evacuar a área seguindo a rota de fuga ao ponto de encontro mais próximo.</div>
+    <div class="box small">Caso o alarme de emergência seja acionado os profissionais deverão evacuar a área seguindo as rotas de fuga ao ponto de encontro mais próximo.</div>
 
     <div class="footer-wrap">
       <div class="footer-line"></div>
@@ -344,33 +359,31 @@ export function buildOsPrintHtml(
     </div>
   </div>
 
-  <div class="page">
+  <div class="page dense">
     <div class="section-title">Medidas Preventivas:</div>
-    <div class="box" style="min-height: 270px;">
-      <div style="font-size: 15px; font-weight: 700; margin: 4px 0 6px;">Ergonomia:</div>
-      <ul class="bullets">${renderBulletList(medidas)}</ul>
-      <div style="font-size: 15px; font-weight: 700; margin: 10px 0 6px;">Disposições Gerais:</div>
-      <ul class="bullets">
-        <li>O local deve permanecer limpo e organizado, eliminando causadores de acidentes como água, óleos ou graxas.</li>
-        <li>Os colaboradores devem utilizar uniforme adequado, óculos de segurança e ingerir líquidos durante a jornada.</li>
-        <li>Somente o pessoal envolvido na atividade deve permanecer na frente de serviço, respeitando o isolamento da área.</li>
-      </ul>
+    <div class="box">
+      <p style="margin:2px 0 4px;"><strong>Ergonomia:</strong> O transporte manual de peso deverá ser realizado conforme a capacidade física de cada um não ultrapassando a carga ergonomicamente correta de 23 kg por colaborador.</p>
+      <ul class="bullets">${renderBulletList(ERGONOMIA_BULLETS)}</ul>
+      <div style="font-weight:700;margin:4px 0 2px;">Movimentação de cargas:</div>
+      <ul class="bullets">${renderBulletList(MOVIMENTACAO_BULLETS)}</ul>
+      <div style="font-weight:700;margin:4px 0 2px;">Disposições Gerais:</div>
+      <ul class="bullets">${renderBulletList(DISPOSICOES_BULLETS)}</ul>
+      <p style="margin:4px 0 2px;">${escapeHtml(DISPOSICOES_TEXTO)}</p>
     </div>
 
     <div class="section-title">Obrigações dos Empregados:</div>
-    <div class="box" style="min-height: 138px;">
-      <div style="font-size: 15px; font-weight: 700; margin: 4px 0 6px;">Cabe ao empregado:</div>
-      <ul class="bullets">${renderBulletList(obrigacoes)}</ul>
+    <div class="box">
+      <div style="font-weight:700;margin:2px 0;">Cabe ao empregado:</div>
+      <ul class="bullets">${renderBulletList(OBRIGACOES_BULLETS)}</ul>
     </div>
 
-    <div class="box" style="min-height: 150px;">
-      <p class="small" style="margin-top: 0;"><strong>Constitui ato faltoso</strong> a recusa injustificada ao cumprimento desta Ordem de Serviço e demais determinações do empregador.</p>
-      <ul class="bullets">
-        <li>Todo acidente no local de trabalho ou no trajeto deve ser comunicado imediatamente ao superior responsável.</li>
-        <li>Caso alguma irregularidade ou risco seja constatado, a atividade deve ser suspensa e comunicada ao responsável do serviço.</li>
-        <li>É proibido executar qualquer trabalho para o qual o colaborador não tenha sido orientado e autorizado.</li>
-      </ul>
-      <p class="small" style="margin-top: 10px;">Recebi da empresa ${escapeHtml(company?.nomeFantasia || "Ciperprag")} o treinamento de segurança, saúde e meio ambiente para o desenvolvimento da minha atividade, juntamente com a cópia desta Ordem de Serviço, comprometendo-me a cumprir as ações preventivas aqui descritas.</p>
+    <div class="box">
+      <p style="margin:0 0 4px;">${escapeHtml(ATO_FALTOSO_TEXTO)}</p>
+      <ul class="bullets">${renderBulletList(ATO_FALTOSO_BULLETS)}</ul>
+    </div>
+
+    <div class="box">
+      <p style="margin:0;">Recebi da empresa ${escapeHtml(company?.razaoSocial || company?.nomeFantasia || "Ciperprag")}, o treinamento de segurança, saúde e meio ambiente para o desenvolvimento de minha atividade, juntamente com a cópia desta Ordem de Serviço, tomando conhecimento das ações preventivas que devo tomar para evitar acidentes de trabalho, doenças ocupacionais e impactos ambientais, as quais me comprometo seguir e cumprir.</p>
     </div>
 
     <div class="sign-grid">
@@ -409,6 +422,7 @@ export function buildOsPrintHtml(
 export function printOsDocument(os: OSApp, bootstrap: BootstrapData | null) {
   const printWindow = window.open("", "_blank", "width=1024,height=900");
   if (!printWindow) return;
-  printWindow.document.write(`${buildOsPrintHtml(os, { bootstrap })}<script>window.onload=function(){window.print();}</script>`);
+  const groupOrders = os.grupoId ? bootstrap?.orders.filter((item) => item.grupoId === os.grupoId) : undefined;
+  printWindow.document.write(`${buildOsPrintHtml(os, { bootstrap, groupOrders })}<script>window.onload=function(){window.print();}</script>`);
   printWindow.document.close();
 }
