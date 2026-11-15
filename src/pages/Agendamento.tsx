@@ -454,6 +454,7 @@ export default function Agendamento() {
                     <SelectItem value="avulso">Serviço avulso (sem contrato)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">{origemAtendimento === "contrato" ? "Contrato vigente: usa o serviço e o saldo do contrato; cada atendimento baixa do saldo." : "Serviço avulso: escolha direto do catálogo, sem contrato e sem saldo."}</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> {origemAtendimento === "contrato" ? "Contrato / Serviço" : "Serviço do catálogo"} <span className="text-destructive">*</span></Label>

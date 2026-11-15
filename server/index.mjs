@@ -14,6 +14,7 @@ import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
 import { parseValidityOverride, resolveValidityDays } from "./certificate-validity.mjs";
 import { parseTagPhotoGroups, photosForTag } from "./tag-photos.mjs";
+import { findDuplicateClient, normalizeCnpj } from "./client-rules.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2839,11 +2840,21 @@ app.post("/api/users/:id/reset-password", requirePermission("usuarios.manage"), 
 
 app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) => {
   const body = req.body;
-  const id = body.id || `CLI-${String(Date.now()).slice(-6)}`;
+  const id = body.id || makeId("CLI");
   const tenantId = req.auth.user.tenant.id;
   await withTransaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`cliente:${tenantId}:${normalizeCnpj(body.cnpj)}`]);
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
+    const { rows: tenantClients } = await client.query("SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE tenant_id = $1", [tenantId]);
+    const duplicate = findDuplicateClient(tenantClients, body, { ignoreId: id, before });
+    if (duplicate) {
+      const error = new Error(duplicate.field === "cnpj"
+        ? `Ja existe um cliente cadastrado com este CNPJ: ${duplicate.client.razao_social}.`
+        : `Ja existe um cliente cadastrado com esta razao social: ${duplicate.client.razao_social}.`);
+      error.status = 409;
+      throw error;
+    }
     const { rowCount: clientRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.clientes (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, endereco, bairro, municipio, uf, cep, logo_url, ativo)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)

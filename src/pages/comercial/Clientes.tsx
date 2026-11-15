@@ -75,6 +75,11 @@ export default function Clientes() {
     reload();
   }, []);
 
+  const cnpjDigitos = form.cnpj.replace(/\D/g, "");
+  const clienteComMesmoCnpj = cnpjDigitos.length >= 14
+    ? lista.find((cliente) => cliente.id !== editId && cliente.cnpj.replace(/\D/g, "") === cnpjDigitos)
+    : undefined;
+
   const filtrados = lista.filter(
     (cliente) =>
       cliente.razaoSocial.toLowerCase().includes(busca.toLowerCase()) ||
@@ -347,6 +352,7 @@ export default function Clientes() {
                 <div className="space-y-2">
                   <Label>CNPJ *</Label>
                   <Input value={form.cnpj} onChange={(event) => setForm({ ...form, cnpj: event.target.value })} />
+                  {clienteComMesmoCnpj ? <p className="text-xs font-medium text-destructive">Já existe um cliente com este CNPJ: {clienteComMesmoCnpj.razaoSocial}. Não será possível salvar.</p> : null}
                 </div>
                 <div className="space-y-2">
                   <Label>Inscrição Estadual</Label>

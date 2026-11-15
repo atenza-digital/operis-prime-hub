@@ -14,3 +14,5 @@
 - docs: texto do Relatório técnico reescrito em linguagem simples (o que é, quando usar, como gerar).
 - fix: agendamento casa contratos por cliente (id ou nome) e informa quando o contrato não está disponível para o cliente.
 - feat: fotos por TAG no encerramento da OS; cada certificado leva somente as fotos da sua TAG (até 3 por TAG).
+- feat: cadastro de cliente bloqueia CNPJ ou razão social já existentes (409) e avisa ao digitar o CNPJ; id de cliente sem risco de colisão.
+- docs: texto de ajuda no agendamento explicando contrato com saldo x serviço avulso.
