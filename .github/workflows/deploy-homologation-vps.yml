@@ -144,8 +144,12 @@ jobs:
             -p "127.0.0.1:${APP_PORT}:${CONTAINER_PORT}" \
             "$IMAGE"
 
-          sleep 5
-          if ! curl -fsS "http://127.0.0.1:${APP_PORT}/api/health"; then
+          healthy=0
+          for attempt in $(seq 1 30); do
+            sleep 2
+            if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health"; then healthy=1; break; fi
+          done
+          if [ "$healthy" -ne 1 ]; then
             echo "Health check falhou. Restaurando container anterior." >&2
             docker logs --tail 120 "$CONTAINER_NAME" || true
             docker rm -f "$CONTAINER_NAME" || true
