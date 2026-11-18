@@ -19,3 +19,4 @@
 - feat: agendamento com vários serviços no mesmo atendimento (uma OS por serviço, ligadas por grupo; migration 032).
 - fix: OS impressa segue o modelo original da cliente (textos de Medidas Preventivas, Obrigações, treinamentos NR35/NR33/NR12, emergência), com quantidade em branco para a equipe de campo, um bloco de observação por serviço e "Altura SIM( ) NÃO( )" para caixa d água; OS agrupadas saem em um documento só.
 - chore: deploy de homologação espera o health check por até 60 s (antes 5 s) e mostra logs do container na falha.
+- fix: agendamento com contrato agora lista serviços do catálogo como extras (antes o bloco ficava vazio quando o cliente tinha um só contrato).

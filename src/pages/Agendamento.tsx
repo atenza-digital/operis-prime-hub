@@ -203,6 +203,10 @@ export default function Agendamento() {
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
   const servicosExtras = servicos.filter((item) => item.id !== servicoSelecionado?.id);
   const contratosExtras = contratosCliente.filter((item) => item.id !== contratoId);
+  const servicosDeContratosExtras = new Set(contratosExtras.map((item) => item.servicoCatalogoId || item.servico));
+  const servicosAvulsosExtras = origemAtendimento === "contrato"
+    ? servicosExtras.filter((item) => !servicosDeContratosExtras.has(item.id) && !servicosDeContratosExtras.has(item.nome))
+    : servicosExtras;
   const sugestoesLocais = [...new Set([
     ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
     ...locaisContrato,
@@ -316,12 +320,14 @@ export default function Agendamento() {
       servico: servicoSelecionado.nome,
       tipo: servicoSelecionado.tipo,
     };
-    const extras = origemAtendimento === "contrato"
+    const extrasDeContrato = origemAtendimento === "contrato"
       ? contratosExtras.filter((item) => extrasContrato.includes(item.id)).flatMap((contrato) => {
         const servico = servicos.find((item) => item.id === contrato.servicoCatalogoId) || servicos.find((item) => item.nome === contrato.servico);
         return servico ? [{ ...base, contratoId: contrato.id, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }] : [];
       })
-      : servicosExtras.filter((item) => extrasAvulso.includes(item.id)).map((servico) => ({ ...base, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }));
+      : [];
+    const extrasDoCatalogo = servicosAvulsosExtras.filter((item) => extrasAvulso.includes(item.id)).map((servico) => ({ ...base, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }));
+    const extras = [...extrasDeContrato, ...extrasDoCatalogo];
     try {
       if (extras.length > 0) {
         await saveScheduleBatch([principal, ...extras]);
@@ -507,20 +513,33 @@ export default function Agendamento() {
               <div className="rounded-xl border p-4 space-y-3">
                 <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Outros serviços no mesmo atendimento (opcional)</Label>
                 <p className="text-xs text-muted-foreground">Marque para agendar mais de um serviço juntos (ex.: bebedouro, caixa d'água e controle de pragas). Cada serviço gera sua própria OS, com contrato, certificado e medição corretos, e a impressão sai em um documento só.</p>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {origemAtendimento === "contrato"
-                    ? contratosExtras.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
-                        <Checkbox checked={extrasContrato.includes(item.id)} onCheckedChange={() => setExtrasContrato((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
-                        <span><strong>{item.servico}</strong><span className="block text-muted-foreground">({item.id})</span></span>
-                      </label>
-                    ))
-                    : servicosExtras.map((item) => (
-                      <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
-                        <Checkbox checked={extrasAvulso.includes(item.id)} onCheckedChange={() => setExtrasAvulso((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
-                        <span><strong>{item.nome}</strong><span className="block text-muted-foreground">{item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></span>
-                      </label>
-                    ))}
+                {origemAtendimento === "contrato" && contratosExtras.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">Outros contratos deste cliente (baixam o saldo do próprio contrato)</p>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {contratosExtras.map((item) => (
+                        <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                          <Checkbox checked={extrasContrato.includes(item.id)} onCheckedChange={() => setExtrasContrato((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                          <span><strong>{item.servico}</strong><span className="block text-muted-foreground">({item.id})</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  {origemAtendimento === "contrato" && <p className="text-xs font-medium">Serviços do catálogo (avulsos, sem baixa de saldo de contrato)</p>}
+                  {servicosAvulsosExtras.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum outro serviço disponível no catálogo.</p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {servicosAvulsosExtras.map((item) => (
+                        <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                          <Checkbox checked={extrasAvulso.includes(item.id)} onCheckedChange={() => setExtrasAvulso((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                          <span><strong>{item.nome}</strong><span className="block text-muted-foreground">{item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : null}
