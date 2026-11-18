@@ -92,7 +92,7 @@ export default function RelatoriosTecnicos() {
       <PageHeader
         eyebrow="Operacional"
         title="Relatórios técnicos"
-        description="Gere relatórios operacionais a partir das OS, com equipe, local, checklist, fotos, produtos, normas e assinatura técnica, sem expor valores comerciais."
+        description="Documento complementar da OS: conta ao cliente, em detalhe, o que foi feito em campo. Não substitui o certificado e não mostra valores."
         actions={[
           { label: "Atualizar", onClick: reload, variant: "outline" },
           { label: "Ver OS", to: "/ordens", variant: "default" },
@@ -146,7 +146,7 @@ export default function RelatoriosTecnicos() {
               Como usar no fluxo
             </p>
             <p className="mt-1 max-w-4xl text-sm leading-6 text-emerald-950/80">
-              O relatório técnico é emitido após a execução da OS para registrar o que foi feito em campo. Ele usa o mesmo conjunto de dados da OS encerrada e pode acompanhar o certificado quando o serviço exigir mais contexto técnico.
+              O que é: um documento de uma página ou duas que descreve o serviço executado (equipe, local, equipamentos/TAGs, procedimentos, checklist, produtos e fotos). Quando usar: só quando o cliente pedir o detalhamento técnico de uma OS já encerrada, além do certificado. Como gerar: escolha a OS encerrada na lista abaixo e clique em "Imprimir relatório".
             </p>
           </div>
           <Badge className="w-fit bg-emerald-700 text-white">Sem valores comerciais</Badge>

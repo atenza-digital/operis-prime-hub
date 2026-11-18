@@ -163,12 +163,27 @@ function buildVerificationUrl(publicCode: string, publicBaseUrl: string) {
   return `${cleanBase}/validar-certificado/${encodeURIComponent(publicCode)}`;
 }
 
-function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const safeOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(origin) ? "" : origin;
-  // When printing from the tenant's public URL, prefer that origin over an
-  // older snapshot so QR codes remain valid after a deployment or domain move.
-  return firstText(safeOrigin, config.publicBaseUrl, snapshotCertificado.publicBaseUrl);
+// O QR só pode apontar para um endereço que o celular do cliente alcance:
+// HTTPS com nome de domínio (nunca localhost, IP da rede/VPS ou http).
+export function isPublicHttpsOrigin(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname;
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return false;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":")) return false;
+    return host.includes(".");
+  } catch {
+    return false;
+  }
+}
+
+export function resolvePublicBaseUrl(config: RecordLike, snapshotCertificado: RecordLike, origin = typeof window !== "undefined" ? window.location.origin : "") {
+  // Imprimindo pelo domínio público, essa origem vale mais que um snapshot
+  // antigo (QR continua válido após mudança de domínio). Fora disso, usa a URL
+  // pública configurada no tenant ou injetada pelo deploy (PUBLIC_APP_URL).
+  const candidates = [origin, firstText(config.publicBaseUrl), firstText(snapshotCertificado.publicBaseUrl)];
+  return candidates.find((item) => item && isPublicHttpsOrigin(item)) ?? firstText(config.publicBaseUrl, snapshotCertificado.publicBaseUrl);
 }
 
 function toBase64Img(url: string): Promise<string> {
@@ -435,7 +450,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const codigoPublico = firstText(snapshotCertificado.codigoPublico, snapshotCertificado.publicCode, config.codigoPublico, buildShortPublicCode(cert.hash));
   const verificationUrl = publicBaseUrl ? buildVerificationUrl(codigoPublico, publicBaseUrl) : "";
   const showQr = firstBool(true, config.exibirQrCode);
-  const qrDataUrl = showQr && verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 104, margin: 1 }) : "";
+  const qrDataUrl = showQr && verificationUrl ? await QRCode.toDataURL(verificationUrl, { width: 450, margin: 4, errorCorrectionLevel: "M" }) : "";
   const limiteFotos = firstNumber(3, config.limiteFotos);
   const fotos = asStringArray(snapshotOs.fotos).length ? asStringArray(snapshotOs.fotos) : os?.fotos ?? cert.fotos ?? [];
   const fotoLegendas = asStringArray(snapshotOs.fotosLegendas);
@@ -498,7 +513,7 @@ export async function imprimirCertificado(cert: CertificadoApp) {
   const cit = firstText(config.cit, snapshotEmpresa.telefoneEmergencia, company?.telefoneEmergencia);
   const rodapeLinhas = asStringArray(config.rodapeLinhas);
   const defaultRodape = [
-    empresaNome && company?.cnpj ? `${empresaNome} CNPJ: ${company.cnpj}` : empresaNome,
+    [empresaNome, ...[firstText(snapshotEmpresa.cnpj, company?.cnpj), firstText(snapshotEmpresa.cnpjSecundario, company?.cnpjSecundario)].filter(Boolean).map((cnpj) => `CNPJ: ${cnpj}`)].filter(Boolean).join(" | "),
     firstText(snapshotEmpresa.endereco, company?.endereco),
     [company?.telefone, company?.email].filter(Boolean).join(" | "),
   ].filter(Boolean);

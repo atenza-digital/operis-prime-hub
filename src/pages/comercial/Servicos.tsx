@@ -420,7 +420,14 @@ export default function Servicos() {
               </div>
               <div className="space-y-2">
                 <Label>Validade do certificado (dias)</Label>
-                <Input type="number" value={form.validadeCertificadoDias} onChange={(event) => setForm({ ...form, validadeCertificadoDias: Number(event.target.value) })} />
+                <Select value={String(form.validadeCertificadoDias ?? 0)} onValueChange={(value) => setForm({ ...form, validadeCertificadoDias: Number(value) })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[...new Set([0, 30, 90, 120, Number(form.validadeCertificadoDias) || 0])].sort((a, b) => a - b).map((dias) => (
+                      <SelectItem key={dias} value={String(dias)}>{dias === 0 ? "Sem validade" : `${dias} dias`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

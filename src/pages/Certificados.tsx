@@ -1,3 +1,4 @@
+import { sortCertificates } from "@/lib/certificateOrder";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { generateCertificateForOrder, getBootstrap, reissueCertificate, revokeCertificate, type BootstrapData, type CertificadoApp } from "@/lib/api";
@@ -76,15 +77,14 @@ export default function Certificados() {
 
   const certsFiltrados = useMemo(() => {
     const termo = busca.toLowerCase();
-    return [...certs]
+    return sortCertificates(certs)
       .filter((item) => {
         const status = validadeStatus(item);
         if (clienteFilter !== "todos" && item.clienteNome !== clienteFilter) return false;
         if (statusFilter !== "todos" && status !== statusFilter) return false;
         if (termo && !item.hash.toLowerCase().includes(termo) && !item.clienteNome.toLowerCase().includes(termo) && !item.servico.toLowerCase().includes(termo)) return false;
         return true;
-      })
-      .reverse();
+      });
   }, [certs, busca, clienteFilter, statusFilter]);
 
   const historicoFiltrado = useMemo(() => {
@@ -247,6 +247,7 @@ export default function Certificados() {
                       <div><p className="truncate text-sm font-semibold leading-tight">{cert.clienteNome}</p><p className="mt-0.5 text-xs text-muted-foreground">{cert.servico}</p></div>
                       <div className="space-y-1 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1.5"><CalendarDays className="h-3 w-3 shrink-0" /><span>Executado: <span className="font-medium text-foreground">{fmtDate(cert.dataExecucao)}</span></span></div>
+                        <div className="flex items-center gap-1.5"><Clock className="h-3 w-3 shrink-0" />{cert.validadeDias > 0 ? <span>Vence em: <span className="font-medium text-foreground">{fmtDate(addDays(cert.dataExecucao, cert.validadeDias))}</span> ({cert.validadeDias} dias)</span> : <span>Sem validade definida</span>}</div>
                         <div className="flex items-center gap-1.5"><User className="h-3 w-3 shrink-0" /> {cert.tecnicoNome}</div>
                         <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3 shrink-0" /> <span className="truncate">{cert.localExecucao || "Local não informado"}</span></div>
                         {cert.tagEquipamentoServico ? <div className="flex items-center gap-1.5"><Tag className="h-3 w-3 shrink-0" /> TAG: <span className="font-medium text-foreground">{cert.tagEquipamentoServico}</span></div> : null}

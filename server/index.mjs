@@ -12,6 +12,9 @@ import { normalizeCommercialConfig, normalizeTenantSlug } from "./commercial-con
 import { sanitizeContracts, sanitizeContractTemplates, sanitizeMeasurements } from "./commercial-visibility.mjs";
 import { renderHtmlToPdf } from "./render-pdf.mjs";
 import { buildScheduleInsertValues, validateScheduleOrigin } from "./schedule-rules.mjs";
+import { parseValidityOverride, resolveValidityDays } from "./certificate-validity.mjs";
+import { parseTagPhotoGroups, photosForTag } from "./tag-photos.mjs";
+import { findDuplicateClient, normalizeCnpj } from "./client-rules.mjs";
 import { isCorsOriginAllowed, parseCorsOrigins, securityHeaders } from "./security.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -905,6 +908,7 @@ function buildCertificateSnapshot({ order, customer, service, company, hash, num
       razaoSocial: company?.razao_social || null,
       nomeFantasia: company?.nome_fantasia || null,
       cnpj: company?.cnpj || null,
+      cnpjSecundario: company?.cnpj_secundario || null,
       endereco: company?.endereco || null,
       telefone: company?.telefone || null,
       email: company?.email || null,
@@ -1240,6 +1244,7 @@ async function getSchedules(tenantId) {
     veiculoDescricao: row.veiculo_descricao,
     status: row.status,
     osId: row.os_id,
+    grupoId: row.grupo_id || null,
     createdAt: row.created_at?.toISOString?.() ?? row.created_at,
   }));
 }
@@ -1320,6 +1325,7 @@ async function getOrders(tenantId) {
     tecnicoDataAdmissao: row.tecnico_data_admissao?.toISOString?.().split("T")[0] ?? row.tecnico_data_admissao,
     equipeTecnicosIds: row.equipe_tecnicos_ids ?? [],
     equipeTecnicosNomes: row.equipe_tecnicos_nomes ?? [],
+    grupoId: row.grupo_id || null,
     veiculoId: row.veiculo_id,
     veiculoDescricao: row.veiculo_descricao,
     localExecucao: row.local_execucao,
@@ -1484,7 +1490,7 @@ function normalizeCertificateTags(order) {
   return unique.length ? unique : [null];
 }
 
-async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null } = {}) {
+async function issueCertificateForOrder(client, order, { dataExecucao, tenantId, tenantSlug = null, userId = null, publicBaseUrl = null, validadeDiasOverride = null, fotosPorTag = null } = {}) {
   const scopedTenantId = tenantId || order.tenant_id;
   const { rows: contractRows } = await client.query("SELECT * FROM ciperprag_hub.contratos WHERE id = $1 AND tenant_id = $2", [order.contrato_id, scopedTenantId]);
   const contract = contractRows[0];
@@ -1496,7 +1502,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
   const { rows: companyRows } = await client.query("SELECT * FROM ciperprag_hub.empresa_config WHERE tenant_id = $1 ORDER BY id LIMIT 1", [scopedTenantId]);
   const company = companyRows[0];
   const executionDate = dataExecucao || order.data_execucao?.toISOString?.().split("T")[0] || order.data_execucao || order.data_emissao?.toISOString?.().split("T")[0] || order.data_emissao;
-  const validadeDias = Number(service?.validade_certificado_dias || company?.certificado_validade_padrao_dias || 0);
+  const validadeDias = resolveValidityDays(validadeDiasOverride, service?.validade_certificado_dias, company?.certificado_validade_padrao_dias);
   const hashes = [];
 
   for (const [index, tag] of normalizeCertificateTags(order).entries()) {
@@ -1521,6 +1527,7 @@ async function issueCertificateForOrder(client, order, { dataExecucao, tenantId,
       tipo: source.serviceType,
       tag_equipamento_servico: tag,
       tags: tag || order.tags,
+      fotos: photosForTag(fotosPorTag, tag) ?? order.fotos,
     };
     const snapshot = buildCertificateSnapshot({
       order: certificateOrder,
@@ -1601,6 +1608,7 @@ async function getCompanyConfig(tenantId) {
     razaoSocial: row.razao_social,
     nomeFantasia: row.nome_fantasia,
     cnpj: row.cnpj,
+    cnpjSecundario: row.cnpj_secundario || "",
     endereco: row.endereco,
     telefone: row.telefone,
     email: row.email,
@@ -2377,12 +2385,12 @@ async function nextSequential(field, tenantId) {
   });
 }
 
-async function upsertSchedule(body, tenantId) {
+async function upsertSchedule(body, tenantId, run = query) {
   const id = body.id || makeId("AG");
   const desiredStatus = body.status || "agendado";
   const contractId = body.contratoId || null;
   const serviceId = body.servicoCatalogoId || null;
-  const { rows: customerRows } = await query(
+  const { rows: customerRows } = await run(
     "SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2 LIMIT 1",
     [body.clienteId, tenantId],
   );
@@ -2393,7 +2401,7 @@ async function upsertSchedule(body, tenantId) {
     throw error;
   }
 
-  const { rows: serviceRows } = await query(
+  const { rows: serviceRows } = await run(
     serviceId
       ? "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE id = $1 AND tenant_id = $2 LIMIT 1"
       : "SELECT id, nome, tipo, unidade, ativo FROM ciperprag_hub.servicos_catalogo WHERE tenant_id = $1 AND lower(trim(nome)) = lower(trim($2)) LIMIT 1",
@@ -2408,7 +2416,7 @@ async function upsertSchedule(body, tenantId) {
 
   let contract = null;
   if (contractId && !["cancelado", "encerrado"].includes(desiredStatus)) {
-    const { rows: contractRows } = await query(
+    const { rows: contractRows } = await run(
       `SELECT
          c.id,
          c.status,
@@ -2434,7 +2442,7 @@ async function upsertSchedule(body, tenantId) {
       error.status = 400;
       throw error;
   }
-  const { rowCount } = await query(
+  const { rowCount } = await run(
     `INSERT INTO ciperprag_hub.agendamentos
     (id, tenant_id, contrato_id, servico_catalogo_id, cliente_id, cliente, cliente_cnpj, servico, tipo, data_agendada, local_id, local_execucao, tags, observacao, tecnicos_ids, tecnicos_nomes, veiculo_id, veiculo_descricao, status, created_at)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
@@ -2480,6 +2488,9 @@ async function upsertSchedule(body, tenantId) {
     }),
   );
   assertTenantWrite(rowCount, "Agendamento");
+  if (body.grupoId) {
+    await run("UPDATE ciperprag_hub.agendamentos SET grupo_id = $1 WHERE id = $2 AND tenant_id = $3", [String(body.grupoId).slice(0, 40), id, tenantId]);
+  }
   return id;
 }
 
@@ -2834,11 +2845,21 @@ app.post("/api/users/:id/reset-password", requirePermission("usuarios.manage"), 
 
 app.post("/api/clients", requirePermission("clientes.manage"), async (req, res) => {
   const body = req.body;
-  const id = body.id || `CLI-${String(Date.now()).slice(-6)}`;
+  const id = body.id || makeId("CLI");
   const tenantId = req.auth.user.tenant.id;
   await withTransaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`cliente:${tenantId}:${normalizeCnpj(body.cnpj)}`]);
     const { rows: beforeRows } = await client.query("SELECT * FROM ciperprag_hub.clientes WHERE id = $1 AND tenant_id = $2", [id, tenantId]);
     const before = beforeRows[0] || null;
+    const { rows: tenantClients } = await client.query("SELECT id, razao_social, cnpj FROM ciperprag_hub.clientes WHERE tenant_id = $1", [tenantId]);
+    const duplicate = findDuplicateClient(tenantClients, body, { ignoreId: id, before });
+    if (duplicate) {
+      const error = new Error(duplicate.field === "cnpj"
+        ? `Ja existe um cliente cadastrado com este CNPJ: ${duplicate.client.razao_social}.`
+        : `Ja existe um cliente cadastrado com esta razao social: ${duplicate.client.razao_social}.`);
+      error.status = 409;
+      throw error;
+    }
     const { rowCount: clientRowCount } = await client.query(
       `INSERT INTO ciperprag_hub.clientes (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, endereco, bairro, municipio, uf, cep, logo_url, ativo)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
@@ -3446,8 +3467,8 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       alvara=$8, cr02=$9, anvisa=$10, vigilancia_sanitaria=$11, responsavel_tecnico=$12, responsavel_execucao=$13, cargo_responsavel=$14,
       certificado_validade_padrao_dias=$15, certificado_texto_legal=$16, certificado_texto_fixacao=$17, telefone_emergencia=$18,
       medicao_forma_pagamento_padrao=$19, medicao_local_entrega_padrao=$20,
-      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, atualizado_em=NOW()
-      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $26 ORDER BY id LIMIT 1)`,
+      cor_primaria=$21, cor_secundaria=$22, cor_destaque=$23, certificado_config=$24, commercial_config=$25, cnpj_secundario=$26, atualizado_em=NOW()
+      WHERE id = (SELECT id FROM ciperprag_hub.empresa_config WHERE tenant_id = $27 ORDER BY id LIMIT 1)`,
     [
       body.razaoSocial,
       body.nomeFantasia,
@@ -3474,6 +3495,7 @@ app.patch("/api/company-config", requirePermission("configuracoes.manage"), asyn
       body.corDestaque || null,
       JSON.stringify(body.certificadoConfig || {}),
       JSON.stringify(normalizeCommercialConfig(body.commercialConfig, req.auth.user.tenant.slug)),
+      String(body.cnpjSecundario || "").trim().slice(0, 18) || null,
       tenantId,
     ],
   );
@@ -4349,6 +4371,32 @@ app.post("/api/agendamentos", requirePermission("agenda.manage"), async (req, re
   res.json({ ok: true, id });
 });
 
+app.post("/api/agendamentos/lote", requirePermission("agenda.manage"), async (req, res) => {
+  const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
+  if (itens.length < 2 || itens.length > 10) {
+    return res.status(400).json({ error: "Informe de 2 a 10 servicos para agendar juntos." });
+  }
+  const tenantId = req.auth.user.tenant.id;
+  const grupoId = makeId("GRP");
+  const ids = await withTransaction(async (client) => {
+    const created = [];
+    for (const [index, item] of itens.entries()) {
+      const id = `${makeId("AG")}-${index + 1}`;
+      await upsertSchedule({ ...item, id, grupoId }, tenantId, (sql, params) => client.query(sql, params));
+      created.push(id);
+    }
+    await logAuditEvent(client, req, {
+      entityType: "agendamento",
+      entityId: grupoId,
+      action: "schedule_group_created",
+      summary: `Agendamento com ${created.length} servicos criado para ${itens[0].clienteNome || itens[0].cliente || grupoId}`,
+      after: { grupoId, ids: created },
+    });
+    return created;
+  });
+  res.json({ ok: true, grupoId, ids });
+});
+
 app.patch("/api/agendamentos/:id", requirePermission("agenda.manage"), async (req, res) => {
   const current = (await getSchedules(req.auth.user.tenant.id)).find((item) => item.id === req.params.id);
   if (!current) return res.status(404).json({ error: "Agendamento não encontrado" });
@@ -4433,6 +4481,9 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
       [orderId, JSON.stringify(snapshot), tenantId],
     );
     await client.query("UPDATE ciperprag_hub.agendamentos SET status = 'os_gerada', os_id = $2 WHERE id = $1 AND tenant_id = $3", [agendamentoId, orderId, tenantId]);
+    if (ag.grupo_id) {
+      await client.query("UPDATE ciperprag_hub.ordens_servico SET grupo_id = $2 WHERE id = $1 AND tenant_id = $3", [orderId, ag.grupo_id, tenantId]);
+    }
     await logAuditEvent(client, req, {
       entityType: "os",
       entityId: orderId,
@@ -4483,6 +4534,7 @@ app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) =>
 app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, res) => {
   const orderId = req.params.id;
   const { dataExecucao, quantidade, tagEquipamentoServico, fotos, checklistRespostas, naoExecutada, motivoNaoExecucao, produtosUtilizados } = req.body;
+  const validadeDiasOverride = parseValidityOverride(req.body.validadeDias);
   const tenantId = req.auth.user.tenant.id;
 
   const response = await withTransaction(async (client) => {
@@ -4503,18 +4555,28 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
     const isNotExecuted = Boolean(naoExecutada);
     const uploadPolicy = resolveAttachmentPolicy("os.foto", company?.certificado_config || {});
     const rawFotos = Array.isArray(fotos) ? fotos : [];
-    if (rawFotos.length > uploadPolicy.maxFiles) {
+    const tagPhotoGroups = parseTagPhotoGroups(req.body.fotosPorTag, uploadPolicy.maxFiles);
+    if (!tagPhotoGroups && rawFotos.length > uploadPolicy.maxFiles) {
       const error = new Error(`Anexe no maximo ${uploadPolicy.maxFiles} fotos de evidencia.`);
       error.status = 400;
       throw error;
     }
-    const validatedFotos = rawFotos.map((foto, index) => validateAttachmentPayload({
-      contentBase64: foto,
-      declaredMimeType: null,
-      allowedMimeTypes: uploadPolicy.allowedMimeTypes,
-      maxBytes: uploadPolicy.maxBytes,
-      label: `foto ${index + 1}`,
+    const photoEntries = tagPhotoGroups
+      ? tagPhotoGroups.flatMap((group) => group.fotos.map((raw) => ({ tag: group.tag, raw })))
+      : rawFotos.map((raw) => ({ tag: null, raw }));
+    const validatedFotos = photoEntries.map((entry, index) => ({
+      ...validateAttachmentPayload({
+        contentBase64: entry.raw,
+        declaredMimeType: null,
+        allowedMimeTypes: uploadPolicy.allowedMimeTypes,
+        maxBytes: uploadPolicy.maxBytes,
+        label: `foto ${index + 1}`,
+      }),
+      tag: entry.tag,
     }));
+    const fotosByTag = tagPhotoGroups
+      ? Object.fromEntries(tagPhotoGroups.map((group) => [group.tag, validatedFotos.filter((foto) => foto.tag === group.tag).map((foto) => foto.dataUrl)]))
+      : null;
 
     if (isNotExecuted && !String(motivoNaoExecucao || "").trim()) {
       const error = new Error("Informe o motivo da nao execucao.");
@@ -4565,6 +4627,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
         metadata: {
           origem: "encerramento_os",
           posicao: index + 1,
+          tag: parsed.tag || null,
           dataExecucao,
           hashSha256: fotoHash,
           ...buildAttachmentSecurityMetadata(uploadPolicy),
@@ -4690,7 +4753,7 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       const certificateResult = await issueCertificateForOrder(
         client,
         { ...order, tenant_id: tenantId, data_execucao: dataExecucao, quantidade: isNotExecuted ? 0 : qty, tag_equipamento_servico: tagEquipamentoServico || order.tag_equipamento_servico, fotos: validatedFotos.map((foto) => foto.dataUrl) },
-        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req) },
+        { dataExecucao, tenantId, tenantSlug: req.auth.user.tenant.slug, userId: req.auth.user.id, publicBaseUrl: getPublicBaseUrl(req), validadeDiasOverride, fotosPorTag: fotosByTag },
       );
       certificateHash = certificateResult.primaryHash;
       certificateHashes = certificateResult.hashes;

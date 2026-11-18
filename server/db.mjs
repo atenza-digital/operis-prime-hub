@@ -62,6 +62,7 @@ export async function ensureDatabaseShape() {
 
   await query(`
     ALTER TABLE IF EXISTS ciperprag_hub.empresa_config
+    ADD COLUMN IF NOT EXISTS cnpj_secundario VARCHAR(18),
     ADD COLUMN IF NOT EXISTS certificado_validade_padrao_dias INTEGER NOT NULL DEFAULT 30,
     ADD COLUMN IF NOT EXISTS certificado_texto_legal TEXT,
     ADD COLUMN IF NOT EXISTS certificado_texto_fixacao TEXT DEFAULT 'FIXAR OBRIGATORIAMENTE EM LOCAL VISIVEL',
@@ -299,6 +300,7 @@ export async function ensureDatabaseShape() {
     ALTER TABLE IF EXISTS ciperprag_hub.agendamentos
     ADD COLUMN IF NOT EXISTS cliente_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cliente_cnpj VARCHAR(18),
+    ADD COLUMN IF NOT EXISTS grupo_id VARCHAR(40),
     ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
     ADD COLUMN IF NOT EXISTS tipo VARCHAR(15),
     ADD COLUMN IF NOT EXISTS local_execucao TEXT,
@@ -372,6 +374,7 @@ export async function ensureDatabaseShape() {
     ADD COLUMN IF NOT EXISTS nao_executada BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS motivo_nao_execucao TEXT,
     ADD COLUMN IF NOT EXISTS servico_catalogo_id VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS grupo_id VARCHAR(40),
     ADD COLUMN IF NOT EXISTS snapshot_dados JSONB NOT NULL DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS snapshot_emitido_em TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS snapshot_encerrado_em TIMESTAMPTZ

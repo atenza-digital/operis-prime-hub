@@ -3,6 +3,7 @@ import {
   generateOrderFromSchedule,
   getBootstrap,
   saveSchedule,
+  saveScheduleBatch,
   type AgendamentoApp,
   type BootstrapData,
   type OSApp,
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { joinLocais, splitLocais } from "@/lib/locations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -109,6 +111,19 @@ function monthCalendarDays(year: number, month: number) {
   });
 }
 
+function joinTags(selecionadas: string[], livres: string) {
+  const seen = new Set<string>();
+  return [...selecionadas, ...livres.split(/[\n,;]+/)]
+    .map((tag) => tag.trim())
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (!tag || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(", ");
+}
+
 export default function Agendamento() {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,6 +137,9 @@ export default function Agendamento() {
   const [localId, setLocalId] = useState("");
   const [localExecucao, setLocalExecucao] = useState("");
   const [tagsSelecionadas, setTagsSelecionadas] = useState<string[]>([]);
+  const [tagsLivres, setTagsLivres] = useState("");
+  const [extrasAvulso, setExtrasAvulso] = useState<string[]>([]);
+  const [extrasContrato, setExtrasContrato] = useState<string[]>([]);
   const [observacao, setObservacao] = useState("");
   const [tecnicosSelecionados, setTecnicosSelecionados] = useState<string[]>([]);
   const [veiculoId, setVeiculoId] = useState("");
@@ -170,19 +188,36 @@ export default function Agendamento() {
     () =>
       contratos.filter((item) => {
         const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-        return item.cliente === clienteNomeSel && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId);
+        return (item.clienteId === clienteId || item.cliente === clienteNomeSel) && item.status === "ativo" && saldo > 0 && Boolean(item.contratoTemplateId);
       }),
-    [clienteNomeSel, contratos],
+    [clienteId, clienteNomeSel, contratos],
   );
   const contratoAtivo = useMemo(() => contratos.find((item) => item.id === contratoId), [contratoId, contratos]);
   const servicoAvulso = useMemo(() => servicos.find((item) => item.id === servicoCatalogoId), [servicoCatalogoId, servicos]);
   const servicoSelecionado = origemAtendimento === "avulso"
     ? servicoAvulso
     : servicos.find((item) => item.id === contratoAtivo?.servicoCatalogoId) || servicos.find((item) => item.nome === contratoAtivo?.servico);
-  const formularioPronto = Boolean(clienteId && dataAgendada && localExecucao && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
+  const formularioPronto = Boolean(clienteId && dataAgendada && splitLocais(localExecucao).length > 0 && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
+  const servicoContratoIndisponivel = origemAtendimento === "contrato" && Boolean(contratoAtivo) && !servicoSelecionado;
+  const camposFaltando = [
+    !clienteId && "cliente",
+    !(origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo) && "contrato ou serviço",
+    !dataAgendada && "data",
+    splitLocais(localExecucao).length === 0 && "local de execução",
+  ].filter(Boolean) as string[];
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
+  const servicosExtras = servicos.filter((item) => item.id !== servicoSelecionado?.id);
+  const contratosExtras = contratosCliente.filter((item) => item.id !== contratoId);
+  const servicosDeContratosExtras = new Set(contratosExtras.map((item) => item.servicoCatalogoId || item.servico));
+  const servicosAvulsosExtras = origemAtendimento === "contrato"
+    ? servicosExtras.filter((item) => !servicosDeContratosExtras.has(item.id) && !servicosDeContratosExtras.has(item.nome))
+    : servicosExtras;
+  const sugestoesLocais = [...new Set([
+    ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
+    ...locaisContrato,
+  ].filter(Boolean))];
   const veiculoSelecionado = veiculos.find((item) => item.id === veiculoId);
 
   const agendamentosBase = useMemo(() => {
@@ -252,7 +287,9 @@ export default function Agendamento() {
     setDataAgendada("");
     setLocalExecucao("");
     setLocalId("");
-    setTagsSelecionadas([]);
+    setTagsSelecionadas([]); setTagsLivres("");
+    setExtrasAvulso([]);
+    setExtrasContrato([]);
     setObservacao("");
     setTecnicosSelecionados([]);
     setVeiculoId("");
@@ -268,28 +305,44 @@ export default function Agendamento() {
       return;
     }
     const equipe = tecnicos.filter((item) => tecnicosSelecionados.includes(item.id));
+    const base = {
+      clienteId,
+      clienteNome: clienteAtivo.razaoSocial,
+      clienteCnpj: clienteAtivo.cnpj,
+      dataAgendada,
+      localId: localId && splitLocais(localExecucao).length === 1 ? localId : undefined,
+      localExecucao: joinLocais([localExecucao]),
+      tags: joinTags(tagsSelecionadas, tagsLivres),
+      observacao,
+      tecnicosIds: equipe.map((item) => item.id),
+      tecnicosNomes: equipe.map((item) => item.nome),
+      veiculoId: veiculoSelecionado?.id,
+      veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
+      status: "agendado" as const,
+    };
+    const principal = {
+      ...base,
+      contratoId: origemAtendimento === "contrato" ? contratoId : undefined,
+      servicoCatalogoId: servicoSelecionado.id,
+      servico: servicoSelecionado.nome,
+      tipo: servicoSelecionado.tipo,
+    };
+    const extrasDeContrato = origemAtendimento === "contrato"
+      ? contratosExtras.filter((item) => extrasContrato.includes(item.id)).flatMap((contrato) => {
+        const servico = servicos.find((item) => item.id === contrato.servicoCatalogoId) || servicos.find((item) => item.nome === contrato.servico);
+        return servico ? [{ ...base, contratoId: contrato.id, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }] : [];
+      })
+      : [];
+    const extrasDoCatalogo = servicosAvulsosExtras.filter((item) => extrasAvulso.includes(item.id)).map((servico) => ({ ...base, servicoCatalogoId: servico.id, servico: servico.nome, tipo: servico.tipo }));
+    const extras = [...extrasDeContrato, ...extrasDoCatalogo];
     try {
-      await saveSchedule({
-        id: newId(),
-        clienteId,
-        clienteNome: clienteAtivo.razaoSocial,
-        clienteCnpj: clienteAtivo.cnpj,
-        contratoId: origemAtendimento === "contrato" ? contratoId : undefined,
-        servicoCatalogoId: servicoSelecionado.id,
-        servico: servicoSelecionado.nome,
-        tipo: servicoSelecionado.tipo,
-        dataAgendada,
-        localId: localId || undefined,
-        localExecucao,
-        tags: tagsSelecionadas.join(", "),
-        observacao,
-        tecnicosIds: equipe.map((item) => item.id),
-        tecnicosNomes: equipe.map((item) => item.nome),
-        veiculoId: veiculoSelecionado?.id,
-        veiculoDescricao: veiculoSelecionado ? `${veiculoSelecionado.modelo} • ${veiculoSelecionado.placa}` : undefined,
-        status: "agendado",
-      });
-      toast.success("Agendamento criado!");
+      if (extras.length > 0) {
+        await saveScheduleBatch([principal, ...extras]);
+        toast.success(`Agendamento criado com ${extras.length + 1} serviços (uma OS por serviço).`);
+      } else {
+        await saveSchedule({ id: newId(), ...principal });
+        toast.success("Agendamento criado!");
+      }
       resetFormulario();
       reload();
     } catch (error) {
@@ -427,34 +480,26 @@ export default function Agendamento() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Origem do atendimento <span className="text-destructive">*</span></Label>
-                <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
-                  <SelectTrigger disabled={!clienteId}><SelectValue /></SelectTrigger>
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
+                <Select
+                  value={origemAtendimento === "contrato" ? (contratoId ? `contrato:${contratoId}` : "") : (servicoCatalogoId ? `servico:${servicoCatalogoId}` : "")}
+                  onValueChange={(value) => {
+                    const [tipoOrigem, id] = [value.slice(0, value.indexOf(":")), value.slice(value.indexOf(":") + 1)];
+                    setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); setExtrasAvulso([]); setExtrasContrato([]);
+                    if (tipoOrigem === "contrato") { setOrigemAtendimento("contrato"); setContratoId(id); setServicoCatalogoId(""); }
+                    else { setOrigemAtendimento("avulso"); setServicoCatalogoId(id); setContratoId(""); }
+                  }}
+                >
+                  <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo</SelectItem>
-                    <SelectItem value="avulso">Serviço avulso (sem contrato)</SelectItem>
+                    {contratosCliente.map((item) => {
+                      const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+                      return <SelectItem key={item.id} value={`contrato:${item.id}`}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}</span></SelectItem>;
+                    })}
+                    {servicos.map((item) => <SelectItem key={item.id} value={`servico:${item.id}`}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• avulso (sem saldo)</span></SelectItem>)}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> {origemAtendimento === "contrato" ? "Contrato / Serviço" : "Serviço do catálogo"} <span className="text-destructive">*</span></Label>
-                {origemAtendimento === "contrato" ? (
-                  <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
-                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                    <SelectContent>
-                      {contratosCliente.map((item) => {
-                        const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-                        return <SelectItem key={item.id} value={item.id}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}</span></SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select value={servicoCatalogoId} onValueChange={(value) => { setServicoCatalogoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); }}>
-                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione o serviço" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                    <SelectContent>{servicos.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• {item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></SelectItem>)}</SelectContent>
-                  </Select>
-                )}
-                {origemAtendimento === "contrato" && clienteId && contratosCliente.length === 0 ? <p className="text-xs text-muted-foreground">Sem contrato vigente com saldo? Selecione “Serviço avulso” para continuar sem consumir saldo contratual.</p> : null}
+                <p className="text-xs text-muted-foreground">Contrato: baixa do saldo contratado. Avulso: serviço do catálogo, sem contrato e sem saldo.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
@@ -462,34 +507,82 @@ export default function Agendamento() {
               </div>
             </div>
 
+            {servicoSelecionado ? (
+              <div className="rounded-xl border p-4 space-y-3">
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Outros serviços no mesmo atendimento (opcional)</Label>
+                <p className="text-xs text-muted-foreground">Marque para agendar mais de um serviço juntos (ex.: bebedouro, caixa d'água e controle de pragas). Cada serviço gera sua própria OS, com contrato, certificado e medição corretos, e a impressão sai em um documento só.</p>
+                {origemAtendimento === "contrato" && contratosExtras.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium">Outros contratos deste cliente (baixam o saldo do próprio contrato)</p>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {contratosExtras.map((item) => (
+                        <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                          <Checkbox checked={extrasContrato.includes(item.id)} onCheckedChange={() => setExtrasContrato((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                          <span><strong>{item.servico}</strong><span className="block text-muted-foreground">({item.id})</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  {origemAtendimento === "contrato" && <p className="text-xs font-medium">Serviços do catálogo (avulsos, sem baixa de saldo de contrato)</p>}
+                  {servicosAvulsosExtras.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum outro serviço disponível no catálogo.</p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {servicosAvulsosExtras.map((item) => (
+                        <label key={item.id} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
+                          <Checkbox checked={extrasAvulso.includes(item.id)} onCheckedChange={() => setExtrasAvulso((prev) => (prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]))} />
+                          <span><strong>{item.nome}</strong><span className="block text-muted-foreground">{item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-xs"><MapPin className="h-3.5 w-3.5" /> Local de Execução <span className="text-destructive">*</span></Label>
-              <Input
-                list="agendamento-locais-sugeridos"
-                placeholder="Ex: Canteiro C2, Bloco A ou área definida"
+              <Textarea
+                placeholder={"Um endereço por linha. Ex: Canteiro C2\nBloco A - Rua X, 100"}
+                rows={2}
                 value={localExecucao}
                 onChange={(event) => {
                   const value = event.target.value;
-                  const matched = locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === value);
+                  const linhas = splitLocais(value);
+                  const matched = linhas.length === 1 ? locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === linhas[0]) : undefined;
                   setLocalId(matched?.id || "");
                   setLocalExecucao(value);
                 }}
                 disabled={!clienteId || !servicoSelecionado}
               />
-              <datalist id="agendamento-locais-sugeridos">
-                {[...new Set([
-                  ...locaisCliente.map((item) => [item.nome, item.endereco].filter(Boolean).join(" - ")),
-                  ...locaisContrato,
-                ].filter(Boolean))].map((local) => <option key={local} value={local} />)}
-              </datalist>
-              {(locaisCliente.length > 0 || locaisContrato.length > 0) && (
-                <p className="text-xs text-muted-foreground">Locais cadastrados são sugestões. Se o atendimento ocorrer em outro ponto, informe o local diretamente.</p>
+              {clienteId && servicoSelecionado && sugestoesLocais.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {sugestoesLocais.filter((local) => !splitLocais(localExecucao).some((item) => item.toLowerCase() === local.toLowerCase())).map((local) => (
+                    <button
+                      key={local}
+                      type="button"
+                      className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted/60"
+                      onClick={() => {
+                        const linhas = splitLocais(localExecucao);
+                        const proximo = [...linhas, local];
+                        const matched = proximo.length === 1 ? locaisCliente.find((item) => [item.nome, item.endereco].filter(Boolean).join(" - ") === local) : undefined;
+                        setLocalId(matched?.id || "");
+                        setLocalExecucao(proximo.join("\n"));
+                      }}
+                    >
+                      + {local}
+                    </button>
+                  ))}
+                </div>
               )}
+              <p className="text-xs text-muted-foreground">Informe um ou mais endereços (um por linha). Locais cadastrados aparecem como sugestões; se o atendimento ocorrer em outro ponto, digite diretamente.</p>
             </div>
 
-            {equipamentosCliente.length > 0 && (
-              <div className="rounded-xl border p-4 space-y-3">
+            <div className="rounded-xl border p-4 space-y-3">
                 <Label className="flex items-center gap-1.5 text-xs"><Tag className="h-3.5 w-3.5" /> Equipamentos/tags previstos</Label>
+                {equipamentosCliente.length > 0 && (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {equipamentosCliente.map((equipamento) => (
                     <label key={equipamento.id || equipamento.tag} className="flex items-start gap-2 rounded-lg border p-2 text-xs cursor-pointer hover:bg-muted/40">
@@ -506,8 +599,13 @@ export default function Agendamento() {
                     </label>
                   ))}
                 </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Outras TAGs (opcional)</Label>
+                  <Input placeholder="Ex: BEB-012, BEB-013 (separe por vírgula)" value={tagsLivres} onChange={(event) => setTagsLivres(event.target.value)} disabled={!clienteId || !servicoSelecionado} />
+                  <p className="text-xs text-muted-foreground">Use para identificar equipamentos que ainda não estão cadastrados no cliente (ex.: bebedouro). Cada TAG gera um certificado.</p>
+                </div>
               </div>
-            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <div className="rounded-xl border p-4 space-y-3">
@@ -559,7 +657,12 @@ export default function Agendamento() {
               </div>
             )}
 
-            <div className="flex justify-end pt-1">
+            <div className="flex flex-col items-end gap-1.5 pt-1">
+              {servicoContratoIndisponivel ? (
+                <p className="text-xs text-destructive text-right">O serviço deste contrato ({contratoAtivo?.servico}) está inativo ou não existe no catálogo de serviços. Reative-o em Comercial › Serviços ou escolha outro contrato/serviço.</p>
+              ) : camposFaltando.length > 0 ? (
+                <p className="text-xs text-muted-foreground text-right">Para criar o agendamento, preencha: {camposFaltando.join(", ")}.</p>
+              ) : null}
               <Button onClick={handleAgendar} size="lg" className="gap-2 px-8" disabled={!formularioPronto}>
                 <CalendarPlus className="h-4 w-4" /> Criar Agendamento
               </Button>

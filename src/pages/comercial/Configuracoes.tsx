@@ -13,6 +13,7 @@ const defaultEmpresa: EmpresaConfig = {
   razaoSocial: "",
   nomeFantasia: "",
   cnpj: "",
+  cnpjSecundario: "",
   endereco: "",
   telefone: "",
   email: "",
@@ -523,6 +524,10 @@ export default function Configuracoes() {
                 <div className="space-y-2">
                   <Label>CNPJ</Label>
                   <Input value={empresa.cnpj} onChange={(event) => setEmpresa({ ...empresa, cnpj: event.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CNPJ secundário (opcional)</Label>
+                  <Input value={empresa.cnpjSecundario || ""} placeholder="00.000.000/0000-00" maxLength={18} onChange={(event) => setEmpresa({ ...empresa, cnpjSecundario: event.target.value })} />
                 </div>
                 <div className="space-y-2">
                   <Label>Telefone</Label>

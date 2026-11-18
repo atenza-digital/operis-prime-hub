@@ -39,7 +39,7 @@ const categoryLabels: Record<EvidenciaAnexoApp["categoria"], string> = {
   foto: "Foto",
   documento: "Documento",
   pop_aprovado: "POP aprovado",
-  pdf_historico: "Histórico",
+  pdf_historico: "Registro de auditoria",
   outro: "Outro",
 };
 
@@ -310,7 +310,7 @@ export default function AuditoriaAnexos() {
           <CardContent className="flex items-center gap-4 p-5">
             <FileText className="h-9 w-9 rounded-xl bg-amber-50 p-2 text-amber-700" />
             <div>
-              <p className="text-sm text-muted-foreground">Históricos</p>
+              <p className="text-sm text-muted-foreground">Registros de auditoria</p>
               <p className="text-3xl font-bold">{totals.historical}</p>
               <p className="text-xs text-muted-foreground">{totals.serverPdf} PDF server-side</p>
             </div>
