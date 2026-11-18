@@ -198,6 +198,13 @@ export default function Agendamento() {
     ? servicoAvulso
     : servicos.find((item) => item.id === contratoAtivo?.servicoCatalogoId) || servicos.find((item) => item.nome === contratoAtivo?.servico);
   const formularioPronto = Boolean(clienteId && dataAgendada && splitLocais(localExecucao).length > 0 && (origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo));
+  const servicoContratoIndisponivel = origemAtendimento === "contrato" && Boolean(contratoAtivo) && !servicoSelecionado;
+  const camposFaltando = [
+    !clienteId && "cliente",
+    !(origemAtendimento === "avulso" ? servicoAvulso : contratoAtivo) && "contrato ou serviço",
+    !dataAgendada && "data",
+    splitLocais(localExecucao).length === 0 && "local de execução",
+  ].filter(Boolean) as string[];
   const locaisCliente = clienteAtivo?.locaisExecucao?.filter((item) => item.ativo) ?? [];
   const equipamentosCliente = clienteAtivo?.equipamentos?.filter((item) => item.ativo) ?? [];
   const locaisContrato = locaisCliente.length ? locaisCliente.map((item) => item.nome) : contratoAtivo?.locais ?? [];
@@ -650,7 +657,12 @@ export default function Agendamento() {
               </div>
             )}
 
-            <div className="flex justify-end pt-1">
+            <div className="flex flex-col items-end gap-1.5 pt-1">
+              {servicoContratoIndisponivel ? (
+                <p className="text-xs text-destructive text-right">O serviço deste contrato ({contratoAtivo?.servico}) está inativo ou não existe no catálogo de serviços. Reative-o em Comercial › Serviços ou escolha outro contrato/serviço.</p>
+              ) : camposFaltando.length > 0 ? (
+                <p className="text-xs text-muted-foreground text-right">Para criar o agendamento, preencha: {camposFaltando.join(", ")}.</p>
+              ) : null}
               <Button onClick={handleAgendar} size="lg" className="gap-2 px-8" disabled={!formularioPronto}>
                 <CalendarPlus className="h-4 w-4" /> Criar Agendamento
               </Button>

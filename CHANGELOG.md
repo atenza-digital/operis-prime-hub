@@ -21,3 +21,4 @@
 - chore: deploy de homologação espera o health check por até 60 s (antes 5 s) e mostra logs do container na falha.
 - fix: agendamento com contrato agora lista serviços do catálogo como extras (antes o bloco ficava vazio quando o cliente tinha um só contrato).
 - fix: agendamento sem o campo "Origem do atendimento"; um único seletor Contrato / Serviço (contratos com saldo e serviços avulsos).
+- fix: agendamento mostra o que falta para liberar o botão e avisa quando o serviço do contrato está inativo no catálogo.
