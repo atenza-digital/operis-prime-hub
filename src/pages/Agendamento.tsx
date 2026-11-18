@@ -473,35 +473,26 @@ export default function Agendamento() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Origem do atendimento <span className="text-destructive">*</span></Label>
-                <Select value={origemAtendimento} onValueChange={(value: "contrato" | "avulso") => { setOrigemAtendimento(value); setContratoId(""); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
-                  <SelectTrigger disabled={!clienteId}><SelectValue /></SelectTrigger>
+                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> Contrato / Serviço <span className="text-destructive">*</span></Label>
+                <Select
+                  value={origemAtendimento === "contrato" ? (contratoId ? `contrato:${contratoId}` : "") : (servicoCatalogoId ? `servico:${servicoCatalogoId}` : "")}
+                  onValueChange={(value) => {
+                    const [tipoOrigem, id] = [value.slice(0, value.indexOf(":")), value.slice(value.indexOf(":") + 1)];
+                    setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); setExtrasAvulso([]); setExtrasContrato([]);
+                    if (tipoOrigem === "contrato") { setOrigemAtendimento("contrato"); setContratoId(id); setServicoCatalogoId(""); }
+                    else { setOrigemAtendimento("avulso"); setServicoCatalogoId(id); setContratoId(""); }
+                  }}
+                >
+                  <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contrato" disabled={contratosCliente.length === 0}>Contrato vigente com saldo{contratosCliente.length === 0 ? " (indisponível para este cliente)" : ""}</SelectItem>
-                    <SelectItem value="avulso">Serviço avulso (sem contrato)</SelectItem>
+                    {contratosCliente.map((item) => {
+                      const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
+                      return <SelectItem key={item.id} value={`contrato:${item.id}`}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}</span></SelectItem>;
+                    })}
+                    {servicos.map((item) => <SelectItem key={item.id} value={`servico:${item.id}`}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• avulso (sem saldo)</span></SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{origemAtendimento === "contrato" ? "Contrato vigente: usa o serviço e o saldo do contrato; cada atendimento baixa do saldo." : "Serviço avulso: escolha direto do catálogo, sem contrato e sem saldo."}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" /> {origemAtendimento === "contrato" ? "Contrato / Serviço" : "Serviço do catálogo"} <span className="text-destructive">*</span></Label>
-                {origemAtendimento === "contrato" ? (
-                  <Select value={contratoId} onValueChange={(value) => { setContratoId(value); setServicoCatalogoId(""); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
-                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                    <SelectContent>
-                      {contratosCliente.map((item) => {
-                        const saldo = Number(item.contratado || 0) - Number(item.executado || 0);
-                        return <SelectItem key={item.id} value={item.id}><span>{item.servico}</span><span className="text-muted-foreground text-xs ml-1.5">({item.id}) • saldo {formatQuantityUnit(saldo, item.unidade)}</span></SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Select value={servicoCatalogoId} onValueChange={(value) => { setServicoCatalogoId(value); setLocalId(""); setLocalExecucao(""); setTagsSelecionadas([]); setTagsLivres(""); }}>
-                    <SelectTrigger disabled={!clienteId}><SelectValue placeholder={clienteId ? "Selecione o serviço" : "Selecione o cliente primeiro"} /></SelectTrigger>
-                    <SelectContent>{servicos.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}<span className="text-muted-foreground text-xs ml-1.5">• {item.tipo === "sanitario" ? "Sanitário" : "Manutenção"}</span></SelectItem>)}</SelectContent>
-                  </Select>
-                )}
-                {origemAtendimento === "contrato" && clienteId && contratosCliente.length === 0 ? <p className="text-xs text-muted-foreground">Sem contrato vigente com saldo? Selecione “Serviço avulso” para continuar sem consumir saldo contratual.</p> : null}
+                <p className="text-xs text-muted-foreground">Contrato: baixa do saldo contratado. Avulso: serviço do catálogo, sem contrato e sem saldo.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5 text-xs"><CalendarPlus className="h-3.5 w-3.5" /> Data <span className="text-destructive">*</span></Label>
