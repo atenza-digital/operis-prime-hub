@@ -69,7 +69,7 @@ app.use(cors({
   methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Authorization", "Content-Type", "X-Tenant-Slug"],
 }));
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({ limit: "30mb" }));
 
 function getRequestIp(req) {
   const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();

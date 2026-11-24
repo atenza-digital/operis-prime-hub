@@ -267,7 +267,7 @@ export default function OrdensServico() {
         quantidade: Number(quantidade || 1),
         validadeDias: validadeDias.trim() === "" ? undefined : Number(validadeDias),
         tagEquipamentoServico: tagEquipamento,
-        fotos: fotosPorTagAtivas ? tagsOs.flatMap((tag) => (fotosPorTag[tag] ?? []).map((item) => item.base64)) : fotos.map((item) => item.base64),
+        fotos: fotosPorTagAtivas ? [] : fotos.map((item) => item.base64),
         fotosPorTag: fotosPorTagAtivas ? Object.fromEntries(tagsOs.map((tag) => [tag, (fotosPorTag[tag] ?? []).map((item) => item.base64)])) : undefined,
         checklistRespostas: checklist,
         naoExecutada,

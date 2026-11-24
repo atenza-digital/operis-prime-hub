@@ -22,3 +22,4 @@
 - fix: agendamento com contrato agora lista serviços do catálogo como extras (antes o bloco ficava vazio quando o cliente tinha um só contrato).
 - fix: agendamento sem o campo "Origem do atendimento"; um único seletor Contrato / Serviço (contratos com saldo e serviços avulsos).
 - fix: agendamento mostra o que falta para liberar o botão e avisa quando o serviço do contrato está inativo no catálogo.
+- fix: encerramento da OS com fotos por TAG não envia mais cada foto duas vezes; limite da requisição subiu para 30 MB.
