@@ -450,7 +450,7 @@ export default function OrdensServico() {
           {!encerrada ? (
             <div className="space-y-4">
               {osSelecionada ? <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cleanText(osSelecionada.clienteNome)}</span><span className="text-muted-foreground">Serviço</span><span>{cleanText(osSelecionada.servico)}</span><span className="text-muted-foreground">Equipe</span><span>{cleanJoin(osSelecionada.equipeTecnicosNomes, osSelecionada.tecnicoNome)}</span><span className="text-muted-foreground">Local</span><span>{cleanText(osSelecionada.localExecucao)}</span></div> : null}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
               </div>

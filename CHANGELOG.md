@@ -24,3 +24,4 @@
 - fix: agendamento mostra o que falta para liberar o botão e avisa quando o serviço do contrato está inativo no catálogo.
 - fix: encerramento da OS com fotos por TAG não envia mais cada foto duas vezes; limite da requisição subiu para 30 MB.
 - fix: encerrar OS não exige mais foto nem TAG (foto obrigatória do serviço deixou de bloquear); data de execução vazia agora avisa.
+- fix: diálogos (inclusive Encerrar OS) rolam e se ajustam a telas pequenas; campos em uma coluna no celular.
