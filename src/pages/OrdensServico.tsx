@@ -180,7 +180,6 @@ export default function OrdensServico() {
   const equipamentosOs = clienteSelecionado?.equipamentos?.filter((item) => item.ativo) ?? [];
   const tagsOs = useMemo(() => listTags(tagEquipamento, osSelecionada?.tags), [tagEquipamento, osSelecionada?.tags]);
   const fotosPorTagAtivas = tagsOs.length > 1;
-  const totalFotos = fotosPorTagAtivas ? tagsOs.reduce((total, tag) => total + (fotosPorTag[tag]?.length ?? 0), 0) : fotos.length;
 
   const ordensFiltradas = useMemo(() => {
     let list = [...ordens].reverse();
@@ -250,12 +249,12 @@ export default function OrdensServico() {
   }
 
   async function handleEncerrar() {
-    if (!osSelecionada || !dataExecucao) return;
-    if (savingClose) return;
-    if (servicoSelecionado?.exigeFoto && !naoExecutada && totalFotos === 0) {
-      toast.error("Este serviço exige ao menos uma foto de evidência.");
+    if (!osSelecionada) return;
+    if (!dataExecucao) {
+      toast.error("Informe a data de execução.");
       return;
     }
+    if (savingClose) return;
     if (naoExecutada && !motivoNaoExecucao.trim()) {
       toast.error("Informe o motivo da não execução.");
       return;

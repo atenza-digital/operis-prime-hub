@@ -4584,12 +4584,6 @@ app.post("/api/orders/:id/encerrar", requirePermission("os.close"), async (req, 
       throw error;
     }
 
-    if (!isNotExecuted && service?.exige_foto && validatedFotos.length === 0) {
-      const error = new Error("Este servico exige ao menos uma foto de evidencia.");
-      error.status = 400;
-      throw error;
-    }
-
     await client.query(
       `UPDATE ciperprag_hub.ordens_servico
        SET status = 'encerrada',

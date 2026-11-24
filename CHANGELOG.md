@@ -23,3 +23,4 @@
 - fix: agendamento sem o campo "Origem do atendimento"; um único seletor Contrato / Serviço (contratos com saldo e serviços avulsos).
 - fix: agendamento mostra o que falta para liberar o botão e avisa quando o serviço do contrato está inativo no catálogo.
 - fix: encerramento da OS com fotos por TAG não envia mais cada foto duas vezes; limite da requisição subiu para 30 MB.
+- fix: encerrar OS não exige mais foto nem TAG (foto obrigatória do serviço deixou de bloquear); data de execução vazia agora avisa.
