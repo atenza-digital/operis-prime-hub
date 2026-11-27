@@ -427,8 +427,8 @@ export function buildTechnicalReportHtml(os: OSApp, bootstrap: BootstrapData | n
 </html>`;
 }
 
-export function printTechnicalReport(os: OSApp, bootstrap: BootstrapData | null) {
-  const printWindow = window.open("", "_blank", "width=1024,height=900");
+export function printTechnicalReport(os: OSApp, bootstrap: BootstrapData | null, existingWindow?: Window | null) {
+  const printWindow = existingWindow ?? window.open("", "_blank", "width=1024,height=900");
   if (!printWindow) return;
   printWindow.document.write(`${buildTechnicalReportHtml(os, bootstrap)}<script>window.onload=function(){window.print();}</script>`);
   printWindow.document.close();

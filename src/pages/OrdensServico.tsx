@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
+import { closeOrder, fetchAttachmentBlob, getBootstrap, getOrderDetail, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
 import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { repairMojibake } from "@/lib/repairMojibake";
@@ -42,8 +42,23 @@ function formatBytes(bytes?: number) {
 
 const MAX_EVIDENCE_EDGE = 1600;
 const MAX_EVIDENCE_DATA_URL_CHARS = 900_000;
+// Com várias TAGs há mais fotos no mesmo envio; cada foto fica menor para não estourar o limite do servidor/proxy.
+const MAX_EVIDENCE_DATA_URL_CHARS_MULTI_TAG = 400_000;
 
-async function prepareEvidencePhoto(file: File) {
+function listTags(...values: Array<string | undefined | null>) {
+  const seen = new Set<string>();
+  return values
+    .flatMap((value) => String(value || "").split(/[,;|\n]+/))
+    .map((value) => value.trim())
+    .filter((value) => {
+      const key = value.toLocaleUpperCase("pt-BR");
+      if (!value || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+async function prepareEvidencePhoto(file: File, maxChars = MAX_EVIDENCE_DATA_URL_CHARS) {
   if (!file.type.startsWith("image/")) throw new Error("Selecione somente arquivos de imagem.");
 
   const sourceUrl = URL.createObjectURL(file);
@@ -65,7 +80,7 @@ async function prepareEvidencePhoto(file: File) {
 
     let quality = 0.82;
     let dataUrl = canvas.toDataURL("image/jpeg", quality);
-    while (dataUrl.length > MAX_EVIDENCE_DATA_URL_CHARS && quality > 0.56) {
+    while (dataUrl.length > maxChars && quality > 0.4) {
       quality -= 0.08;
       dataUrl = canvas.toDataURL("image/jpeg", quality);
     }
@@ -121,11 +136,13 @@ export default function OrdensServico() {
   const [encOsId, setEncOsId] = useState("");
   const [dataExecucao, setDataExecucao] = useState("");
   const [quantidade, setQuantidade] = useState("1");
+  const [validadeDias, setValidadeDias] = useState("");
   const [tagEquipamento, setTagEquipamento] = useState("");
   const [checklist, setChecklist] = useState<Array<{ item: string; concluido: boolean; observacao?: string }>>([]);
   const [naoExecutada, setNaoExecutada] = useState(false);
   const [motivoNaoExecucao, setMotivoNaoExecucao] = useState("");
   const [fotos, setFotos] = useState<{ preview: string; base64: string }[]>([]);
+  const [fotosPorTag, setFotosPorTag] = useState<Record<string, { preview: string; base64: string }[]>>({});
   const [produtosUtilizados, setProdutosUtilizados] = useState<Array<{ produtoId: string; quantidade: number }>>([]);
   const [encerrada, setEncerrada] = useState(false);
   const [certHash, setCertHash] = useState("");
@@ -161,6 +178,8 @@ export default function OrdensServico() {
   const servicoSelecionado = data?.services.find((item) => item.nome === osSelecionada?.servico);
   const clienteSelecionado = data?.clients.find((item) => item.id === osSelecionada?.clienteId || item.cnpj === osSelecionada?.clienteCnpj);
   const equipamentosOs = clienteSelecionado?.equipamentos?.filter((item) => item.ativo) ?? [];
+  const tagsOs = useMemo(() => listTags(tagEquipamento, osSelecionada?.tags), [tagEquipamento, osSelecionada?.tags]);
+  const fotosPorTagAtivas = tagsOs.length > 1;
 
   const ordensFiltradas = useMemo(() => {
     let list = [...ordens].reverse();
@@ -197,17 +216,31 @@ export default function OrdensServico() {
     event.target.value = "";
   }
 
+  async function handleFotoTagChange(tag: string, event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    const atuais = fotosPorTag[tag]?.length ?? 0;
+    try {
+      const prepared = await Promise.all(files.slice(0, 3 - atuais).map((file) => prepareEvidencePhoto(file, MAX_EVIDENCE_DATA_URL_CHARS_MULTI_TAG)));
+      setFotosPorTag((prev) => ({ ...prev, [tag]: [...(prev[tag] ?? []), ...prepared.map((base64) => ({ preview: base64, base64 }))].slice(0, 3) }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível preparar a foto.");
+    }
+    event.target.value = "";
+  }
+
   function openEnc(osId: string) {
     const os = ordens.find((item) => item.id === osId);
     const service = data?.services.find((item) => item.nome === os?.servico);
     setEncOsId(osId);
     setDataExecucao(todayInputDateBr());
     setQuantidade("1");
+    setValidadeDias("");
     setTagEquipamento(os?.tagEquipamentoServico || os?.tags?.split(",")[0]?.trim() || "");
     setChecklist((service?.checklistItens ?? []).map((item) => ({ item, concluido: false, observacao: "" })));
     setNaoExecutada(false);
     setMotivoNaoExecucao("");
     setFotos([]);
+    setFotosPorTag({});
     setProdutosUtilizados((service?.produtosEstoque || []).map((item) => ({ produtoId: item.produtoId, quantidade: Number(item.quantidadePrevista || 0) })));
     setEncerrada(false);
     setCertHash("");
@@ -216,12 +249,12 @@ export default function OrdensServico() {
   }
 
   async function handleEncerrar() {
-    if (!osSelecionada || !dataExecucao) return;
-    if (savingClose) return;
-    if (servicoSelecionado?.exigeFoto && !naoExecutada && fotos.length === 0) {
-      toast.error("Este serviço exige ao menos uma foto de evidência.");
+    if (!osSelecionada) return;
+    if (!dataExecucao) {
+      toast.error("Informe a data de execução.");
       return;
     }
+    if (savingClose) return;
     if (naoExecutada && !motivoNaoExecucao.trim()) {
       toast.error("Informe o motivo da não execução.");
       return;
@@ -231,8 +264,10 @@ export default function OrdensServico() {
       const response = await closeOrder(osSelecionada.id, {
         dataExecucao,
         quantidade: Number(quantidade || 1),
+        validadeDias: validadeDias.trim() === "" ? undefined : Number(validadeDias),
         tagEquipamentoServico: tagEquipamento,
-        fotos: fotos.map((item) => item.base64),
+        fotos: fotosPorTagAtivas ? [] : fotos.map((item) => item.base64),
+        fotosPorTag: fotosPorTagAtivas ? Object.fromEntries(tagsOs.map((tag) => [tag, (fotosPorTag[tag] ?? []).map((item) => item.base64)])) : undefined,
         checklistRespostas: checklist,
         naoExecutada,
         motivoNaoExecucao,
@@ -388,7 +423,7 @@ export default function OrdensServico() {
                       {os.certificadoHash ? <div className="flex items-center gap-1 font-medium text-primary"><Award className="h-3 w-3" /> {os.certificadoHash}</div> : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5 border-t pt-1">
-                      <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => setViewOs(os)}><Eye className="h-3 w-3" /> Ver</Button>
+                      <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => { setViewOs(os); getOrderDetail(os.id).then((detalhe) => setViewOs((atual) => (atual?.id === detalhe.id ? detalhe : atual))).catch(() => toast.error("Não foi possível carregar as fotos desta OS.")); }}><Eye className="h-3 w-3" /> Ver</Button>
                       <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => handleImprimirOS(os)}><Printer className="h-3 w-3" /> Imprimir</Button>
                       {os.status === "aberta" ? (
                         <>
@@ -415,10 +450,11 @@ export default function OrdensServico() {
           {!encerrada ? (
             <div className="space-y-4">
               {osSelecionada ? <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs"><span className="text-muted-foreground">Cliente</span><span className="font-medium">{cleanText(osSelecionada.clienteNome)}</span><span className="text-muted-foreground">Serviço</span><span>{cleanText(osSelecionada.servico)}</span><span className="text-muted-foreground">Equipe</span><span>{cleanJoin(osSelecionada.equipeTecnicosNomes, osSelecionada.tecnicoNome)}</span><span className="text-muted-foreground">Local</span><span>{cleanText(osSelecionada.localExecucao)}</span></div> : null}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>Data de execução <span className="text-destructive">*</span></Label><Input type="date" value={dataExecucao} onChange={(event) => setDataExecucao(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Quantidade</Label><Input type="number" min="1" value={quantidade} onChange={(event) => setQuantidade(event.target.value)} /></div>
               </div>
+              <div className="space-y-1.5"><Label>Validade do certificado (dias)</Label><Select value={validadeDias || "padrao"} onValueChange={(value) => setValidadeDias(value === "padrao" ? "" : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="padrao">Padrão do serviço{servicoSelecionado?.validadeCertificadoDias ? ` (${servicoSelecionado.validadeCertificadoDias} dias)` : ""}</SelectItem><SelectItem value="30">30 dias</SelectItem><SelectItem value="90">90 dias</SelectItem><SelectItem value="120">120 dias</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">O vencimento do certificado é a data de execução + os dias escolhidos.</p></div>
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" /> Tag do equipamento atendido</Label>
                 {equipamentosOs.length > 0 ? (
@@ -470,7 +506,36 @@ export default function OrdensServico() {
                   {naoExecutada ? <Textarea value={motivoNaoExecucao} onChange={(event) => setMotivoNaoExecucao(event.target.value)} placeholder="Informe o motivo da não execução..." rows={3} /> : null}
                 </div>
               ) : null}
+              {fotosPorTagAtivas ? (
+                <div className="space-y-3">
+                  <Label>Fotos de evidência por equipamento <span className="text-xs text-muted-foreground">(até 3 por TAG; cada certificado usa só as fotos da sua TAG)</span></Label>
+                  {tagsOs.map((tag) => (
+                    <div key={tag} className="rounded-lg border p-3 space-y-2">
+                      <p className="flex items-center gap-1.5 text-xs font-semibold"><Tag className="h-3.5 w-3.5" /> {tag}</p>
+                      <input id={`fotos-tag-${tag}`} type="file" accept="image/*" multiple className="hidden" onChange={(event) => handleFotoTagChange(tag, event)} />
+                      <div className="flex gap-3">
+                        {[0, 1, 2].map((index) => {
+                          const foto = fotosPorTag[tag]?.[index];
+                          return (
+                            <div key={index} className="relative">
+                              {foto ? (
+                                <div className="group relative h-20 w-20 overflow-hidden rounded-lg border-2 border-primary">
+                                  <img src={foto.preview} alt={`${tag} foto ${index + 1}`} className="h-full w-full object-cover" />
+                                  <button type="button" onClick={() => setFotosPorTag((prev) => ({ ...prev, [tag]: (prev[tag] ?? []).filter((_, fotoIndex) => fotoIndex !== index) }))} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5"><X className="h-3 w-3 text-white" /></button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => document.getElementById(`fotos-tag-${tag}`)?.click()} className="flex h-20 w-20 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50">Foto {index + 1}</button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <div className="space-y-2"><Label>Fotos de evidência <span className="text-xs text-muted-foreground">(até 3)</span></Label><input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotoChange} /><div className="flex gap-3">{[0, 1, 2].map((index) => <div key={index} className="relative">{fotos[index] ? <div className="group relative h-24 w-24 overflow-hidden rounded-lg border-2 border-primary"><img src={fotos[index].preview} alt={`Foto ${index + 1}`} className="h-full w-full object-cover" /><button onClick={() => setFotos((prev) => prev.filter((_, fotoIndex) => fotoIndex !== index))} className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5"><X className="h-3 w-3 text-white" /></button></div> : <button onClick={() => fileInputRef.current?.click()} className="flex h-24 w-24 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/50">Foto {index + 1}</button>}</div>)}</div></div>
+              )}
               <DialogFooter><Button variant="outline" onClick={() => setEncDialog(false)} disabled={savingClose}>Cancelar</Button><Button onClick={handleEncerrar} disabled={savingClose}>{savingClose ? "Encerrando..." : "Encerrar OS"}</Button></DialogFooter>
             </div>
           ) : (
@@ -521,23 +586,6 @@ export default function OrdensServico() {
                       </div>
                     ))}
                   </div>
-
-                  {viewOs.evidencias?.some((item) => item.categoria === "pdf_historico") ? (
-                    <div className="mt-3 rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs font-semibold">Documentos históricos</p>
-                      {viewOs.evidencias.filter((item) => item.categoria === "pdf_historico").map((item) => (
-                        <div key={item.id} className="mt-2 flex flex-col gap-2 rounded-md border bg-background p-2 md:flex-row md:items-center md:justify-between">
-                          <p className="text-[11px] text-muted-foreground">
-                            {cleanText(item.nomeArquivo)} {item.imutavel ? "· imutável" : ""} {item.hashSha256 ? `· hash ${item.hashSha256.slice(0, 12)}...` : ""}
-                          </p>
-                          <div className="flex gap-1.5">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openAttachment(item)}>Abrir</Button>
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadAttachment(item)}>Baixar</Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
             </div>

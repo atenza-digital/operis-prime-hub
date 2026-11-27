@@ -154,6 +154,7 @@ export interface Contrato {
 
 export interface AgendamentoApp {
   id: string;
+  grupoId?: string | null;
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
@@ -202,7 +203,9 @@ export interface EvidenciaAnexoApp {
 export interface OSApp {
   id: string;
   numero: string;
+  fotosCount?: number;
   agendamentoId?: string;
+  grupoId?: string | null;
   clienteId?: string;
   clienteNome: string;
   clienteCnpj: string;
@@ -239,6 +242,7 @@ export interface OSApp {
 export interface CertificadoApp {
   id: string;
   hash: string;
+  tagEquipamentoServico?: string | null;
   numero: string;
   osId: string;
   osNumero?: string;
@@ -419,6 +423,7 @@ export interface EmpresaConfig {
   razaoSocial: string;
   nomeFantasia: string;
   cnpj: string;
+  cnpjSecundario?: string;
   endereco: string;
   telefone: string;
   email: string;
@@ -788,6 +793,8 @@ export const addDays = (dateStr: string, days: number) => {
   return date.toISOString().split("T")[0];
 };
 
+export const getOrderDetail = async (id: string) => (await api<{ ok: boolean; order: OSApp }>(`/orders/${encodeURIComponent(id)}/detalhe`)).order;
+export const getCertificateDetail = async (id: string) => (await api<{ ok: boolean; certificate: CertificadoApp }>(`/certificates/${encodeURIComponent(id)}/detalhe`)).certificate;
 export const getBootstrap = async () => repairBootstrapText(await api<BootstrapData>("/bootstrap"));
 export const getPublicTenantContext = (tenantSlug?: string | null) => {
   const search = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
@@ -921,10 +928,11 @@ export const generateProposalFromPdf = (
   meta: { fileName: string; bytes: number; model: string; arquivoTemporario: boolean };
 }>("/contract-templates/proposal-assist", { method: "POST", body: JSON.stringify(payload), signal });
 export const saveSchedule = (payload: Partial<AgendamentoApp>) => api("/agendamentos", { method: "POST", body: JSON.stringify(payload) });
+export const saveScheduleBatch = (itens: Array<Partial<AgendamentoApp>>) => api<{ ok: boolean; grupoId: string; ids: string[] }>("/agendamentos/lote", { method: "POST", body: JSON.stringify({ itens }) });
 export const updateSchedule = (id: string, payload: Partial<AgendamentoApp>) => api(`/agendamentos/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 export const generateOrderFromSchedule = (id: string, tecnicoNome: string) => api(`/agendamentos/${id}/gerar-os`, { method: "POST", body: JSON.stringify({ tecnicoNome }) });
 export const updateOrder = (id: string, payload: Partial<OSApp>) => api(`/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
-export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; tagEquipamentoServico?: string; fotos: string[]; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string; produtosUtilizados?: Array<{ produtoId: string; quantidade: number }> }) =>
+export const closeOrder = (id: string, payload: { dataExecucao: string; quantidade: number; validadeDias?: number; tagEquipamentoServico?: string; fotos: string[]; fotosPorTag?: Record<string, string[]>; checklistRespostas?: OSApp["checklistRespostas"]; naoExecutada?: boolean; motivoNaoExecucao?: string; produtosUtilizados?: Array<{ produtoId: string; quantidade: number }> }) =>
   api<{ ok: boolean; certificateHash?: string; certificateHashes?: string[] }>(`/orders/${id}/encerrar`, { method: "POST", body: JSON.stringify(payload) });
 export const generateCertificateForOrder = (id: string) => api<{ ok: boolean; hash: string; hashes?: string[] }>(`/orders/${id}/certificado`, { method: "POST" });
 export const revokeCertificate = (id: string, motivo: string) => api<{ ok: boolean; id: string; status: "revogado" }>(`/certificates/${encodeURIComponent(id)}/revoke`, { method: "PATCH", body: JSON.stringify({ motivo }) });
