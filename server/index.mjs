@@ -1287,27 +1287,48 @@ async function getAttachments(tenantId) {
   return rows.map((row) => mapAttachment(row));
 }
 
-async function getAttachmentsByEntity(entityType, tenantId) {
+async function getAttachmentsByEntity(entityType, tenantId, { entityId = null, includeContent = true } = {}) {
+  const columns = includeContent
+    ? "*"
+    : "id, entidade_tipo, entidade_id, categoria, nome_arquivo, mime_type, tamanho_bytes, url, metadados, hash_sha256, snapshot_hash_sha256, template_codigo, template_versao, storage_provider, storage_bucket, storage_key, storage_etag, imutavel, criado_em";
   const { rows } = await query(
-    `SELECT *
+    `SELECT ${columns}
      FROM ciperprag_hub.evidencias_anexos
      WHERE entidade_tipo = $1
        AND tenant_id = $2
+       AND ($3::text IS NULL OR entidade_id = $3)
      ORDER BY entidade_id, criado_em, id`,
-    [entityType, tenantId],
+    [entityType, tenantId, entityId],
   );
   const map = new Map();
   for (const row of rows) {
-    const item = mapAttachment(row, { includeImageContent: true });
+    const item = mapAttachment(row, { includeImageContent: includeContent });
     if (!map.has(row.entidade_id)) map.set(row.entidade_id, []);
     map.get(row.entidade_id).push(item);
   }
   return map;
 }
 
-async function getOrders(tenantId) {
-  const attachmentsByOrder = await getAttachmentsByEntity("os", tenantId);
-  const { rows } = await query("SELECT * FROM ciperprag_hub.ordens_servico WHERE tenant_id = $1 ORDER BY data_emissao, id", [tenantId]);
+// Fotos e snapshots completos so saem quando `full` e verdadeiro (detalhe de uma
+// OS). A listagem do bootstrap fica leve para a agenda abrir rapido.
+function stripSnapshotPhotos(value) {
+  if (Array.isArray(value)) return value.map(stripSnapshotPhotos);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => key !== "fotos" && key !== "conteudoBase64")
+        .map(([key, entry]) => [key, stripSnapshotPhotos(entry)]),
+    );
+  }
+  return value;
+}
+
+async function getOrders(tenantId, { full = false, id = null } = {}) {
+  const attachmentsByOrder = await getAttachmentsByEntity("os", tenantId, { entityId: id, includeContent: full });
+  const { rows } = await query(
+    "SELECT * FROM ciperprag_hub.ordens_servico WHERE tenant_id = $1 AND ($2::text IS NULL OR id = $2) ORDER BY data_emissao, id",
+    [tenantId, id],
+  );
   return rows.map((row) => ({
     id: row.id,
     numero: row.numero,
@@ -1337,18 +1358,22 @@ async function getOrders(tenantId) {
     quantidade: Number(row.quantidade ?? 0),
     unidade: row.unidade,
     status: row.status,
-    fotos: row.fotos ?? [],
+    fotos: full ? row.fotos ?? [] : [],
+    fotosCount: Array.isArray(row.fotos) ? row.fotos.length : 0,
     evidencias: attachmentsByOrder.get(row.id) ?? [],
     certificadoHash: row.certificado_hash,
     checklistRespostas: row.checklist_respostas ?? [],
     naoExecutada: row.nao_executada ?? false,
     motivoNaoExecucao: row.motivo_nao_execucao,
-    snapshotDados: row.snapshot_dados ?? {},
+    snapshotDados: full ? row.snapshot_dados ?? {} : stripSnapshotPhotos(row.snapshot_dados ?? {}),
   }));
 }
 
-async function getCertificates(tenantId) {
-  const { rows } = await query("SELECT * FROM ciperprag_hub.certificados WHERE tenant_id = $1 ORDER BY emitido_em DESC, id DESC", [tenantId]);
+async function getCertificates(tenantId, { full = false, id = null } = {}) {
+  const { rows } = await query(
+    "SELECT * FROM ciperprag_hub.certificados WHERE tenant_id = $1 AND ($2::text IS NULL OR id = $2) ORDER BY emitido_em DESC, id DESC",
+    [tenantId, id],
+  );
   return rows.map((row) => ({
     id: row.id,
     hash: row.hash,
@@ -1369,7 +1394,7 @@ async function getCertificates(tenantId) {
     validadeDias: row.validade_dias,
     produtosQuimicos: row.produtos_quimicos ?? [],
     produtosDetalhados: normalizeJsonArray(row.produtos_detalhados),
-    snapshotDados: row.snapshot_dados ?? {},
+    snapshotDados: full ? row.snapshot_dados ?? {} : stripSnapshotPhotos(row.snapshot_dados ?? {}),
     tagEquipamentoServico: row.tag_equipamento_servico || null,
     status: row.status,
     revogadoEm: row.revogado_em?.toISOString?.() ?? row.revogado_em,
@@ -4496,8 +4521,22 @@ app.post("/api/agendamentos/:id/gerar-os", requirePermission("os.manage"), async
   res.json({ ok: true, id: result });
 });
 
+app.get("/api/orders/:id/detalhe", async (req, res) => {
+  if (req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
+  const [order] = await getOrders(req.auth.user.tenant.id, { full: true, id: req.params.id });
+  if (!order) return res.status(404).json({ error: "OS não encontrada" });
+  res.json({ ok: true, order });
+});
+
+app.get("/api/certificates/:id/detalhe", async (req, res) => {
+  if (req.auth?.user?.senhaTemporaria) return res.status(428).json({ error: "Troca de senha obrigatoria antes de continuar." });
+  const [certificate] = await getCertificates(req.auth.user.tenant.id, { full: true, id: req.params.id });
+  if (!certificate) return res.status(404).json({ error: "Certificado não encontrado" });
+  res.json({ ok: true, certificate });
+});
+
 app.patch("/api/orders/:id", requirePermission("os.manage"), async (req, res) => {
-  const current = (await getOrders(req.auth.user.tenant.id)).find((item) => item.id === req.params.id);
+  const current = (await getOrders(req.auth.user.tenant.id, { full: true, id: req.params.id }))[0];
   if (!current) return res.status(404).json({ error: "OS não encontrada" });
   const body = { ...current, ...req.body };
   await query(

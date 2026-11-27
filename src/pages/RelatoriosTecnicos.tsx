@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getBootstrap, type BootstrapData, type OSApp } from "@/lib/api";
+import { getBootstrap, getOrderDetail, type BootstrapData, type OSApp } from "@/lib/api";
 import { formatDateBr } from "@/lib/formatters";
 import { repairMojibake } from "@/lib/repairMojibake";
 import { printTechnicalReport } from "@/lib/technicalReportPrint";
@@ -23,7 +23,7 @@ function normalizeReportNumber(os: OSApp) {
 }
 
 function hasPhotos(os: OSApp) {
-  return Boolean(os.fotos?.length || os.evidencias?.some((item) => item.mimeType?.startsWith("image/") || item.conteudoBase64?.startsWith("data:image/")));
+  return Boolean(os.fotosCount || os.fotos?.length || os.evidencias?.some((item) => item.mimeType?.startsWith("image/") || item.conteudoBase64?.startsWith("data:image/")));
 }
 
 export default function RelatoriosTecnicos() {
@@ -80,11 +80,17 @@ export default function RelatoriosTecnicos() {
     [orders],
   );
 
-  function handlePrint(os: OSApp) {
+  async function handlePrint(os: OSApp) {
     if (os.status !== "encerrada") {
       toast.warning("O relatório técnico deve ser gerado preferencialmente após o encerramento da OS.");
     }
-    printTechnicalReport(os, data);
+    const printWindow = window.open("", "_blank", "width=1024,height=900");
+    try {
+      printTechnicalReport(await getOrderDetail(os.id), data, printWindow);
+    } catch {
+      printWindow?.close();
+      toast.error("Não foi possível carregar as fotos da OS para o relatório.");
+    }
   }
 
   return (

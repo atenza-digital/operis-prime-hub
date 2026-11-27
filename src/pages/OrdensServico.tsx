@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { closeOrder, fetchAttachmentBlob, getBootstrap, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
+import { closeOrder, fetchAttachmentBlob, getBootstrap, getOrderDetail, type BootstrapData, type EvidenciaAnexoApp, type OSApp, updateOrder } from "@/lib/api";
 import { printOsDocument } from "@/lib/osPrint";
 import { documentTypographyCss } from "@/lib/documentFontFaces";
 import { repairMojibake } from "@/lib/repairMojibake";
@@ -423,7 +423,7 @@ export default function OrdensServico() {
                       {os.certificadoHash ? <div className="flex items-center gap-1 font-medium text-primary"><Award className="h-3 w-3" /> {os.certificadoHash}</div> : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5 border-t pt-1">
-                      <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => setViewOs(os)}><Eye className="h-3 w-3" /> Ver</Button>
+                      <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => { setViewOs(os); getOrderDetail(os.id).then((detalhe) => setViewOs((atual) => (atual?.id === detalhe.id ? detalhe : atual))).catch(() => toast.error("Não foi possível carregar as fotos desta OS.")); }}><Eye className="h-3 w-3" /> Ver</Button>
                       <Button size="sm" variant="outline" className="h-7 flex-1 gap-1 text-xs" onClick={() => handleImprimirOS(os)}><Printer className="h-3 w-3" /> Imprimir</Button>
                       {os.status === "aberta" ? (
                         <>

@@ -1,4 +1,4 @@
-﻿import { addDays, getBootstrap, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
+﻿import { addDays, getBootstrap, getCertificateDetail, getOrderDetail, type BootstrapData, type CertificadoApp, type EmpresaConfig } from "@/lib/api";
 import templateCertificado from "@/template_certificado_dinamico.html?raw";
 import { documentTypographyCss } from "@/lib/documentFontFaces";
 import QRCode from "qrcode";
@@ -394,10 +394,14 @@ function buildLicenses(cert: CertificadoApp, company: EmpresaConfig | null, snap
   return fromFields;
 }
 
-export async function imprimirCertificado(cert: CertificadoApp) {
-  const bootstrap = await getBootstrap();
+export async function imprimirCertificado(certResumo: CertificadoApp) {
+  // A listagem vem sem fotos (leve); busca o certificado e a OS completos para imprimir.
+  const [bootstrap, cert, os] = await Promise.all([
+    getBootstrap(),
+    getCertificateDetail(certResumo.id).catch(() => certResumo),
+    certResumo.osId ? getOrderDetail(certResumo.osId).catch(() => undefined) : Promise.resolve(undefined),
+  ]);
   const company = bootstrap.companyConfig;
-  const os = bootstrap.orders.find((item) => item.id === cert.osId);
   const snapshotCertificado = snapshotSection(cert, "certificado");
   const snapshotOs = snapshotSection(cert, "os");
   const snapshotEmpresa = snapshotSection(cert, "empresa");

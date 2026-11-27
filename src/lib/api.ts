@@ -203,6 +203,7 @@ export interface EvidenciaAnexoApp {
 export interface OSApp {
   id: string;
   numero: string;
+  fotosCount?: number;
   agendamentoId?: string;
   grupoId?: string | null;
   clienteId?: string;
@@ -241,6 +242,7 @@ export interface OSApp {
 export interface CertificadoApp {
   id: string;
   hash: string;
+  tagEquipamentoServico?: string | null;
   numero: string;
   osId: string;
   osNumero?: string;
@@ -791,6 +793,8 @@ export const addDays = (dateStr: string, days: number) => {
   return date.toISOString().split("T")[0];
 };
 
+export const getOrderDetail = async (id: string) => (await api<{ ok: boolean; order: OSApp }>(`/orders/${encodeURIComponent(id)}/detalhe`)).order;
+export const getCertificateDetail = async (id: string) => (await api<{ ok: boolean; certificate: CertificadoApp }>(`/certificates/${encodeURIComponent(id)}/detalhe`)).certificate;
 export const getBootstrap = async () => repairBootstrapText(await api<BootstrapData>("/bootstrap"));
 export const getPublicTenantContext = (tenantSlug?: string | null) => {
   const search = tenantSlug ? `?tenant=${encodeURIComponent(tenantSlug)}` : "";
